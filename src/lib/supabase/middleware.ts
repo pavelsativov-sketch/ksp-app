@@ -1,8 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/plans"];
 const AUTH_ROUTES = ["/login", "/register"];
+
+function isProtectedPath(pathname: string): boolean {
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return true;
+  if (pathname === "/plans/new") return true;
+  if (pathname.startsWith("/plans/") && pathname.endsWith("/edit")) return true;
+  return false;
+}
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -36,7 +42,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+  const isProtected = isProtectedPath(pathname);
   const isAuth = AUTH_ROUTES.some((p) => pathname.startsWith(p));
 
   if (!user && isProtected) {
