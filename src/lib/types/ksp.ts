@@ -3,6 +3,8 @@
  * Используется как для формы, так и для хранения в `lesson_plans.content` (jsonb).
  */
 
+import type { InteractiveTask } from "@/lib/ksp/tasks";
+
 export type Visibility = "private" | "unlisted" | "public";
 export type Language = "ru" | "kz";
 
@@ -16,6 +18,8 @@ export interface LessonStage {
   studentActions: string;
   /** Ресурсы, раздаточный материал, ссылки */
   resources: string;
+  /** Интерактивные задания, привязанные к этому этапу */
+  tasks?: InteractiveTask[];
 }
 
 /** Оценивание и рефлексия */
@@ -122,6 +126,7 @@ function emptyStage(): LessonStage {
     teacherActions: "",
     studentActions: "",
     resources: "",
+    tasks: [],
   };
 }
 

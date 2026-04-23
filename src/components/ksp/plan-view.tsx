@@ -1,4 +1,6 @@
 import type { LessonPlanRow, LessonStage } from "@/lib/types/ksp";
+import { TaskPlayer } from "./task-player";
+import { taskTypeLabel } from "@/lib/ksp/tasks";
 
 export function PlanView({ plan }: { plan: LessonPlanRow }) {
   const c = plan.content;
@@ -143,43 +145,62 @@ function StageTable({
   title: string;
   stage: LessonStage;
 }) {
+  const tasks = stage.tasks ?? [];
   return (
     <div className="space-y-2">
       <h3 className="font-semibold mt-2">{title}</h3>
-      <table className="w-full text-sm border border-slate-300">
-        <thead>
-          <tr className="bg-slate-100">
-            <th className="border border-slate-300 p-2 text-left w-[15%]">
-              Время
-            </th>
-            <th className="border border-slate-300 p-2 text-left w-[40%]">
-              Действия учителя
-            </th>
-            <th className="border border-slate-300 p-2 text-left w-[30%]">
-              Действия учеников
-            </th>
-            <th className="border border-slate-300 p-2 text-left w-[15%]">
-              Ресурсы
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">
-              {stage.time || "—"}
-            </td>
-            <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">
-              {stage.teacherActions || "—"}
-            </td>
-            <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">
-              {stage.studentActions || "—"}
-            </td>
-            <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">
-              {stage.resources || "—"}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <StageBody stage={stage} />
+      {tasks.length > 0 && (
+        <div className="mt-3 space-y-2 no-print">
+          <p className="text-xs uppercase tracking-wider text-slate-500">
+            Интерактивные задания этапа ({tasks.length})
+          </p>
+          {tasks.map((task) => (
+            <div
+              key={task.id}
+              className="border border-slate-200 rounded-lg p-3 bg-slate-50/50"
+            >
+              <TaskPlayer task={task} />
+            </div>
+          ))}
+        </div>
+      )}
+      {tasks.length > 0 && (
+        <div className="hidden print:block text-xs space-y-1">
+          <p className="font-medium">Интерактивные задания:</p>
+          <ol className="list-decimal pl-5 space-y-1">
+            {tasks.map((t) => (
+              <li key={t.id}>
+                <span className="text-slate-600">[{taskTypeLabel(t.type)}]</span>{" "}
+                {t.question}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
+  );
+}
+
+function StageBody({ stage }: { stage: LessonStage }) {
+  return (
+    <table className="w-full text-sm border border-slate-300">
+      <thead>
+        <tr className="bg-slate-100">
+          <th className="border border-slate-300 p-2 text-left w-[15%]">Время</th>
+          <th className="border border-slate-300 p-2 text-left w-[40%]">Действия учителя</th>
+          <th className="border border-slate-300 p-2 text-left w-[30%]">Действия учеников</th>
+          <th className="border border-slate-300 p-2 text-left w-[15%]">Ресурсы</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.time || "—"}</td>
+          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.teacherActions || "—"}</td>
+          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.studentActions || "—"}</td>
+          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.resources || "—"}</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }

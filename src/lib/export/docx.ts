@@ -11,7 +11,8 @@ import {
   WidthType,
   BorderStyle,
 } from "docx";
-import type { KspContent, LessonPlanRow } from "@/lib/types/ksp";
+import type { LessonPlanRow, LessonStage } from "@/lib/types/ksp";
+import { type InteractiveTask, taskTypeLabel } from "@/lib/ksp/tasks";
 
 const BORDER = {
   style: BorderStyle.SINGLE,
@@ -59,8 +60,8 @@ function bulletList(items: string[]): Paragraph[] {
   );
 }
 
-function stageTable(title: string, stage: KspContent["stages"]["beginning"]) {
-  return [
+function stageTable(title: string, stage: LessonStage) {
+  const children: (Paragraph | Table)[] = [
     new Paragraph({
       text: title,
       heading: HeadingLevel.HEADING_3,
@@ -89,6 +90,124 @@ function stageTable(title: string, stage: KspContent["stages"]["beginning"]) {
       ],
     }),
   ];
+
+  const tasks = stage.tasks ?? [];
+  if (tasks.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Интерактивные задания этапа:", bold: true }),
+        ],
+        spacing: { before: 150, after: 50 },
+      }),
+    );
+    tasks.forEach((task, i) => {
+      children.push(...renderTask(task, i + 1));
+    });
+  }
+  return children;
+}
+
+function renderTask(task: InteractiveTask, n: number): Paragraph[] {
+  const head = new Paragraph({
+    spacing: { before: 100 },
+    children: [
+      new TextRun({ text: `${n}. [${taskTypeLabel(task.type)}] `, bold: true }),
+      new TextRun({ text: task.question || "—" }),
+      new TextRun({
+        text: ` (${task.points} ${task.points === 1 ? "балл" : "балла"})`,
+        italics: true,
+      }),
+    ],
+  });
+  const body: Paragraph[] = [head];
+
+  switch (task.type) {
+    case "MCQ":
+      task.options.forEach((opt, i) => {
+        const marker = i === task.correctIndex ? "✓" : "○";
+        body.push(
+          new Paragraph({
+            children: [new TextRun({ text: `   ${marker} ${opt}` })],
+          }),
+        );
+      });
+      break;
+    case "TRUE_FALSE":
+      body.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `   Правильный ответ: ${task.correct ? "Верно" : "Неверно"}`,
+            }),
+          ],
+        }),
+      );
+      break;
+    case "SHORT_ANSWER":
+      body.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `   Ожидаемый ответ: ${task.acceptedAnswers.join(" / ") || "—"}`,
+            }),
+          ],
+        }),
+      );
+      break;
+    case "FILL_BLANK":
+      body.push(
+        new Paragraph({
+          children: [new TextRun({ text: `   ${task.template}` })],
+        }),
+      );
+      body.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `   Ответы: ${task.answers.join(", ")}`,
+              italics: true,
+            }),
+          ],
+        }),
+      );
+      break;
+    case "MATCHING":
+      task.pairs.forEach((p) => {
+        body.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `   ${task.left[p.leftIndex] ?? ""} ↔ ${task.right[p.rightIndex] ?? ""}`,
+              }),
+            ],
+          }),
+        );
+      });
+      break;
+    case "ORDERING":
+      task.correctOrder.forEach((idx, pos) => {
+        body.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `   ${pos + 1}. ${task.items[idx] ?? ""}` }),
+            ],
+          }),
+        );
+      });
+      break;
+  }
+
+  if (task.hint) {
+    body.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `   Подсказка: ${task.hint}`, italics: true }),
+        ],
+      }),
+    );
+  }
+  return body;
 }
 
 export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {

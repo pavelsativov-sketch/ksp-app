@@ -27,6 +27,8 @@ import {
   emptyKsp,
   type SubjectRow,
 } from "@/lib/types/ksp";
+import type { InteractiveTask } from "@/lib/ksp/tasks";
+import { TaskBuilder } from "./task-builder";
 import {
   savePlanAction,
   type SavePlanInput,
@@ -427,6 +429,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         <CardContent className="space-y-4">
           <StageEditor
             title="Начало урока"
+            stageKey="beginning"
             stage={content.stages.beginning}
             onChange={(stage) =>
               setContent({
@@ -434,9 +437,11 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
                 stages: { ...content.stages, beginning: stage },
               })
             }
+            context={{ topic: content.topic, grade, subject: subjectName, language }}
           />
           <StageEditor
             title="Середина урока"
+            stageKey="middle"
             stage={content.stages.middle}
             onChange={(stage) =>
               setContent({
@@ -444,9 +449,11 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
                 stages: { ...content.stages, middle: stage },
               })
             }
+            context={{ topic: content.topic, grade, subject: subjectName, language }}
           />
           <StageEditor
             title="Конец урока"
+            stageKey="end"
             stage={content.stages.end}
             onChange={(stage) =>
               setContent({
@@ -454,6 +461,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
                 stages: { ...content.stages, end: stage },
               })
             }
+            context={{ topic: content.topic, grade, subject: subjectName, language }}
           />
         </CardContent>
       </Card>
@@ -611,13 +619,21 @@ function ListEditor({
 
 function StageEditor({
   title,
+  stageKey,
   stage,
   onChange,
+  context,
 }: {
   title: string;
+  stageKey: "beginning" | "middle" | "end";
   stage: LessonStage;
   onChange: (stage: LessonStage) => void;
+  context: { topic: string; grade: number; subject: string; language: "ru" | "kz" };
 }) {
+  const tasks = stage.tasks ?? [];
+  function setTasks(next: InteractiveTask[]) {
+    onChange({ ...stage, tasks: next });
+  }
   return (
     <div className="border border-slate-200 rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -659,6 +675,11 @@ function StageEditor({
           />
         </div>
       </div>
+      <TaskBuilder
+        tasks={tasks}
+        onChange={setTasks}
+        context={{ stage: stageKey, ...context }}
+      />
     </div>
   );
 }

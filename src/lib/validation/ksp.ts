@@ -1,10 +1,62 @@
 import { z } from "zod";
 
+const taskBase = {
+  id: z.string().min(1),
+  question: z.string().trim().default(""),
+  hint: z.string().trim().optional(),
+  points: z.number().int().min(1).max(100).default(1),
+  objectiveCode: z.string().trim().optional(),
+};
+
+const taskSchema = z.discriminatedUnion("type", [
+  z.object({
+    ...taskBase,
+    type: z.literal("MCQ"),
+    options: z.array(z.string()).min(2),
+    correctIndex: z.number().int().min(0),
+  }),
+  z.object({
+    ...taskBase,
+    type: z.literal("TRUE_FALSE"),
+    correct: z.boolean(),
+  }),
+  z.object({
+    ...taskBase,
+    type: z.literal("SHORT_ANSWER"),
+    acceptedAnswers: z.array(z.string().trim()).min(1),
+  }),
+  z.object({
+    ...taskBase,
+    type: z.literal("FILL_BLANK"),
+    template: z.string().min(1),
+    answers: z.array(z.string().trim()).min(1),
+  }),
+  z.object({
+    ...taskBase,
+    type: z.literal("MATCHING"),
+    left: z.array(z.string()).min(2),
+    right: z.array(z.string()).min(2),
+    pairs: z.array(
+      z.object({
+        leftIndex: z.number().int().min(0),
+        rightIndex: z.number().int().min(0),
+      }),
+    ),
+  }),
+  z.object({
+    ...taskBase,
+    type: z.literal("ORDERING"),
+    items: z.array(z.string()).min(2),
+    correctOrder: z.array(z.number().int().min(0)),
+  }),
+]);
+
 const stageSchema = z.object({
   time: z.string().trim().default(""),
   teacherActions: z.string().trim().default(""),
   studentActions: z.string().trim().default(""),
   resources: z.string().trim().default(""),
+  tasks: z.array(taskSchema).default([]),
 });
 
 const headerSchema = z.object({
