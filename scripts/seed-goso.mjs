@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 /**
- * Seed Supabase with official GOSO learning objectives (RK).
+ * Seed Supabase with official GOSO subjects + learning objectives (RK).
  *
  * Usage:
- *   1. Apply supabase/migrations/0003_goso_subjects.sql in SQL Editor first
- *      (creates subjects.name_ru unique constraint and upserts all subjects).
- *   2. Put SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY into .env.local
+ *   1. Put SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY into .env.local
  *      (service_role — NOT the anon key; needed to bypass RLS for bulk insert).
- *   3. Run:  node scripts/seed-goso.mjs
+ *   2. Run:  npm run seed:goso
  *
- * The script is idempotent — re-running skips rows that already exist
- * (thanks to UNIQUE(subject_id, grade, code) in 0001_init.sql).
+ * Idempotent — missing subjects are created, existing ones get grade range
+ * extended. Objectives are deduplicated by UNIQUE(subject_id, grade, code)
+ * from 0001_init.sql. Re-running this script is safe.
  */
 
 import fs from "node:fs";
@@ -62,22 +61,62 @@ async function main() {
   const raw = fs.readFileSync(JSON_PATH, "utf8");
   const data = JSON.parse(raw);
 
-  // 1. Map subject name -> uuid
-  const { data: subjects, error: subjErr } = await supabase
-    .from("subjects")
-    .select("id, name_ru");
-  if (subjErr) throw subjErr;
-  const subjectId = new Map(subjects.map((s) => [s.name_ru, s.id]));
+  // 1. Compute per-subject grade range from JSON
+  const subjectMeta = new Map(); // name_ru -> {gmin, gmax}
+  for (const group of data) {
+    const entry = subjectMeta.get(group.name) ?? { gmin: 99, gmax: 0 };
+    for (const obj of group.objectives) {
+      const g = Number(obj.grade);
+      if (g < entry.gmin) entry.gmin = g;
+      if (g > entry.gmax) entry.gmax = g;
+    }
+    subjectMeta.set(group.name, entry);
+  }
 
-  // 2. Build objectives rows
+  // 2. Ensure every subject exists; read existing first
+  const { data: existing, error: subjErr } = await supabase
+    .from("subjects")
+    .select("id, name_ru, grade_min, grade_max");
+  if (subjErr) throw subjErr;
+  const byName = new Map(existing.map((s) => [s.name_ru, s]));
+
+  let inserted = 0;
+  let updated = 0;
+  for (const [name, { gmin, gmax }] of subjectMeta) {
+    const row = byName.get(name);
+    if (!row) {
+      const { data: created, error } = await supabase
+        .from("subjects")
+        .insert({ name_ru: name, grade_min: gmin, grade_max: gmax })
+        .select("id, name_ru, grade_min, grade_max")
+        .single();
+      if (error) throw error;
+      byName.set(name, created);
+      inserted++;
+    } else {
+      const newMin = Math.min(row.grade_min, gmin);
+      const newMax = Math.max(row.grade_max, gmax);
+      if (newMin !== row.grade_min || newMax !== row.grade_max) {
+        const { error } = await supabase
+          .from("subjects")
+          .update({ grade_min: newMin, grade_max: newMax })
+          .eq("id", row.id);
+        if (error) throw error;
+        updated++;
+      }
+    }
+  }
+  console.log(
+    `Subjects: ${inserted} inserted, ${updated} grade-range updated, ${byName.size} total.`,
+  );
+
+  // 3. Build objectives rows
   const rows = [];
   let skipped = 0;
   for (const group of data) {
-    const sid = subjectId.get(group.name);
-    if (!sid) {
-      console.warn(
-        `! subject not found in DB: ${group.name} — did you run 0003_goso_subjects.sql?`,
-      );
+    const subj = byName.get(group.name);
+    if (!subj) {
+      console.warn(`! subject still missing after ensure: ${group.name}`);
       continue;
     }
     for (const obj of group.objectives) {
@@ -86,7 +125,7 @@ async function main() {
         continue;
       }
       rows.push({
-        subject_id: sid,
+        subject_id: subj.id,
         grade: Number(obj.grade),
         code: String(obj.code),
         text_ru: String(obj.description),
@@ -97,17 +136,20 @@ async function main() {
   }
 
   console.log(
-    `Prepared ${rows.length} objectives (skipped ${skipped} malformed) for ${subjects.length} subjects.`,
+    `Prepared ${rows.length} objectives (skipped ${skipped} malformed).`,
   );
 
-  // 3. Upsert in batches. UNIQUE(subject_id, grade, code) handles idempotency.
+  // 4. Upsert in batches. UNIQUE(subject_id, grade, code) handles idempotency.
   const BATCH = 500;
   let done = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
     const { error } = await supabase
       .from("learning_objectives")
-      .upsert(chunk, { onConflict: "subject_id,grade,code", ignoreDuplicates: true });
+      .upsert(chunk, {
+        onConflict: "subject_id,grade,code",
+        ignoreDuplicates: true,
+      });
     if (error) {
       console.error(`batch ${i}-${i + chunk.length} failed:`, error.message);
       process.exit(1);
@@ -115,7 +157,7 @@ async function main() {
     done += chunk.length;
     process.stdout.write(`  ${done}/${rows.length}\r`);
   }
-  console.log(`\nDone: ${done} rows upserted.`);
+  console.log(`\nDone: ${done} objective rows upserted.`);
 }
 
 main().catch((e) => {
