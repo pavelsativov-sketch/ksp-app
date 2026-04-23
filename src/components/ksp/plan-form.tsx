@@ -29,6 +29,7 @@ import {
 } from "@/lib/types/ksp";
 import type { InteractiveTask } from "@/lib/ksp/tasks";
 import { TaskBuilder } from "./task-builder";
+import { ObjectivesPicker } from "./objectives-picker";
 import {
   savePlanAction,
   type SavePlanInput,
@@ -283,10 +284,30 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         <CardHeader>
           <CardTitle>Цели обучения</CardTitle>
           <CardDescription>
-            Цели из учебной программы РК (напр. код 5.1.2.1).
+            Цели из официальной учебной программы РК (ГОСО). Выберите из списка
+            или впишите вручную.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <ObjectivesPicker
+            subjectId={subjectId}
+            grade={grade}
+            selectedCodes={content.learningObjectives
+              .map((o) => o.code)
+              .filter(Boolean)}
+            onAdd={(rows) =>
+              setContent({
+                ...content,
+                learningObjectives: [
+                  ...content.learningObjectives,
+                  ...rows.filter(
+                    (r) =>
+                      !content.learningObjectives.some((o) => o.code === r.code),
+                  ),
+                ],
+              })
+            }
+          />
           <ListEditor
             items={content.learningObjectives.map(
               (o) => `${o.code}${o.code ? " — " : ""}${o.text}`,
