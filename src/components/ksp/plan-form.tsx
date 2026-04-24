@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Save, Loader2, Plus, X, Check } from "lucide-react";
+import { Sparkles, Save, Loader2, Plus, X, Check, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +31,7 @@ import {
 import type { InteractiveTask } from "@/lib/ksp/tasks";
 import { TaskBuilder } from "./task-builder";
 import { ObjectivesPicker } from "./objectives-picker";
+import { AiEnhanceButton } from "./ai-enhance-button";
 import {
   savePlanAction,
   type SavePlanInput,
@@ -70,6 +71,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
   );
   const [activeTab, setActiveTab] = useState<string>("meta");
   const [draftSaved, setDraftSaved] = useState(false);
+  const [showValidation, setShowValidation] = useState(false);
 
   const subjectName =
     subjects.find((s) => s.id === subjectId)?.name_ru ?? "Предмет";
@@ -180,8 +182,14 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
     }
   }
 
+  const warnings = useMemo(
+    () => collectWarnings({ title, topic: content.topic, content }),
+    [title, content],
+  );
+
   function save() {
     setSaveError(null);
+    setShowValidation(true);
     const payload: SavePlanInput = {
       id: initialPlan?.id,
       title: title || content.topic || "Новый КСП",
@@ -210,6 +218,22 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
 
   return (
     <div className="space-y-6">
+      {showValidation && warnings.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex gap-3 items-start">
+          <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-900">
+            <p className="font-medium mb-1">
+              План сохранён, но есть незаполненные важные разделы ({warnings.length}):
+            </p>
+            <ul className="list-disc pl-5 space-y-0.5">
+              {warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white border border-slate-200 rounded-lg p-3 sticky top-0 z-10 backdrop-blur">
         <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
           <span>Заполнено: {progress.percent}% ({progress.done}/{progress.total})</span>
@@ -248,12 +272,15 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2 space-y-1.5">
-            <Label htmlFor="title">Название КСП</Label>
+            <Label htmlFor="title">
+              Название КСП <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Напр. «Натуральные числа. Сложение» — 5 класс"
+              className={showValidation && !title.trim() ? "border-red-400 focus-visible:ring-red-400" : ""}
             />
           </div>
           <div className="space-y-1.5">
@@ -374,6 +401,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
               setContent({ ...content, topic: e.target.value })
             }
             placeholder="Напр. «Сложение многозначных чисел»"
+            className={showValidation && !content.topic.trim() ? "border-red-400 focus-visible:ring-red-400" : ""}
           />
           {aiError && (
             <p className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200">
@@ -432,8 +460,16 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
           <CardTitle>Цели урока (SMART)</CardTitle>
+          <AiEnhanceButton
+            section="lessonObjectives"
+            current={content.lessonObjectives}
+            onApply={(improved) =>
+              setContent({ ...content, lessonObjectives: improved })
+            }
+            context={{ topic: content.topic, subject: subjectName, grade, language }}
+          />
         </CardHeader>
         <CardContent>
           <ListEditor
@@ -447,8 +483,16 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
           <CardTitle>Критерии оценивания</CardTitle>
+          <AiEnhanceButton
+            section="assessmentCriteria"
+            current={content.assessmentCriteria}
+            onApply={(improved) =>
+              setContent({ ...content, assessmentCriteria: improved })
+            }
+            context={{ topic: content.topic, subject: subjectName, grade, language }}
+          />
         </CardHeader>
         <CardContent>
           <ListEditor
@@ -462,9 +506,37 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Языковые цели</CardTitle>
-          <CardDescription>Термины и ключевые фразы</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <div>
+            <CardTitle>Языковые цели</CardTitle>
+            <CardDescription>Термины и ключевые фразы</CardDescription>
+          </div>
+          <div className="flex flex-col gap-1 items-end">
+            <AiEnhanceButton
+              section="languageObjectivesTerms"
+              current={content.languageObjectives.terms}
+              onApply={(terms) =>
+                setContent({
+                  ...content,
+                  languageObjectives: { ...content.languageObjectives, terms },
+                })
+              }
+              context={{ topic: content.topic, subject: subjectName, grade, language }}
+              label="AI → термины"
+            />
+            <AiEnhanceButton
+              section="languageObjectivesPhrases"
+              current={content.languageObjectives.phrases}
+              onApply={(phrases) =>
+                setContent({
+                  ...content,
+                  languageObjectives: { ...content.languageObjectives, phrases },
+                })
+              }
+              context={{ topic: content.topic, subject: subjectName, grade, language }}
+              label="AI → фразы"
+            />
+          </div>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -511,7 +583,16 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="values">Привитие ценностей</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="values">Привитие ценностей</Label>
+              <AiEnhanceButton
+                section="values"
+                current={content.values}
+                onApply={(improved) => setContent({ ...content, values: improved })}
+                context={{ topic: content.topic, subject: subjectName, grade, language }}
+                label="AI"
+              />
+            </div>
             <Textarea
               id="values"
               rows={3}
@@ -533,7 +614,18 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
             />
           </div>
           <div className="md:col-span-2">
-            <Label htmlFor="priorKnowledge">Предшествующие знания</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="priorKnowledge">Предшествующие знания</Label>
+              <AiEnhanceButton
+                section="priorKnowledge"
+                current={content.priorKnowledge}
+                onApply={(improved) =>
+                  setContent({ ...content, priorKnowledge: improved })
+                }
+                context={{ topic: content.topic, subject: subjectName, grade, language }}
+                label="AI"
+              />
+            </div>
             <Textarea
               id="priorKnowledge"
               rows={2}
@@ -568,6 +660,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
               })
             }
             context={{ topic: content.topic, grade, subject: subjectName, language }}
+            availableObjectives={content.learningObjectives}
           />
           <StageEditor
             title="Середина урока"
@@ -580,6 +673,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
               })
             }
             context={{ topic: content.topic, grade, subject: subjectName, language }}
+            availableObjectives={content.learningObjectives}
           />
           <StageEditor
             title="Конец урока"
@@ -592,6 +686,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
               })
             }
             context={{ topic: content.topic, grade, subject: subjectName, language }}
+            availableObjectives={content.learningObjectives}
           />
         </CardContent>
       </Card>
@@ -637,7 +732,21 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
             />
           </div>
           <div>
-            <Label>Здоровье и ТБ</Label>
+            <div className="flex items-center justify-between">
+              <Label>Здоровье и ТБ</Label>
+              <AiEnhanceButton
+                section="healthAndSafety"
+                current={content.evaluation.healthAndSafety}
+                onApply={(improved) =>
+                  setContent({
+                    ...content,
+                    evaluation: { ...content.evaluation, healthAndSafety: improved },
+                  })
+                }
+                context={{ topic: content.topic, subject: subjectName, grade, language }}
+                label="AI"
+              />
+            </div>
             <Textarea
               rows={2}
               value={content.evaluation.healthAndSafety}
@@ -653,7 +762,21 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
             />
           </div>
           <div>
-            <Label>Рефлексия учителя</Label>
+            <div className="flex items-center justify-between">
+              <Label>Рефлексия учителя</Label>
+              <AiEnhanceButton
+                section="reflection"
+                current={content.evaluation.reflection}
+                onApply={(improved) =>
+                  setContent({
+                    ...content,
+                    evaluation: { ...content.evaluation, reflection: improved },
+                  })
+                }
+                context={{ topic: content.topic, subject: subjectName, grade, language }}
+                label="AI"
+              />
+            </div>
             <Textarea
               rows={3}
               value={content.evaluation.reflection}
@@ -759,12 +882,14 @@ function StageEditor({
   stage,
   onChange,
   context,
+  availableObjectives,
 }: {
   title: string;
   stageKey: "beginning" | "middle" | "end";
   stage: LessonStage;
   onChange: (stage: LessonStage) => void;
   context: { topic: string; grade: number; subject: string; language: "ru" | "kz" };
+  availableObjectives: Array<{ code: string; text: string }>;
 }) {
   const tasks = stage.tasks ?? [];
   function setTasks(next: InteractiveTask[]) {
@@ -815,9 +940,44 @@ function StageEditor({
         tasks={tasks}
         onChange={setTasks}
         context={{ stage: stageKey, ...context }}
+        availableObjectives={availableObjectives}
       />
     </div>
   );
+}
+
+function collectWarnings({
+  title,
+  topic,
+  content,
+}: {
+  title: string;
+  topic: string;
+  content: KspContent;
+}): string[] {
+  const out: string[] = [];
+  if (!title.trim()) out.push("Название КСП не заполнено");
+  if (!topic.trim()) out.push("Тема урока не указана");
+  if (content.learningObjectives.length === 0) out.push("Нет целей обучения из программы (ГОСО)");
+  if (content.lessonObjectives.length === 0) out.push("Нет целей урока (SMART)");
+  if (content.assessmentCriteria.length === 0)
+    out.push("Не заданы критерии оценивания");
+  const anyStage = (
+    [content.stages.beginning, content.stages.middle, content.stages.end] as const
+  ).some((s) => s.teacherActions.trim().length > 0);
+  if (!anyStage)
+    out.push("Нет действий учителя ни в одном этапе урока");
+  const totalTasks =
+    (content.stages.beginning.tasks?.length ?? 0) +
+    (content.stages.middle.tasks?.length ?? 0) +
+    (content.stages.end.tasks?.length ?? 0);
+  if (totalTasks === 0)
+    out.push(
+      "Нет интерактивных заданий (добавьте хотя бы одно для вовлечения учеников)",
+    );
+  if (!content.evaluation.healthAndSafety.trim())
+    out.push("Не заполнен раздел «Здоровье и ТБ»");
+  return out;
 }
 
 function computeProgress(c: KspContent, title: string): { percent: number; done: number; total: number } {

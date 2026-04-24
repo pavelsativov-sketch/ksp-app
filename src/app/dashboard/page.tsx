@@ -10,7 +10,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { FileText, Plus } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { PlansFilter, type PlanListItem } from "@/components/ksp/plans-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +42,42 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/dashboard");
 
-  const { data: plans } = await supabase
-    .from("lesson_plans")
-    .select("id, title, grade, subject_id, updated_at, visibility")
-    .eq("owner_id", user.id)
-    .order("updated_at", { ascending: false });
+  const [plansRes, subjectsRes] = await Promise.all([
+    supabase
+      .from("lesson_plans")
+      .select("id, title, grade, subject_id, quarter, updated_at, visibility, content")
+      .eq("owner_id", user.id)
+      .order("updated_at", { ascending: false }),
+    supabase.from("subjects").select("id, name_ru").order("name_ru"),
+  ]);
+
+  const subjects = (subjectsRes.data as Array<{ id: string; name_ru: string }> | null) ?? [];
+  const subjectMap = new Map(subjects.map((s) => [s.id, s.name_ru]));
+  const rawPlans = (plansRes.data as Array<{
+    id: string;
+    title: string;
+    grade: number;
+    subject_id: string | null;
+    quarter: number | null;
+    updated_at: string;
+    visibility: "private" | "unlisted" | "public";
+    content: { topic?: string } | null;
+  }> | null) ?? [];
+
+  const plans: PlanListItem[] = rawPlans.map((p) => ({
+    id: p.id,
+    title: p.title,
+    grade: p.grade,
+    subject_id: p.subject_id,
+    subject_name: p.subject_id ? subjectMap.get(p.subject_id) ?? null : null,
+    quarter: p.quarter,
+    updated_at: p.updated_at,
+    visibility: p.visibility,
+    topic: p.content?.topic ?? null,
+  }));
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Мои КСП</h1>
@@ -64,36 +92,7 @@ export default async function DashboardPage() {
         </Button>
       </div>
 
-      {plans && plans.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {plans.map((p) => (
-            <Card key={p.id} className="hover:border-blue-400 transition-colors">
-              <CardHeader>
-                <CardTitle className="text-lg line-clamp-2">
-                  <Link href={`/plans/${p.id}`} className="hover:underline">
-                    {p.title}
-                  </Link>
-                </CardTitle>
-                <CardDescription className="text-xs flex gap-2 items-center">
-                  <span>{p.grade} класс</span>
-                  <span>•</span>
-                  <span>{formatDate(p.updated_at)}</span>
-                  <span>•</span>
-                  <span className="capitalize">{p.visibility}</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex gap-2 pt-0">
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/plans/${p.id}`}>Открыть</Link>
-                </Button>
-                <Button asChild variant="ghost" size="sm">
-                  <Link href={`/plans/${p.id}/edit`}>Редактировать</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
+      {plans.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center space-y-4">
             <FileText className="mx-auto text-slate-400 w-12 h-12" />
@@ -111,6 +110,14 @@ export default async function DashboardPage() {
             </Button>
           </CardContent>
         </Card>
+      ) : (
+        <PlansFilter
+          plans={plans}
+          subjects={subjects}
+          showVisibility
+          showEditLink
+          emptyMessage="Пока нет КСП"
+        />
       )}
     </div>
   );

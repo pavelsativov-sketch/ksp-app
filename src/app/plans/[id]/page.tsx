@@ -4,8 +4,9 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { PlanView } from "@/components/ksp/plan-view";
 import { PrintButton } from "@/components/ksp/print-button";
+import { ClonePlanButton } from "@/components/ksp/clone-plan-button";
 import type { LessonPlanRow } from "@/lib/types/ksp";
-import { Download, Edit, Printer } from "lucide-react";
+import { Archive, Download, Edit, Printer } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +50,15 @@ export default async function PlanViewPage({
               </Link>
             </Button>
           )}
+          {user && <ClonePlanButton planId={plan.id} />}
           <Button asChild variant="outline">
             <a href={`/api/export/docx/${plan.id}`}>
               <Download /> Word
+            </a>
+          </Button>
+          <Button asChild>
+            <a href={`/api/export/zip/${plan.id}`}>
+              <Archive /> Пакет (.zip)
             </a>
           </Button>
           <PrintButton>

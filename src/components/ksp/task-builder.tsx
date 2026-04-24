@@ -48,9 +48,10 @@ export interface TaskBuilderProps {
     subject: string;
     language: "ru" | "kz";
   };
+  availableObjectives?: Array<{ code: string; text: string }>;
 }
 
-export function TaskBuilder({ tasks, onChange, context }: TaskBuilderProps) {
+export function TaskBuilder({ tasks, onChange, context, availableObjectives = [] }: TaskBuilderProps) {
   const [newType, setNewType] = useState<TaskType>("MCQ");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -152,6 +153,7 @@ export function TaskBuilder({ tasks, onChange, context }: TaskBuilderProps) {
             task={task}
             onChange={(t) => updateTask(idx, t)}
             onDelete={() => removeTask(idx)}
+            availableObjectives={availableObjectives}
           />
         ))}
       </div>
@@ -163,10 +165,12 @@ function TaskCard({
   task,
   onChange,
   onDelete,
+  availableObjectives,
 }: {
   task: InteractiveTask;
   onChange: (t: InteractiveTask) => void;
   onDelete: () => void;
+  availableObjectives: Array<{ code: string; text: string }>;
 }) {
   const [open, setOpen] = useState(true);
   const [preview, setPreview] = useState(false);
@@ -218,7 +222,7 @@ function TaskCard({
           {task.type === "MATCHING" && <MatchingEditor task={task} onChange={onChange} />}
           {task.type === "ORDERING" && <OrderingEditor task={task} onChange={onChange} />}
           {task.type === "NUMERIC" && <NumericEditor task={task} onChange={onChange} />}
-          <TaskOptions task={task} onChange={onChange} />
+          <TaskOptions task={task} onChange={onChange} availableObjectives={availableObjectives} />
         </div>
       )}
 
@@ -269,10 +273,13 @@ function CommonFields({
 function TaskOptions({
   task,
   onChange,
+  availableObjectives,
 }: {
   task: InteractiveTask;
   onChange: (t: InteractiveTask) => void;
+  availableObjectives: Array<{ code: string; text: string }>;
 }) {
+  const hasObjectives = availableObjectives.some((o) => o.code);
   return (
     <details className="group">
       <summary className="text-xs text-slate-500 cursor-pointer select-none">
@@ -312,13 +319,37 @@ function TaskOptions({
             </Label>
           </div>
         )}
-        <div>
-          <Label>Код цели (ГОСО)</Label>
-          <Input
-            value={task.objectiveCode ?? ""}
-            onChange={(e) => onChange({ ...task, objectiveCode: e.target.value })}
-            placeholder="напр. 5.1.2.1"
-          />
+        <div className="md:col-span-3">
+          <Label>Привязка к цели ГОСО</Label>
+          {hasObjectives ? (
+            <Select
+              value={task.objectiveCode ?? "__none__"}
+              onValueChange={(v) =>
+                onChange({ ...task, objectiveCode: v === "__none__" ? undefined : v })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Выберите цель из КСП" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— без привязки —</SelectItem>
+                {availableObjectives
+                  .filter((o) => o.code)
+                  .map((o) => (
+                    <SelectItem key={o.code} value={o.code}>
+                      <span className="font-mono text-xs mr-2">{o.code}</span>
+                      {o.text.length > 60 ? o.text.slice(0, 60) + "…" : o.text}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              value={task.objectiveCode ?? ""}
+              onChange={(e) => onChange({ ...task, objectiveCode: e.target.value })}
+              placeholder="сначала добавьте цели ГОСО в табе «Цели» — или впишите код вручную"
+            />
+          )}
         </div>
       </div>
     </details>
