@@ -196,6 +196,19 @@ function renderTask(task: InteractiveTask, n: number): Paragraph[] {
         );
       });
       break;
+    case "NUMERIC":
+      body.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text:
+                `   Ответ: ${task.answer}${task.unit ? ` ${task.unit}` : ""}` +
+                (task.tolerance > 0 ? ` (допуск ±${task.tolerance})` : ""),
+            }),
+          ],
+        }),
+      );
+      break;
   }
 
   if (task.hint) {

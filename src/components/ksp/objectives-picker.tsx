@@ -39,9 +39,7 @@ export function ObjectivesPicker({
     const ctrl = new AbortController();
     let cancelled = false;
     (async () => {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(null);
       try {
         const res = await fetch(

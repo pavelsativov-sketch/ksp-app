@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Save, Loader2, Plus, X } from "lucide-react";
+import { Sparkles, Save, Loader2, Plus, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,7 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   type KspContent,
   type LessonStage,
@@ -34,6 +35,8 @@ import {
   savePlanAction,
   type SavePlanInput,
 } from "@/app/actions/plans";
+
+const DRAFT_KEY_PREFIX = "ksp-draft:";
 
 interface PlanFormProps {
   initialPlan?: Partial<SavePlanInput> & { id?: string };
@@ -65,9 +68,72 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
   const [content, setContent] = useState<KspContent>(
     initialPlan?.content ?? emptyKsp(),
   );
+  const [activeTab, setActiveTab] = useState<string>("meta");
+  const [draftSaved, setDraftSaved] = useState(false);
 
   const subjectName =
     subjects.find((s) => s.id === subjectId)?.name_ru ?? "Предмет";
+
+  const draftKey = `${DRAFT_KEY_PREFIX}${initialPlan?.id ?? "new"}`;
+
+  // Restore draft on first mount (only when no initialPlan.content was supplied).
+  useEffect(() => {
+    if (initialPlan?.content) return;
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const raw = window.localStorage.getItem(draftKey);
+        if (!raw) return;
+        const saved = JSON.parse(raw) as {
+          title?: string;
+          subjectId?: string;
+          grade?: number;
+          quarter?: number | null;
+          section?: string;
+          visibility?: "private" | "unlisted" | "public";
+          language?: "ru" | "kz";
+          content?: KspContent;
+        };
+        if (saved.title !== undefined) setTitle(saved.title);
+        if (saved.subjectId !== undefined && saved.subjectId) setSubjectId(saved.subjectId);
+        if (saved.grade !== undefined) setGrade(saved.grade);
+        if (saved.quarter !== undefined) setQuarter(saved.quarter);
+        if (saved.section !== undefined) setSection(saved.section);
+        if (saved.visibility !== undefined) setVisibility(saved.visibility);
+        if (saved.language !== undefined) setLanguage(saved.language);
+        if (saved.content) setContent(saved.content);
+      } catch {
+        // ignore corrupted draft
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced autosave of the whole form state.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const h = setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          draftKey,
+          JSON.stringify({ title, subjectId, grade, quarter, section, visibility, language, content }),
+        );
+        setDraftSaved(true);
+        const t = setTimeout(() => setDraftSaved(false), 1500);
+        return () => clearTimeout(t);
+      } catch {
+        // ignore quota errors
+      }
+    }, 600);
+    return () => clearTimeout(h);
+  }, [title, subjectId, grade, quarter, section, visibility, language, content, draftKey]);
+
+  const progress = useMemo(() => computeProgress(content, title), [content, title]);
 
   async function generateWithAi() {
     setAiError(null);
@@ -132,6 +198,11 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
       if ("error" in res && res.error) {
         setSaveError(res.error);
       } else if ("id" in res && res.id) {
+        try {
+          window.localStorage.removeItem(draftKey);
+        } catch {
+          // ignore
+        }
         router.push(`/plans/${res.id}`);
       }
     });
@@ -139,6 +210,35 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
 
   return (
     <div className="space-y-6">
+      <div className="bg-white border border-slate-200 rounded-lg p-3 sticky top-0 z-10 backdrop-blur">
+        <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
+          <span>Заполнено: {progress.percent}% ({progress.done}/{progress.total})</span>
+          <span className="flex items-center gap-1 text-emerald-600">
+            {draftSaved && (
+              <>
+                <Check className="w-3 h-3" /> Черновик сохранён
+              </>
+            )}
+          </span>
+        </div>
+        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-sky-400 to-emerald-500 transition-all duration-500"
+            style={{ width: `${progress.percent}%` }}
+          />
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="meta">Метаданные</TabsTrigger>
+          <TabsTrigger value="goals">Цели</TabsTrigger>
+          <TabsTrigger value="context">Контекст</TabsTrigger>
+          <TabsTrigger value="flow">Ход урока</TabsTrigger>
+          <TabsTrigger value="evaluation">Оценивание</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="meta" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Метаданные</CardTitle>
@@ -242,6 +342,9 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         </CardContent>
       </Card>
 
+        </TabsContent>
+
+        <TabsContent value="goals" className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
@@ -399,6 +502,9 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         </CardContent>
       </Card>
 
+        </TabsContent>
+
+        <TabsContent value="context" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Контекст урока</CardTitle>
@@ -440,6 +546,9 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         </CardContent>
       </Card>
 
+        </TabsContent>
+
+        <TabsContent value="flow" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Ход урока</CardTitle>
@@ -487,6 +596,9 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
         </CardContent>
       </Card>
 
+        </TabsContent>
+
+        <TabsContent value="evaluation" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Оценивание и рефлексия</CardTitle>
@@ -558,6 +670,9 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
           </div>
         </CardContent>
       </Card>
+
+        </TabsContent>
+      </Tabs>
 
       {saveError && (
         <p className="text-sm text-red-600 bg-red-50 p-3 rounded border border-red-200">
@@ -703,4 +818,31 @@ function StageEditor({
       />
     </div>
   );
+}
+
+function computeProgress(c: KspContent, title: string): { percent: number; done: number; total: number } {
+  const checks: boolean[] = [
+    title.trim().length > 0,
+    c.topic.trim().length > 0,
+    c.learningObjectives.length > 0,
+    c.lessonObjectives.length > 0,
+    c.assessmentCriteria.length > 0,
+    c.languageObjectives.terms.length + c.languageObjectives.phrases.length > 0,
+    c.values.trim().length > 0,
+    c.priorKnowledge.trim().length > 0,
+    c.stages.beginning.teacherActions.trim().length > 0,
+    c.stages.middle.teacherActions.trim().length > 0,
+    c.stages.end.teacherActions.trim().length > 0,
+    c.evaluation.formativeAssessment.trim().length > 0,
+    c.evaluation.reflection.trim().length > 0,
+    c.evaluation.healthAndSafety.trim().length > 0,
+    // Interactive tasks present anywhere
+    (c.stages.beginning.tasks?.length ?? 0) +
+      (c.stages.middle.tasks?.length ?? 0) +
+      (c.stages.end.tasks?.length ?? 0) >
+      0,
+  ];
+  const total = checks.length;
+  const done = checks.filter(Boolean).length;
+  return { percent: Math.round((done / total) * 100), done, total };
 }

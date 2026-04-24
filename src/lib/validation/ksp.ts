@@ -6,6 +6,8 @@ const taskBase = {
   hint: z.string().trim().optional(),
   points: z.number().int().min(1).max(100).default(1),
   objectiveCode: z.string().trim().optional(),
+  timeLimitSec: z.number().int().min(0).max(3600).optional(),
+  shuffle: z.boolean().optional(),
 };
 
 const taskSchema = z.discriminatedUnion("type", [
@@ -48,6 +50,13 @@ const taskSchema = z.discriminatedUnion("type", [
     type: z.literal("ORDERING"),
     items: z.array(z.string()).min(2),
     correctOrder: z.array(z.number().int().min(0)),
+  }),
+  z.object({
+    ...taskBase,
+    type: z.literal("NUMERIC"),
+    answer: z.number(),
+    tolerance: z.number().min(0).default(0),
+    unit: z.string().trim().optional(),
   }),
 ]);
 

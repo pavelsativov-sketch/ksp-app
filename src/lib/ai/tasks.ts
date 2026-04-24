@@ -5,6 +5,7 @@ import {
   type TrueFalseTask,
   type FillBlankTask,
   type OrderingTask,
+  type NumericTask,
   type TaskType,
   emptyTask,
 } from "@/lib/ksp/tasks";
@@ -41,6 +42,7 @@ const OPENAI_TASKS_SCHEMA = {
                 "SHORT_ANSWER",
                 "FILL_BLANK",
                 "ORDERING",
+                "NUMERIC",
               ],
             },
             question: { type: "string" },
@@ -115,6 +117,19 @@ function materialize(raw: RawTask): InteractiveTask {
     }
     case "MATCHING":
       return t;
+    case "NUMERIC": {
+      const answer =
+        typeof raw.payload.answer === "number" ? raw.payload.answer : 0;
+      const tolerance =
+        typeof raw.payload.tolerance === "number"
+          ? Math.max(0, raw.payload.tolerance)
+          : 0;
+      const unit =
+        typeof raw.payload.unit === "string" && raw.payload.unit.trim()
+          ? raw.payload.unit
+          : undefined;
+      return { ...t, answer, tolerance, unit };
+    }
   }
 }
 
@@ -144,13 +159,15 @@ export async function generateTasks(
 Этап: ${stageName}
 Количество заданий: ${count}
 
-Разрешённые типы: MCQ (4 варианта), TRUE_FALSE, SHORT_ANSWER, FILL_BLANK, ORDERING.
+Разрешённые типы: MCQ (4 варианта), TRUE_FALSE, SHORT_ANSWER, FILL_BLANK, ORDERING, NUMERIC.
 Для каждого задания укажи тип, вопрос, подсказку (hint), баллы (1–5) и payload по схеме:
 - MCQ: { options: string[], correctIndex: number }
 - TRUE_FALSE: { correct: boolean }
 - SHORT_ANSWER: { acceptedAnswers: string[] }
 - FILL_BLANK: { template: "... ___ ...", answers: string[] }
 - ORDERING: { items: string[] }  // элементы уже в правильном порядке
+- NUMERIC: { answer: number, tolerance: number, unit?: string }
+Предпочтительно разнообразь типы заданий. Для NUMERIC используй реальные вычисления по теме.
 Верни ровно ${count} заданий.`;
 
   const response = await openai.chat.completions.create({
@@ -210,6 +227,13 @@ function stubTasks(input: GenerateTasksInput, count: number): InteractiveTask[] 
     correctOrder: [0, 1, 2, 3],
     hint: "Сначала цель, затем материал, затем практика, в конце — итоги.",
   };
-  const tasks: InteractiveTask[] = [mcq, tf, fb, ordering];
+  const numeric: NumericTask = {
+    ...(emptyTask("NUMERIC") as NumericTask),
+    question: `Сколько ключевых понятий встречается в теме «${input.topic}»? (введите примерное число)`,
+    answer: 3,
+    tolerance: 1,
+    hint: "Обычно 2–4 основных понятия.",
+  };
+  const tasks: InteractiveTask[] = [mcq, tf, fb, ordering, numeric];
   return tasks.slice(0, Math.min(count, tasks.length));
 }

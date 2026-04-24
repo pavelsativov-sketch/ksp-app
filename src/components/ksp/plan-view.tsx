@@ -1,12 +1,48 @@
+"use client";
+
+import { useState } from "react";
 import type { LessonPlanRow, LessonStage } from "@/lib/types/ksp";
 import { TaskPlayer } from "./task-player";
+import { QuizMode } from "./quiz-mode";
+import { Button } from "@/components/ui/button";
+import { Sparkles } from "lucide-react";
 import { taskTypeLabel } from "@/lib/ksp/tasks";
 
 export function PlanView({ plan }: { plan: LessonPlanRow }) {
   const c = plan.content;
+  const [quizOpen, setQuizOpen] = useState(false);
+  const totalTasks =
+    (c.stages.beginning.tasks?.length ?? 0) +
+    (c.stages.middle.tasks?.length ?? 0) +
+    (c.stages.end.tasks?.length ?? 0);
   return (
     <div className="print-plan bg-white border border-slate-200 rounded-lg p-6 md:p-8 space-y-6">
       <h1 className="text-2xl font-bold text-center">{plan.title}</h1>
+
+      {totalTasks > 0 && (
+        <div className="no-print flex justify-center">
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => setQuizOpen(true)}
+            className="bg-gradient-to-r from-amber-500 to-pink-600 hover:from-amber-600 hover:to-pink-700"
+          >
+            <Sparkles className="w-5 h-5" />
+            Пройти урок как квиз ({totalTasks} заданий)
+          </Button>
+        </div>
+      )}
+
+      {quizOpen && (
+        <QuizMode
+          stages={[
+            { stageKey: "beginning", stageTitle: "Начало урока", tasks: c.stages.beginning.tasks ?? [] },
+            { stageKey: "middle", stageTitle: "Середина урока", tasks: c.stages.middle.tasks ?? [] },
+            { stageKey: "end", stageTitle: "Конец урока", tasks: c.stages.end.tasks ?? [] },
+          ]}
+          onClose={() => setQuizOpen(false)}
+        />
+      )}
 
       <table className="w-full text-sm">
         <tbody>

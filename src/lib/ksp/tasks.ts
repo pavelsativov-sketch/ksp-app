@@ -12,7 +12,8 @@ export type TaskType =
   | "SHORT_ANSWER"
   | "FILL_BLANK"
   | "MATCHING"
-  | "ORDERING";
+  | "ORDERING"
+  | "NUMERIC";
 
 export interface BaseTask {
   id: string;
@@ -21,6 +22,10 @@ export interface BaseTask {
   hint?: string;
   points: number;
   objectiveCode?: string;
+  /** Optional per-task timer in seconds. When > 0, player shows countdown. */
+  timeLimitSec?: number;
+  /** When true, MCQ options are shuffled on each render for the student. */
+  shuffle?: boolean;
 }
 
 export interface McqTask extends BaseTask {
@@ -64,13 +69,24 @@ export interface OrderingTask extends BaseTask {
   correctOrder: number[];
 }
 
+export interface NumericTask extends BaseTask {
+  type: "NUMERIC";
+  /** Correct numeric value. */
+  answer: number;
+  /** Allowed absolute tolerance (|student - answer| ≤ tolerance). Default 0. */
+  tolerance: number;
+  /** Optional unit label shown next to the input (e.g. “км/ч”, “кг”). */
+  unit?: string;
+}
+
 export type InteractiveTask =
   | McqTask
   | TrueFalseTask
   | ShortAnswerTask
   | FillBlankTask
   | MatchingTask
-  | OrderingTask;
+  | OrderingTask
+  | NumericTask;
 
 export type TaskAnswer =
   | { type: "MCQ"; selectedIndex: number | null }
@@ -78,7 +94,8 @@ export type TaskAnswer =
   | { type: "SHORT_ANSWER"; text: string }
   | { type: "FILL_BLANK"; fillers: string[] }
   | { type: "MATCHING"; pairs: Array<{ leftIndex: number; rightIndex: number }> }
-  | { type: "ORDERING"; order: number[] };
+  | { type: "ORDERING"; order: number[] }
+  | { type: "NUMERIC"; value: number | null };
 
 export interface TaskResult {
   isCorrect: boolean;
@@ -194,6 +211,28 @@ export function evaluateTask(task: InteractiveTask, answer: TaskAnswer): TaskRes
           : `На своих местах: ${correctPlaces} из ${task.correctOrder.length}.`,
       };
     }
+    case "NUMERIC": {
+      const a = answer as Extract<TaskAnswer, { type: "NUMERIC" }>;
+      if (a.value === null || Number.isNaN(a.value)) {
+        return {
+          isCorrect: false,
+          score: 0,
+          maxScore,
+          feedback: "Введите число",
+        };
+      }
+      const tol = Math.abs(task.tolerance ?? 0);
+      const ok = Math.abs(a.value - task.answer) <= tol;
+      const unit = task.unit ? ` ${task.unit}` : "";
+      return {
+        isCorrect: ok,
+        score: ok ? maxScore : 0,
+        maxScore,
+        feedback: ok
+          ? "Верно!"
+          : `Неверно. Ожидаемый ответ: ${task.answer}${unit}${tol > 0 ? ` (±${tol})` : ""}.`,
+      };
+    }
   }
 }
 
@@ -213,6 +252,8 @@ export function emptyTask(type: TaskType): InteractiveTask {
       return { ...base, type, question: "", left: ["", ""], right: ["", ""], pairs: [{ leftIndex: 0, rightIndex: 0 }, { leftIndex: 1, rightIndex: 1 }] };
     case "ORDERING":
       return { ...base, type, question: "", items: ["", "", ""], correctOrder: [0, 1, 2] };
+    case "NUMERIC":
+      return { ...base, type, question: "", answer: 0, tolerance: 0 };
   }
 }
 
@@ -224,5 +265,6 @@ export function taskTypeLabel(t: TaskType): string {
     case "FILL_BLANK": return "Заполни пропуск";
     case "MATCHING": return "Соотнесение";
     case "ORDERING": return "Расстановка по порядку";
+    case "NUMERIC": return "Числовой ответ";
   }
 }

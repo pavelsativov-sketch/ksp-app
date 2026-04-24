@@ -24,6 +24,7 @@ import {
   type FillBlankTask,
   type MatchingTask,
   type OrderingTask,
+  type NumericTask,
 } from "@/lib/ksp/tasks";
 import { TaskPlayer } from "./task-player";
 
@@ -34,6 +35,7 @@ const TYPES: TaskType[] = [
   "FILL_BLANK",
   "MATCHING",
   "ORDERING",
+  "NUMERIC",
 ];
 
 export interface TaskBuilderProps {
@@ -215,6 +217,8 @@ function TaskCard({
           {task.type === "FILL_BLANK" && <FillBlankEditor task={task} onChange={onChange} />}
           {task.type === "MATCHING" && <MatchingEditor task={task} onChange={onChange} />}
           {task.type === "ORDERING" && <OrderingEditor task={task} onChange={onChange} />}
+          {task.type === "NUMERIC" && <NumericEditor task={task} onChange={onChange} />}
+          <TaskOptions task={task} onChange={onChange} />
         </div>
       )}
 
@@ -256,6 +260,106 @@ function CommonFields({
           max={100}
           value={task.points}
           onChange={(e) => onChange({ ...task, points: Math.max(1, Number(e.target.value) || 1) })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TaskOptions({
+  task,
+  onChange,
+}: {
+  task: InteractiveTask;
+  onChange: (t: InteractiveTask) => void;
+}) {
+  return (
+    <details className="group">
+      <summary className="text-xs text-slate-500 cursor-pointer select-none">
+        Доп. настройки — подсказка, таймер, перемешивание
+      </summary>
+      <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="md:col-span-3">
+          <Label>Подсказка ученику (за показ — штраф на пару баллов)</Label>
+          <Input
+            value={task.hint ?? ""}
+            onChange={(e) => onChange({ ...task, hint: e.target.value })}
+            placeholder="Напр. «Вспомните правило порядка действий»"
+          />
+        </div>
+        <div>
+          <Label>Таймер (сек, 0 = без)</Label>
+          <Input
+            type="number"
+            min={0}
+            max={3600}
+            value={task.timeLimitSec ?? 0}
+            onChange={(e) =>
+              onChange({ ...task, timeLimitSec: Math.max(0, Number(e.target.value) || 0) })
+            }
+          />
+        </div>
+        {task.type === "MCQ" && (
+          <div className="flex items-center gap-2 mt-5">
+            <input
+              id={`shuffle-${task.id}`}
+              type="checkbox"
+              checked={!!task.shuffle}
+              onChange={(e) => onChange({ ...task, shuffle: e.target.checked })}
+            />
+            <Label htmlFor={`shuffle-${task.id}`} className="text-sm font-normal">
+              Перемешивать варианты
+            </Label>
+          </div>
+        )}
+        <div>
+          <Label>Код цели (ГОСО)</Label>
+          <Input
+            value={task.objectiveCode ?? ""}
+            onChange={(e) => onChange({ ...task, objectiveCode: e.target.value })}
+            placeholder="напр. 5.1.2.1"
+          />
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function NumericEditor({
+  task,
+  onChange,
+}: {
+  task: NumericTask;
+  onChange: (t: NumericTask) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <Label>Правильный ответ</Label>
+        <Input
+          type="number"
+          value={Number.isFinite(task.answer) ? task.answer : 0}
+          onChange={(e) => onChange({ ...task, answer: Number(e.target.value) })}
+        />
+      </div>
+      <div>
+        <Label>Допуск (±)</Label>
+        <Input
+          type="number"
+          min={0}
+          step="any"
+          value={task.tolerance ?? 0}
+          onChange={(e) =>
+            onChange({ ...task, tolerance: Math.max(0, Number(e.target.value) || 0) })
+          }
+        />
+      </div>
+      <div>
+        <Label>Единица (опц.)</Label>
+        <Input
+          value={task.unit ?? ""}
+          onChange={(e) => onChange({ ...task, unit: e.target.value })}
+          placeholder="напр. км/ч, кг, °C"
         />
       </div>
     </div>
