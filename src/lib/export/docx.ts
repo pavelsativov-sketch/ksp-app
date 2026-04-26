@@ -26,7 +26,32 @@ const BORDERS = {
   right: BORDER,
 };
 
-function cell(text: string, opts?: { bold?: boolean; width?: number }) {
+function p(text: string, opts?: { bold?: boolean; italics?: boolean }): Paragraph {
+  return new Paragraph({
+    children: [new TextRun({ text, bold: opts?.bold, italics: opts?.italics })],
+  });
+}
+
+function pBold(label: string, value: string): Paragraph {
+  return new Paragraph({
+    children: [
+      new TextRun({ text: label, bold: true }),
+      new TextRun({ text: value || "—" }),
+    ],
+  });
+}
+
+function bulletItems(items: string[]): Paragraph[] {
+  return items.map(
+    (item) =>
+      new Paragraph({
+        text: item,
+        bullet: { level: 0 },
+      }),
+  );
+}
+
+function cellTextOnly(text: string, opts?: { bold?: boolean; width?: number }) {
   return new TableCell({
     borders: BORDERS,
     width: opts?.width
@@ -40,72 +65,159 @@ function cell(text: string, opts?: { bold?: boolean; width?: number }) {
   });
 }
 
+function cellChildren(
+  children: Paragraph[],
+  opts?: { bold?: boolean; width?: number },
+) {
+  return new TableCell({
+    borders: BORDERS,
+    width: opts?.width
+      ? { size: opts.width, type: WidthType.PERCENTAGE }
+      : undefined,
+    children: children.length > 0 ? children : [new Paragraph({ text: "—" })],
+  });
+}
+
 function labelRow(label: string, value: string) {
   return new TableRow({
     children: [
-      cell(label, { bold: true, width: 30 }),
-      cell(value, { width: 70 }),
+      cellTextOnly(label, { bold: true, width: 30 }),
+      cellTextOnly(value, { width: 70 }),
     ],
   });
 }
 
-function bulletList(items: string[]): Paragraph[] {
-  if (items.length === 0) return [new Paragraph({ text: "—" })];
-  return items.map(
-    (item) =>
+/** Build "teacher actions" cell content with structure: key questions, actions, tasks. */
+function teacherCellChildren(stage: LessonStage): Paragraph[] {
+  const out: Paragraph[] = [];
+  if (stage.teacherActions.trim()) {
+    out.push(
+      ...stage.teacherActions
+        .split(/\n+/)
+        .filter((s) => s.trim())
+        .map((line) => new Paragraph({ text: line })),
+    );
+  }
+  const kq = stage.keyQuestions?.filter((q) => q.trim()) ?? [];
+  if (kq.length > 0) {
+    out.push(
       new Paragraph({
-        text: item,
-        bullet: { level: 0 },
+        children: [new TextRun({ text: "Ключевые вопросы:", bold: true })],
+        spacing: { before: 80 },
       }),
-  );
-}
-
-function stageTable(title: string, stage: LessonStage) {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({
-      text: title,
-      heading: HeadingLevel.HEADING_3,
-      spacing: { before: 200, after: 100 },
-    }),
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({
-          tableHeader: true,
-          children: [
-            cell("Время", { bold: true, width: 15 }),
-            cell("Действия учителя", { bold: true, width: 40 }),
-            cell("Действия учеников", { bold: true, width: 30 }),
-            cell("Ресурсы", { bold: true, width: 15 }),
-          ],
-        }),
-        new TableRow({
-          children: [
-            cell(stage.time),
-            cell(stage.teacherActions),
-            cell(stage.studentActions),
-            cell(stage.resources),
-          ],
-        }),
-      ],
-    }),
-  ];
-
+      ...bulletItems(kq),
+    );
+  }
   const tasks = stage.tasks ?? [];
   if (tasks.length > 0) {
-    children.push(
+    out.push(
       new Paragraph({
-        children: [
-          new TextRun({ text: "Интерактивные задания этапа:", bold: true }),
-        ],
-        spacing: { before: 150, after: 50 },
+        children: [new TextRun({ text: "Задания:", bold: true })],
+        spacing: { before: 80 },
       }),
     );
     tasks.forEach((task, i) => {
-      children.push(...renderTask(task, i + 1));
+      out.push(...renderTask(task, i + 1));
     });
   }
-  return children;
+  if (stage.summary?.trim()) {
+    out.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Итог урока:", bold: true })],
+        spacing: { before: 80 },
+      }),
+      new Paragraph({ text: stage.summary }),
+    );
+  }
+  if (stage.homework?.trim()) {
+    out.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Домашнее задание:", bold: true })],
+        spacing: { before: 80 },
+      }),
+      new Paragraph({ text: stage.homework }),
+    );
+  }
+  const rq = stage.reflectionQuestions?.filter((q) => q.trim()) ?? [];
+  if (rq.length > 0) {
+    out.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Рефлексия:", bold: true })],
+        spacing: { before: 80 },
+      }),
+      ...bulletItems(rq),
+    );
+  }
+  return out;
+}
+
+function studentCellChildren(stage: LessonStage): Paragraph[] {
+  const out: Paragraph[] = [];
+  if (stage.studentActions.trim()) {
+    out.push(
+      ...stage.studentActions
+        .split(/\n+/)
+        .filter((s) => s.trim())
+        .map((line) => new Paragraph({ text: line })),
+    );
+  }
+  return out;
+}
+
+function assessmentCellChildren(stage: LessonStage): Paragraph[] {
+  const out: Paragraph[] = [];
+  const desc = stage.descriptors?.filter((d) => d.trim()) ?? [];
+  if (desc.length > 0) {
+    out.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Дескрипторы:", bold: true })],
+      }),
+      ...desc.map(
+        (d) =>
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Дескриптор: ", italics: true }),
+              new TextRun({ text: d }),
+            ],
+          }),
+      ),
+    );
+  }
+  if (stage.assessmentMethod?.trim()) {
+    out.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Метод: ", bold: true })],
+      }),
+      new Paragraph({ text: stage.assessmentMethod }),
+    );
+  }
+  return out;
+}
+
+function stageRow(label: string, stage: LessonStage): TableRow {
+  const stageCell = new Paragraph({
+    children: [
+      new TextRun({ text: label, bold: true }),
+      ...(stage.time ? [new TextRun({ text: `\n${stage.time}` })] : []),
+    ],
+  });
+  return new TableRow({
+    children: [
+      cellChildren([stageCell], { width: 14 }),
+      cellChildren(teacherCellChildren(stage), { width: 32 }),
+      cellChildren(studentCellChildren(stage), { width: 22 }),
+      cellChildren(assessmentCellChildren(stage), { width: 18 }),
+      cellChildren(
+        stage.resources
+          ? stage.resources
+              .split(/\n+/)
+              .filter((s) => s.trim())
+              .map((line) => new Paragraph({ text: line }))
+          : [],
+        { width: 14 },
+      ),
+    ],
+  });
 }
 
 function renderTask(task: InteractiveTask, n: number): Paragraph[] {
@@ -173,12 +285,12 @@ function renderTask(task: InteractiveTask, n: number): Paragraph[] {
       );
       break;
     case "MATCHING":
-      task.pairs.forEach((p) => {
+      task.pairs.forEach((pair) => {
         body.push(
           new Paragraph({
             children: [
               new TextRun({
-                text: `   ${task.left[p.leftIndex] ?? ""} ↔ ${task.right[p.rightIndex] ?? ""}`,
+                text: `   ${task.left[pair.leftIndex] ?? ""} ↔ ${task.right[pair.rightIndex] ?? ""}`,
               }),
             ],
           }),
@@ -226,6 +338,7 @@ function renderTask(task: InteractiveTask, n: number): Paragraph[] {
 export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
   const c = plan.content;
 
+  // === Шапка КСП (table label/value) ===
   const header = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
@@ -235,10 +348,30 @@ export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
       labelRow("ФИО учителя", c.header.teacherName),
       labelRow("Класс", c.header.grade),
       labelRow(
-        "Участвовало / Отсутствовало",
+        "Присутствовало / Отсутствовало",
         `${c.header.studentsPresent ?? "—"} / ${c.header.studentsAbsent ?? "—"}`,
       ),
       labelRow("Тема урока", c.topic),
+    ],
+  });
+
+  // === Большая таблица «Ход урока» — 5 колонок ===
+  const flow = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        tableHeader: true,
+        children: [
+          cellTextOnly("Этап урока", { bold: true, width: 14 }),
+          cellTextOnly("Действия педагога", { bold: true, width: 32 }),
+          cellTextOnly("Действия ученика", { bold: true, width: 22 }),
+          cellTextOnly("Оценивание", { bold: true, width: 18 }),
+          cellTextOnly("Ресурсы", { bold: true, width: 14 }),
+        ],
+      }),
+      stageRow("Начало урока", c.stages.beginning),
+      stageRow("Середина урока", c.stages.middle),
+      stageRow("Конец урока", c.stages.end),
     ],
   });
 
@@ -251,6 +384,11 @@ export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
         properties: {},
         children: [
           new Paragraph({
+            text: "Краткосрочный (поурочный) план",
+            heading: HeadingLevel.HEADING_2,
+            alignment: AlignmentType.CENTER,
+          }),
+          new Paragraph({
             text: plan.title,
             heading: HeadingLevel.HEADING_1,
             alignment: AlignmentType.CENTER,
@@ -258,111 +396,90 @@ export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
           header,
 
           new Paragraph({
-            text: "Цели обучения",
+            text: "Цели обучения в соответствии с учебной программой",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           }),
-          ...bulletList(
-            c.learningObjectives.map(
-              (o) => `${o.code ? `${o.code} — ` : ""}${o.text}`,
-            ),
-          ),
+          ...(c.learningObjectives.length > 0
+            ? bulletItems(
+                c.learningObjectives.map(
+                  (o) => `${o.code ? `${o.code} — ` : ""}${o.text}`,
+                ),
+              )
+            : [p("—")]),
 
           new Paragraph({
             text: "Цели урока",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           }),
-          ...bulletList(c.lessonObjectives),
+          ...(c.lessonObjectives.length > 0
+            ? bulletItems(c.lessonObjectives)
+            : [p("—")]),
 
           new Paragraph({
             text: "Критерии оценивания",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           }),
-          ...bulletList(c.assessmentCriteria),
+          ...(c.assessmentCriteria.length > 0
+            ? bulletItems(c.assessmentCriteria)
+            : [p("—")]),
 
           new Paragraph({
             text: "Языковые цели",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Термины: ", bold: true }),
-              new TextRun({
-                text: c.languageObjectives.terms.join(", ") || "—",
-              }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Ключевые фразы: ", bold: true }),
-              new TextRun({
-                text: c.languageObjectives.phrases.join("; ") || "—",
-              }),
-            ],
-          }),
+          pBold(
+            "Термины: ",
+            c.languageObjectives.terms.join(", ") || "—",
+          ),
+          pBold(
+            "Ключевые фразы: ",
+            c.languageObjectives.phrases.join("; ") || "—",
+          ),
 
           new Paragraph({
             text: "Привитие ценностей",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           }),
-          new Paragraph({ text: c.values || "—" }),
+          p(c.values || "—"),
 
           new Paragraph({
             text: "Межпредметные связи",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 200, after: 100 },
           }),
-          new Paragraph({ text: c.crossCurricularLinks || "—" }),
+          p(c.crossCurricularLinks || "—"),
 
           new Paragraph({
             text: "Предшествующие знания",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 200, after: 100 },
           }),
-          new Paragraph({ text: c.priorKnowledge || "—" }),
+          p(c.priorKnowledge || "—"),
 
           new Paragraph({
             text: "Ход урока",
             heading: HeadingLevel.HEADING_2,
-            spacing: { before: 300, after: 100 },
+            spacing: { before: 300, after: 150 },
           }),
-          ...stageTable("Начало урока", c.stages.beginning),
-          ...stageTable("Середина урока", c.stages.middle),
-          ...stageTable("Конец урока", c.stages.end),
+          flow,
 
           new Paragraph({
-            text: "Оценивание и рефлексия",
+            text: "Дифференциация / Здоровье и ТБ / Рефлексия учителя",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 100 },
           }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Формативное оценивание: ", bold: true }),
-              new TextRun({ text: c.evaluation.formativeAssessment || "—" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Дифференциация: ", bold: true }),
-              new TextRun({ text: c.evaluation.differentiation || "—" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Здоровье и ТБ: ", bold: true }),
-              new TextRun({ text: c.evaluation.healthAndSafety || "—" }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Рефлексия: ", bold: true }),
-              new TextRun({ text: c.evaluation.reflection || "—" }),
-            ],
-          }),
+          pBold(
+            "Формативное оценивание: ",
+            c.evaluation.formativeAssessment || "—",
+          ),
+          pBold("Дифференциация: ", c.evaluation.differentiation || "—"),
+          pBold("Здоровье и ТБ: ", c.evaluation.healthAndSafety || "—"),
+          pBold("Рефлексия учителя: ", c.evaluation.reflection || "—"),
         ],
       },
     ],

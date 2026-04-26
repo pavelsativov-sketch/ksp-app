@@ -895,6 +895,12 @@ function StageEditor({
   function setTasks(next: InteractiveTask[]) {
     onChange({ ...stage, tasks: next });
   }
+  const timeHint =
+    stageKey === "beginning"
+      ? "1–10 мин"
+      : stageKey === "middle"
+        ? "11–35 мин"
+        : "36–45 мин";
   return (
     <div className="border border-slate-200 rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -903,7 +909,7 @@ function StageEditor({
           className="w-40"
           value={stage.time}
           onChange={(e) => onChange({ ...stage, time: e.target.value })}
-          placeholder="0–5 мин"
+          placeholder={timeHint}
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -935,6 +941,97 @@ function StageEditor({
             placeholder="Учебник, презентация, раздаточный материал"
           />
         </div>
+        <div>
+          <Label>
+            Ключевые вопросы (кумулятивная беседа){" "}
+            <span className="text-xs text-slate-500">— для активизации</span>
+          </Label>
+          <ListEditor
+            items={stage.keyQuestions ?? []}
+            onChange={(items) => onChange({ ...stage, keyQuestions: items })}
+            placeholder={
+              stageKey === "beginning"
+                ? "Напр. «Что вы помните из предыдущего урока?»"
+                : stageKey === "end"
+                  ? "Напр. «Что нового вы узнали?»"
+                  : "Напр. «Какое свойство вы заметили?»"
+            }
+          />
+        </div>
+        <div>
+          <Label>
+            Дескрипторы оценивания{" "}
+            <span className="text-xs text-slate-500">
+              — что именно делает ученик
+            </span>
+          </Label>
+          <ListEditor
+            items={stage.descriptors ?? []}
+            onChange={(items) => onChange({ ...stage, descriptors: items })}
+            placeholder="Напр. «Записывает определение»"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <Label>Метод оценивания</Label>
+          <Select
+            value={stage.assessmentMethod ?? ""}
+            onValueChange={(v) =>
+              onChange({ ...stage, assessmentMethod: v === "_none" ? "" : v })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Выберите метод" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">— не указан —</SelectItem>
+              <SelectItem value="Похвала">Похвала</SelectItem>
+              <SelectItem value="ФО">ФО (формативное)</SelectItem>
+              <SelectItem value="СОР">СОР (суммативное за раздел)</SelectItem>
+              <SelectItem value="Взаимооценивание">Взаимооценивание</SelectItem>
+              <SelectItem value="Самооценивание">Самооценивание</SelectItem>
+              <SelectItem value="ФО + Взаимооценивание">
+                ФО + Взаимооценивание
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {stageKey === "end" && (
+          <>
+            <div className="md:col-span-2">
+              <Label>Итог урока</Label>
+              <Textarea
+                rows={2}
+                value={stage.summary ?? ""}
+                onChange={(e) => onChange({ ...stage, summary: e.target.value })}
+                placeholder="1–2 предложения: что узнали, что закрепили"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>
+                Рефлексивные вопросы ученикам{" "}
+                <span className="text-xs text-slate-500">— 3 открытых</span>
+              </Label>
+              <ListEditor
+                items={stage.reflectionQuestions ?? []}
+                onChange={(items) =>
+                  onChange({ ...stage, reflectionQuestions: items })
+                }
+                placeholder="Напр. «Что было сложно?»"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Домашнее задание</Label>
+              <Textarea
+                rows={2}
+                value={stage.homework ?? ""}
+                onChange={(e) =>
+                  onChange({ ...stage, homework: e.target.value })
+                }
+                placeholder="Конкретное задание с комментарием"
+              />
+            </div>
+          </>
+        )}
       </div>
       <TaskBuilder
         tasks={tasks}
