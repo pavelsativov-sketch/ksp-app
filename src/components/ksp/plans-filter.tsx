@@ -43,6 +43,20 @@ export interface PlansFilterProps {
 
 const ALL = "__all__";
 
+function VisibilityBadge({ value }: { value: "private" | "unlisted" | "public" }) {
+  const map = {
+    private: { label: "приватный", cls: "bg-slate-100 text-slate-600" },
+    unlisted: { label: "по ссылке", cls: "bg-sky-100 text-sky-700" },
+    public: { label: "публичный", cls: "bg-emerald-100 text-emerald-700" },
+  } as const;
+  const it = map[value];
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${it.cls}`}>
+      {it.label}
+    </span>
+  );
+}
+
 export function PlansFilter({
   plans,
   subjects,
@@ -180,7 +194,10 @@ export function PlansFilter({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((p) => (
-            <Card key={p.id} className="hover:border-blue-400 transition-colors">
+            <Card
+              key={p.id}
+              className="group hover:border-sky-400 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
+            >
               <CardHeader>
                 <CardTitle className="text-lg line-clamp-2">
                   <Link href={`/plans/${p.id}`} className="hover:underline">
@@ -206,7 +223,7 @@ export function PlansFilter({
                   {showVisibility && p.visibility && (
                     <>
                       <span>•</span>
-                      <span className="capitalize">{p.visibility}</span>
+                      <VisibilityBadge value={p.visibility} />
                     </>
                   )}
                 </CardDescription>

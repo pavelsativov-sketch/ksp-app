@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Save, Loader2, Plus, X, Check, AlertTriangle } from "lucide-react";
+import { Sparkles, Save, Loader2, Check, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,9 @@ import type { InteractiveTask } from "@/lib/ksp/tasks";
 import { TaskBuilder } from "./task-builder";
 import { ObjectivesPicker } from "./objectives-picker";
 import { AiEnhanceButton } from "./ai-enhance-button";
+import { ListEditor } from "./list-editor";
+import { RichTextEditor, richTextToPlain } from "./rich-text-editor";
+import { uploadPlanImage } from "@/lib/upload-image";
 import {
   savePlanAction,
   type SavePlanInput,
@@ -254,7 +257,7 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex-wrap">
+        <TabsList className="flex-wrap mobile-scroll w-full justify-start">
           <TabsTrigger value="meta">Метаданные</TabsTrigger>
           <TabsTrigger value="goals">Цели</TabsTrigger>
           <TabsTrigger value="context">Контекст</TabsTrigger>
@@ -815,67 +818,6 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
   );
 }
 
-function ListEditor({
-  items,
-  onChange,
-  placeholder,
-}: {
-  items: string[];
-  onChange: (items: string[]) => void;
-  placeholder?: string;
-}) {
-  const [draft, setDraft] = useState("");
-  return (
-    <div className="space-y-2">
-      <ul className="space-y-1">
-        {items.map((item, idx) => (
-          <li
-            key={idx}
-            className="flex items-start gap-2 bg-slate-50 rounded px-2 py-1"
-          >
-            <span className="text-slate-400 text-xs mt-1">•</span>
-            <span className="flex-1 text-sm whitespace-pre-wrap">{item}</span>
-            <button
-              type="button"
-              className="text-slate-400 hover:text-red-600"
-              onClick={() => onChange(items.filter((_, i) => i !== idx))}
-              aria-label="Удалить"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="flex gap-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={placeholder}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && draft.trim()) {
-              e.preventDefault();
-              onChange([...items, draft.trim()]);
-              setDraft("");
-            }
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            if (draft.trim()) {
-              onChange([...items, draft.trim()]);
-              setDraft("");
-            }
-          }}
-        >
-          <Plus /> Добавить
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function StageEditor({
   title,
   stageKey,
@@ -915,22 +857,26 @@ function StageEditor({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <Label>Действия учителя</Label>
-          <Textarea
+          <RichTextEditor
             rows={4}
             value={stage.teacherActions}
-            onChange={(e) =>
-              onChange({ ...stage, teacherActions: e.target.value })
+            onChange={(html) =>
+              onChange({ ...stage, teacherActions: html })
             }
+            onUploadImage={uploadPlanImage}
+            placeholder="Что делает учитель: объясняет, демонстрирует, направляет…"
           />
         </div>
         <div>
           <Label>Действия учеников</Label>
-          <Textarea
+          <RichTextEditor
             rows={4}
             value={stage.studentActions}
-            onChange={(e) =>
-              onChange({ ...stage, studentActions: e.target.value })
+            onChange={(html) =>
+              onChange({ ...stage, studentActions: html })
             }
+            onUploadImage={uploadPlanImage}
+            placeholder="Что делают ученики: записывают, сравнивают, обсуждают…"
           />
         </div>
         <div className="md:col-span-2">
@@ -1061,7 +1007,7 @@ function collectWarnings({
     out.push("Не заданы критерии оценивания");
   const anyStage = (
     [content.stages.beginning, content.stages.middle, content.stages.end] as const
-  ).some((s) => s.teacherActions.trim().length > 0);
+  ).some((s) => richTextToPlain(s.teacherActions).trim().length > 0);
   if (!anyStage)
     out.push("Нет действий учителя ни в одном этапе урока");
   const totalTasks =
@@ -1087,9 +1033,9 @@ function computeProgress(c: KspContent, title: string): { percent: number; done:
     c.languageObjectives.terms.length + c.languageObjectives.phrases.length > 0,
     c.values.trim().length > 0,
     c.priorKnowledge.trim().length > 0,
-    c.stages.beginning.teacherActions.trim().length > 0,
-    c.stages.middle.teacherActions.trim().length > 0,
-    c.stages.end.teacherActions.trim().length > 0,
+    richTextToPlain(c.stages.beginning.teacherActions).trim().length > 0,
+    richTextToPlain(c.stages.middle.teacherActions).trim().length > 0,
+    richTextToPlain(c.stages.end.teacherActions).trim().length > 0,
     c.evaluation.formativeAssessment.trim().length > 0,
     c.evaluation.reflection.trim().length > 0,
     c.evaluation.healthAndSafety.trim().length > 0,

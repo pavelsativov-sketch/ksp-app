@@ -13,6 +13,7 @@ import {
 } from "docx";
 import type { LessonPlanRow, LessonStage } from "@/lib/types/ksp";
 import { type InteractiveTask, taskTypeLabel } from "@/lib/ksp/tasks";
+import { htmlToDocxParagraphs } from "./html-to-docx";
 
 const BORDER = {
   style: BorderStyle.SINGLE,
@@ -90,14 +91,7 @@ function labelRow(label: string, value: string) {
 /** Build "teacher actions" cell content with structure: key questions, actions, tasks. */
 function teacherCellChildren(stage: LessonStage): Paragraph[] {
   const out: Paragraph[] = [];
-  if (stage.teacherActions.trim()) {
-    out.push(
-      ...stage.teacherActions
-        .split(/\n+/)
-        .filter((s) => s.trim())
-        .map((line) => new Paragraph({ text: line })),
-    );
-  }
+  out.push(...htmlToDocxParagraphs(stage.teacherActions));
   const kq = stage.keyQuestions?.filter((q) => q.trim()) ?? [];
   if (kq.length > 0) {
     out.push(
@@ -152,16 +146,7 @@ function teacherCellChildren(stage: LessonStage): Paragraph[] {
 }
 
 function studentCellChildren(stage: LessonStage): Paragraph[] {
-  const out: Paragraph[] = [];
-  if (stage.studentActions.trim()) {
-    out.push(
-      ...stage.studentActions
-        .split(/\n+/)
-        .filter((s) => s.trim())
-        .map((line) => new Paragraph({ text: line })),
-    );
-  }
-  return out;
+  return htmlToDocxParagraphs(stage.studentActions);
 }
 
 function assessmentCellChildren(stage: LessonStage): Paragraph[] {
@@ -170,7 +155,7 @@ function assessmentCellChildren(stage: LessonStage): Paragraph[] {
   if (desc.length > 0) {
     out.push(
       new Paragraph({
-        children: [new TextRun({ text: "Дескрипторы:", bold: true })],
+        children: [new TextRun({ text: "Дескрипторы (этап):", bold: true })],
       }),
       ...desc.map(
         (d) =>
@@ -183,10 +168,40 @@ function assessmentCellChildren(stage: LessonStage): Paragraph[] {
       ),
     );
   }
+  // Per-task descriptors — surfaced by referencing task number
+  const tasksWithDesc =
+    stage.tasks?.filter((t) => (t.descriptors?.length ?? 0) > 0) ?? [];
+  if (tasksWithDesc.length > 0) {
+    out.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Дескрипторы к заданиям:", bold: true })],
+        spacing: { before: 80 },
+      }),
+    );
+    tasksWithDesc.forEach((task) => {
+      const taskNum = (stage.tasks?.indexOf(task) ?? 0) + 1;
+      out.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `Задание ${taskNum}: `, italics: true }),
+            new TextRun({ text: task.question.slice(0, 50), italics: true }),
+          ],
+        }),
+        ...(task.descriptors ?? []).map(
+          (d) =>
+            new Paragraph({
+              bullet: { level: 0 },
+              children: [new TextRun({ text: d })],
+            }),
+        ),
+      );
+    });
+  }
   if (stage.assessmentMethod?.trim()) {
     out.push(
       new Paragraph({
         children: [new TextRun({ text: "Метод: ", bold: true })],
+        spacing: { before: 80 },
       }),
       new Paragraph({ text: stage.assessmentMethod }),
     );

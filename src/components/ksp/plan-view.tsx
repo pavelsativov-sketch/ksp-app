@@ -7,6 +7,7 @@ import { QuizMode } from "./quiz-mode";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 import { taskTypeLabel } from "@/lib/ksp/tasks";
+import { RichTextRender } from "./rich-text-render";
 
 export function PlanView({ plan }: { plan: LessonPlanRow }) {
   const c = plan.content;
@@ -174,6 +175,34 @@ function Empty() {
   return <p className="text-slate-400 italic">—</p>;
 }
 
+const TONE: Record<string, string> = {
+  sky: "bg-sky-50 border-sky-200 text-sky-900",
+  emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
+  amber: "bg-amber-50 border-amber-200 text-amber-900",
+  slate: "bg-slate-50 border-slate-200 text-slate-900",
+  violet: "bg-violet-50 border-violet-200 text-violet-900",
+  rose: "bg-rose-50 border-rose-200 text-rose-900",
+};
+
+function MiniBlock({
+  title,
+  tone,
+  children,
+}: {
+  title: string;
+  tone: keyof typeof TONE;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-md border px-3 py-2 ${TONE[tone]}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wider opacity-70 mb-1">
+        {title}
+      </p>
+      <div className="text-sm">{children}</div>
+    </div>
+  );
+}
+
 function StageTable({
   title,
   stage,
@@ -182,21 +211,88 @@ function StageTable({
   stage: LessonStage;
 }) {
   const tasks = stage.tasks ?? [];
+  const keyQuestions = stage.keyQuestions?.filter((q) => q.trim()) ?? [];
+  const descriptors = stage.descriptors?.filter((d) => d.trim()) ?? [];
+  const reflectionQuestions =
+    stage.reflectionQuestions?.filter((q) => q.trim()) ?? [];
   return (
     <div className="space-y-2">
       <h3 className="font-semibold mt-2">{title}</h3>
       <StageBody stage={stage} />
+      {(keyQuestions.length > 0 ||
+        descriptors.length > 0 ||
+        stage.assessmentMethod ||
+        stage.summary ||
+        reflectionQuestions.length > 0 ||
+        stage.homework) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 text-sm">
+          {keyQuestions.length > 0 && (
+            <MiniBlock title="Ключевые вопросы" tone="sky">
+              <ul className="list-disc pl-5 space-y-0.5">
+                {keyQuestions.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            </MiniBlock>
+          )}
+          {descriptors.length > 0 && (
+            <MiniBlock title="Дескрипторы оценивания (этап)" tone="emerald">
+              <ul className="list-disc pl-5 space-y-0.5">
+                {descriptors.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </MiniBlock>
+          )}
+          {stage.assessmentMethod && (
+            <MiniBlock title="Метод оценивания" tone="amber">
+              <p>{stage.assessmentMethod}</p>
+            </MiniBlock>
+          )}
+          {stage.summary && (
+            <MiniBlock title="Итог урока" tone="slate">
+              <p className="whitespace-pre-wrap">{stage.summary}</p>
+            </MiniBlock>
+          )}
+          {reflectionQuestions.length > 0 && (
+            <MiniBlock title="Рефлексия" tone="violet">
+              <ul className="list-disc pl-5 space-y-0.5">
+                {reflectionQuestions.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            </MiniBlock>
+          )}
+          {stage.homework && (
+            <MiniBlock title="Домашнее задание" tone="rose">
+              <p className="whitespace-pre-wrap">{stage.homework}</p>
+            </MiniBlock>
+          )}
+        </div>
+      )}
       {tasks.length > 0 && (
         <div className="mt-3 space-y-2 no-print">
           <p className="text-xs uppercase tracking-wider text-slate-500">
             Интерактивные задания этапа ({tasks.length})
           </p>
-          {tasks.map((task) => (
+          {tasks.map((task, idx) => (
             <div
               key={task.id}
-              className="border border-slate-200 rounded-lg p-3 bg-slate-50/50"
+              className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 hover:border-slate-300 transition-colors"
             >
               <TaskPlayer task={task} />
+              {(task.descriptors?.length ?? 0) > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-200">
+                  <p className="text-xs font-medium text-slate-600">
+                    Дескрипторы задания {idx + 1}:
+                  </p>
+                  <ul className="list-disc pl-5 text-xs text-slate-600">
+                    {task.descriptors!.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -232,8 +328,12 @@ function StageBody({ stage }: { stage: LessonStage }) {
       <tbody>
         <tr>
           <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.time || "—"}</td>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.teacherActions || "—"}</td>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.studentActions || "—"}</td>
+          <td className="border border-slate-300 p-2 align-top">
+            <RichTextRender value={stage.teacherActions} />
+          </td>
+          <td className="border border-slate-300 p-2 align-top">
+            <RichTextRender value={stage.studentActions} />
+          </td>
           <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.resources || "—"}</td>
         </tr>
       </tbody>
