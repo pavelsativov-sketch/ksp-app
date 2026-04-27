@@ -164,6 +164,25 @@ export interface LessonPlanRow {
   language: Language;
   created_at: string;
   updated_at: string;
+  series_id: string | null;
+  series_position: number | null;
+}
+
+export interface LessonSeriesRow {
+  id: string;
+  user_id: string;
+  title: string;
+  subject: string | null;
+  grade: number | null;
+  quarter: number | null;
+  created_at: string;
+}
+
+/** Plan as displayed inside a series — minimal fields for prev/next nav. */
+export interface SeriesPlanRef {
+  id: string;
+  title: string;
+  series_position: number | null;
 }
 
 export interface SubjectRow {

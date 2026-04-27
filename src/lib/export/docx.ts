@@ -350,24 +350,46 @@ function renderTask(task: InteractiveTask, n: number): Paragraph[] {
   return body;
 }
 
-export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
+export interface BuildKspDocxOptions {
+  series?: { title: string; total?: number } | null;
+}
+
+export async function buildKspDocx(
+  plan: LessonPlanRow,
+  options: BuildKspDocxOptions = {},
+): Promise<Buffer> {
   const c = plan.content;
+
+  const headerRows = [
+    labelRow("Раздел долгосрочного плана", c.header.longTermPlanSection),
+    labelRow("Школа", c.header.school),
+    labelRow("Дата", c.header.date),
+    labelRow("ФИО учителя", c.header.teacherName),
+    labelRow("Класс", c.header.grade),
+    labelRow(
+      "Присутствовало / Отсутствовало",
+      `${c.header.studentsPresent ?? "—"} / ${c.header.studentsAbsent ?? "—"}`,
+    ),
+    labelRow("Тема урока", c.topic),
+  ];
+
+  if (options.series && plan.series_position) {
+    const total = options.series.total;
+    const lessonLabel = total
+      ? `Урок ${plan.series_position} из ${total}`
+      : `Урок ${plan.series_position}`;
+    headerRows.push(
+      labelRow(
+        "Серия уроков",
+        `${options.series.title} · ${lessonLabel}`,
+      ),
+    );
+  }
 
   // === Шапка КСП (table label/value) ===
   const header = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
-      labelRow("Раздел долгосрочного плана", c.header.longTermPlanSection),
-      labelRow("Школа", c.header.school),
-      labelRow("Дата", c.header.date),
-      labelRow("ФИО учителя", c.header.teacherName),
-      labelRow("Класс", c.header.grade),
-      labelRow(
-        "Присутствовало / Отсутствовало",
-        `${c.header.studentsPresent ?? "—"} / ${c.header.studentsAbsent ?? "—"}`,
-      ),
-      labelRow("Тема урока", c.topic),
-    ],
+    rows: headerRows,
   });
 
   // === Большая таблица «Ход урока» — 5 колонок ===

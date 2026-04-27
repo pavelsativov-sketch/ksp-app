@@ -37,7 +37,28 @@ export async function GET(
     }
   }
 
-  const buffer = await buildKspDocx(plan);
+  let seriesOption: { title: string; total?: number } | null = null;
+  if (plan.series_id) {
+    const [{ data: srow }, { count }] = await Promise.all([
+      supabase
+        .from("lesson_series")
+        .select("title")
+        .eq("id", plan.series_id)
+        .maybeSingle(),
+      supabase
+        .from("lesson_plans")
+        .select("id", { count: "exact", head: true })
+        .eq("series_id", plan.series_id),
+    ]);
+    if (srow?.title) {
+      seriesOption = {
+        title: (srow as { title: string }).title,
+        total: count ?? undefined,
+      };
+    }
+  }
+
+  const buffer = await buildKspDocx(plan, { series: seriesOption });
   const filename = `${plan.title || "ksp"}.docx`.replace(/[^\p{L}\p{N}_\-. ]/gu, "_");
 
   return new NextResponse(new Uint8Array(buffer), {

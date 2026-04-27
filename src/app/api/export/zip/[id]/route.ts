@@ -38,10 +38,31 @@ export async function GET(
     }
   }
 
+  let seriesOption: { title: string; total?: number } | null = null;
+  if (plan.series_id) {
+    const [{ data: srow }, { count }] = await Promise.all([
+      supabase
+        .from("lesson_series")
+        .select("title")
+        .eq("id", plan.series_id)
+        .maybeSingle(),
+      supabase
+        .from("lesson_plans")
+        .select("id", { count: "exact", head: true })
+        .eq("series_id", plan.series_id),
+    ]);
+    if (srow?.title) {
+      seriesOption = {
+        title: (srow as { title: string }).title,
+        total: count ?? undefined,
+      };
+    }
+  }
+
   const zip = new JSZip();
 
   // plan.docx
-  const docxBuffer = await buildKspDocx(plan);
+  const docxBuffer = await buildKspDocx(plan, { series: seriesOption });
   zip.file("plan.docx", new Uint8Array(docxBuffer));
 
   // interactive.html (self-contained, works via file://)
