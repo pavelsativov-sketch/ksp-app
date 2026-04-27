@@ -232,7 +232,6 @@ function imageRunFor(
   return new TextRun({
     text: ` [фото: ${label}] `,
     italics: true,
-    color: "888888",
   });
 }
 
@@ -338,7 +337,6 @@ function parseInline(
                 new TextRun({
                   text: (r as unknown as { options?: { text?: string } }).options?.text ?? "",
                   ...nextStyle,
-                  color: "0F62FE",
                   underline: { type: "single" },
                 }),
             ),

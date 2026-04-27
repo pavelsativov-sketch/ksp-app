@@ -18,7 +18,7 @@ import { htmlToDocxParagraphsAsync } from "./html-to-docx";
 const BORDER = {
   style: BorderStyle.SINGLE,
   size: 4,
-  color: "666666",
+  color: "000000",
 };
 const BORDERS = {
   top: BORDER,
@@ -222,10 +222,10 @@ async function stageRow(label: string, stage: LessonStage): Promise<TableRow> {
   ]);
   return new TableRow({
     children: [
-      cellChildren([stageCell], { width: 14 }),
-      cellChildren(teacher, { width: 32 }),
-      cellChildren(student, { width: 22 }),
-      cellChildren(assessmentCellChildren(stage), { width: 18 }),
+      cellChildren([stageCell], { width: 10 }),
+      cellChildren(teacher, { width: 46 }),
+      cellChildren(student, { width: 20 }),
+      cellChildren(assessmentCellChildren(stage), { width: 13 }),
       cellChildren(
         stage.resources
           ? stage.resources
@@ -233,7 +233,7 @@ async function stageRow(label: string, stage: LessonStage): Promise<TableRow> {
               .filter((s) => s.trim())
               .map((line) => new Paragraph({ text: line }))
           : [],
-        { width: 14 },
+        { width: 11 },
       ),
     ],
   });
@@ -381,11 +381,11 @@ export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
       new TableRow({
         tableHeader: true,
         children: [
-          cellTextOnly("Этап урока", { bold: true, width: 14 }),
-          cellTextOnly("Действия педагога", { bold: true, width: 32 }),
-          cellTextOnly("Действия ученика", { bold: true, width: 22 }),
-          cellTextOnly("Оценивание", { bold: true, width: 18 }),
-          cellTextOnly("Ресурсы", { bold: true, width: 14 }),
+          cellTextOnly("Этап урока", { bold: true, width: 10 }),
+          cellTextOnly("Действия педагога", { bold: true, width: 46 }),
+          cellTextOnly("Действия ученика", { bold: true, width: 20 }),
+          cellTextOnly("Оценивание", { bold: true, width: 13 }),
+          cellTextOnly("Ресурсы", { bold: true, width: 11 }),
         ],
       }),
       ...(await Promise.all([
@@ -446,6 +446,51 @@ export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
           ...(c.assessmentCriteria.length > 0
             ? bulletItems(c.assessmentCriteria)
             : [p("—")]),
+
+          ...(c.pointsScale && c.pointsScale.length > 0
+            ? [
+                new Paragraph({
+                  text: "Шкала оценивания (10 баллов)",
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 300, after: 100 },
+                }),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      tableHeader: true,
+                      children: [
+                        cellTextOnly("За что начисляется балл", { bold: true, width: 80 }),
+                        cellTextOnly("Баллы", { bold: true, width: 20 }),
+                      ],
+                    }),
+                    ...c.pointsScale.map(
+                      (item) =>
+                        new TableRow({
+                          children: [
+                            cellTextOnly(item.label, { width: 80 }),
+                            cellTextOnly(String(item.points), { width: 20 }),
+                          ],
+                        }),
+                    ),
+                    new TableRow({
+                      children: [
+                        cellTextOnly("Итого", { bold: true, width: 80 }),
+                        cellTextOnly(
+                          String(
+                            c.pointsScale.reduce(
+                              (s, x) => s + (Number(x.points) || 0),
+                              0,
+                            ),
+                          ),
+                          { bold: true, width: 20 },
+                        ),
+                      ],
+                    }),
+                  ],
+                }),
+              ]
+            : []),
 
           new Paragraph({
             text: "Языковые цели",
