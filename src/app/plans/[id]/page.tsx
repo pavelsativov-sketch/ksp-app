@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { PlanView } from "@/components/ksp/plan-view";
 import { PrintButton } from "@/components/ksp/print-button";
 import { ClonePlanButton } from "@/components/ksp/clone-plan-button";
-import type { LessonPlanRow } from "@/lib/types/ksp";
-import { Archive, Download, Edit, Printer } from "lucide-react";
+import { SeriesNav } from "@/components/ksp/series-nav";
+import type { LessonPlanRow, LessonSeriesRow } from "@/lib/types/ksp";
+import { Archive, Download, Edit, Plus, Printer } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,30 @@ export default async function PlanViewPage({
   } = await supabase.auth.getUser();
   const isOwner = user?.id === plan.owner_id;
 
+  let series: LessonSeriesRow | null = null;
+  let seriesPlans: Array<{ id: string; title: string; series_position: number | null }> = [];
+  if (plan.series_id) {
+    const [{ data: srow }, { data: peers }] = await Promise.all([
+      supabase
+        .from("lesson_series")
+        .select("id, user_id, title, subject, grade, quarter, created_at")
+        .eq("id", plan.series_id)
+        .maybeSingle(),
+      supabase
+        .from("lesson_plans")
+        .select("id, title, series_position")
+        .eq("series_id", plan.series_id)
+        .order("series_position", { ascending: true, nullsFirst: false }),
+    ]);
+    series = (srow as LessonSeriesRow | null) ?? null;
+    seriesPlans =
+      (peers as Array<{
+        id: string;
+        title: string;
+        series_position: number | null;
+      }> | null) ?? [];
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap no-print">
@@ -40,6 +65,17 @@ export default async function PlanViewPage({
           <h1 className="text-2xl md:text-3xl font-bold">{plan.title}</h1>
           <p className="text-slate-500 text-sm">
             {plan.grade} класс · {plan.visibility}
+            {series && plan.series_position && (
+              <>
+                {" · "}
+                <span className="text-sky-700 font-medium">
+                  Урок {plan.series_position}
+                  {seriesPlans.length > 0 ? ` из ${seriesPlans.length}` : ""}
+                  {" — "}
+                  {series.title}
+                </span>
+              </>
+            )}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -66,6 +102,27 @@ export default async function PlanViewPage({
           </PrintButton>
         </div>
       </div>
+      {series && (
+        <div className="no-print flex items-center gap-3 flex-wrap rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2">
+          <SeriesNav
+            currentId={plan.id}
+            seriesTitle={series.title}
+            plans={seriesPlans}
+          />
+          {isOwner && (
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="ml-auto"
+            >
+              <Link href={`/plans/new?series=${plan.series_id}`}>
+                <Plus className="w-3.5 h-3.5" /> Добавить урок в серию
+              </Link>
+            </Button>
+          )}
+        </div>
+      )}
       <PlanView plan={plan} />
     </div>
   );

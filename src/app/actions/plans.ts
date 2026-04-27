@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createLessonPlanSchema } from "@/lib/validation/ksp";
-import type { KspContent } from "@/lib/types/ksp";
+import type { KspContent, LessonSeriesRow } from "@/lib/types/ksp";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -27,6 +27,8 @@ export interface SavePlanInput {
   visibility: "private" | "unlisted" | "public";
   language: "ru" | "kz";
   content: KspContent;
+  series_id?: string | null;
+  series_position?: number | null;
 }
 
 export async function savePlanAction(input: SavePlanInput) {
@@ -40,6 +42,14 @@ export async function savePlanAction(input: SavePlanInput) {
   const { supabase, user } = await requireUser();
   const data = parsed.data;
 
+  const seriesFields = {
+    series_id: input.series_id ?? null,
+    series_position:
+      input.series_position == null || isNaN(input.series_position)
+        ? null
+        : input.series_position,
+  };
+
   if (input.id) {
     const { error } = await supabase
       .from("lesson_plans")
@@ -52,6 +62,7 @@ export async function savePlanAction(input: SavePlanInput) {
         visibility: data.visibility,
         language: data.language,
         content: data.content,
+        ...seriesFields,
       })
       .eq("id", input.id)
       .eq("owner_id", user.id);
@@ -73,12 +84,50 @@ export async function savePlanAction(input: SavePlanInput) {
       visibility: data.visibility,
       language: data.language,
       content: data.content,
+      ...seriesFields,
     })
     .select("id")
     .single();
   if (error) return { error: error.message };
   revalidatePath("/dashboard");
   return { id: inserted.id };
+}
+
+// ─── Series ────────────────────────────────────────────────────────────────
+
+export async function listMySeriesAction(): Promise<LessonSeriesRow[]> {
+  const { supabase, user } = await requireUser();
+  const { data, error } = await supabase
+    .from("lesson_series")
+    .select("id, user_id, title, subject, grade, quarter, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return (data ?? []) as LessonSeriesRow[];
+}
+
+export async function createSeriesAction(input: {
+  title: string;
+  subject?: string | null;
+  grade?: number | null;
+  quarter?: number | null;
+}): Promise<{ id?: string; error?: string }> {
+  if (!input.title?.trim()) return { error: "Заполните название серии" };
+  const { supabase, user } = await requireUser();
+  const { data, error } = await supabase
+    .from("lesson_series")
+    .insert({
+      user_id: user.id,
+      title: input.title.trim(),
+      subject: input.subject ?? null,
+      grade: input.grade ?? null,
+      quarter: input.quarter ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard");
+  return { id: data.id };
 }
 
 export async function deletePlanAction(id: string) {

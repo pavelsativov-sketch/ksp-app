@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { PlanForm } from "@/components/ksp/plan-form";
-import type { SubjectRow } from "@/lib/types/ksp";
+import type { LessonSeriesRow, SubjectRow } from "@/lib/types/ksp";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewPlanPage() {
+export default async function NewPlanPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ series?: string }>;
+}) {
   if (!isSupabaseConfigured()) redirect("/");
 
   const supabase = await createClient();
@@ -14,10 +18,35 @@ export default async function NewPlanPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/plans/new");
 
-  const { data: subjects } = await supabase
-    .from("subjects")
-    .select("id, name_ru, name_kz, grade_min, grade_max")
-    .order("name_ru");
+  const sp = (await searchParams) ?? {};
+
+  const [{ data: subjects }, { data: seriesList }] = await Promise.all([
+    supabase
+      .from("subjects")
+      .select("id, name_ru, name_kz, grade_min, grade_max")
+      .order("name_ru"),
+    supabase
+      .from("lesson_series")
+      .select("id, user_id, title, subject, grade, quarter, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  // If ?series=<id> is supplied, suggest the next position for new plan in that series.
+  let presetSeriesId: string | null = null;
+  let presetPosition: number | null = null;
+  if (sp.series) {
+    presetSeriesId = sp.series;
+    const { data: existing } = await supabase
+      .from("lesson_plans")
+      .select("series_position")
+      .eq("series_id", sp.series)
+      .eq("owner_id", user.id);
+    const positions = (existing ?? [])
+      .map((p) => (p as { series_position: number | null }).series_position)
+      .filter((p): p is number => typeof p === "number");
+    presetPosition = positions.length === 0 ? 1 : Math.max(...positions) + 1;
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
@@ -28,7 +57,12 @@ export default async function NewPlanPage() {
           остальное.
         </p>
       </div>
-      <PlanForm subjects={(subjects as SubjectRow[] | null) ?? []} />
+      <PlanForm
+        subjects={(subjects as SubjectRow[] | null) ?? []}
+        seriesList={(seriesList as LessonSeriesRow[] | null) ?? []}
+        presetSeriesId={presetSeriesId}
+        presetSeriesPosition={presetPosition}
+      />
     </div>
   );
 }

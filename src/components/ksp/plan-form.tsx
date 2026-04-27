@@ -27,6 +27,7 @@ import {
   type LessonStage,
   emptyKsp,
   type SubjectRow,
+  type LessonSeriesRow,
 } from "@/lib/types/ksp";
 import type { InteractiveTask } from "@/lib/ksp/tasks";
 import { TaskBuilder } from "./task-builder";
@@ -37,17 +38,28 @@ import { RichTextEditor, richTextToPlain } from "./rich-text-editor";
 import { uploadPlanImage } from "@/lib/upload-image";
 import {
   savePlanAction,
+  createSeriesAction,
   type SavePlanInput,
 } from "@/app/actions/plans";
 
 const DRAFT_KEY_PREFIX = "ksp-draft:";
+const SERIES_NONE = "__none__";
 
 interface PlanFormProps {
   initialPlan?: Partial<SavePlanInput> & { id?: string };
   subjects: SubjectRow[];
+  seriesList?: LessonSeriesRow[];
+  presetSeriesId?: string | null;
+  presetSeriesPosition?: number | null;
 }
 
-export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
+export function PlanForm({
+  initialPlan,
+  subjects,
+  seriesList = [],
+  presetSeriesId = null,
+  presetSeriesPosition = null,
+}: PlanFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [aiLoading, setAiLoading] = useState(false);
@@ -69,6 +81,15 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
   const [language, setLanguage] = useState<"ru" | "kz">(
     initialPlan?.language ?? "ru",
   );
+  const [seriesId, setSeriesId] = useState<string | null>(
+    initialPlan?.series_id ?? presetSeriesId ?? null,
+  );
+  const [seriesPosition, setSeriesPosition] = useState<number | null>(
+    initialPlan?.series_position ?? presetSeriesPosition ?? null,
+  );
+  const [series, setSeries] = useState<LessonSeriesRow[]>(seriesList);
+  const [creatingSeries, setCreatingSeries] = useState(false);
+  const [newSeriesTitle, setNewSeriesTitle] = useState("");
   const [content, setContent] = useState<KspContent>(
     initialPlan?.content ?? emptyKsp(),
   );
@@ -203,6 +224,8 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
       visibility,
       language,
       content,
+      series_id: seriesId,
+      series_position: seriesId ? seriesPosition : null,
     };
     startTransition(async () => {
       const res = await savePlanAction(payload);
@@ -368,6 +391,137 @@ export function PlanForm({ initialPlan, subjects }: PlanFormProps) {
                 <SelectItem value="public">Публичный (в библиотеке)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Серия уроков</CardTitle>
+          <CardDescription>
+            Объедините несколько КСП в последовательность (Урок 1 → Урок 2 → …),
+            чтобы переключаться между ними с одной кнопки.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2 space-y-1.5">
+            <Label>Серия</Label>
+            <Select
+              value={seriesId ?? SERIES_NONE}
+              onValueChange={(v) => {
+                if (v === SERIES_NONE) {
+                  setSeriesId(null);
+                  setSeriesPosition(null);
+                } else {
+                  setSeriesId(v);
+                  if (seriesPosition == null) setSeriesPosition(1);
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Не входит в серию" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SERIES_NONE}>Не входит в серию</SelectItem>
+                {series.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.title}
+                    {s.grade ? ` · ${s.grade} класс` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="series-position">Номер урока в серии</Label>
+            <Input
+              id="series-position"
+              type="number"
+              min={1}
+              max={99}
+              value={seriesPosition ?? ""}
+              onChange={(e) =>
+                setSeriesPosition(
+                  e.target.value ? Number(e.target.value) : null,
+                )
+              }
+              disabled={!seriesId}
+              placeholder={seriesId ? "1" : "—"}
+            />
+          </div>
+          <div className="md:col-span-3 flex items-end gap-2 flex-wrap">
+            {!creatingSeries ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setCreatingSeries(true)}
+              >
+                + Создать новую серию
+              </Button>
+            ) : (
+              <div className="flex items-end gap-2 flex-wrap w-full md:w-auto">
+                <div className="space-y-1 flex-1 min-w-[220px]">
+                  <Label htmlFor="new-series-title" className="text-xs">
+                    Название серии
+                  </Label>
+                  <Input
+                    id="new-series-title"
+                    value={newSeriesTitle}
+                    onChange={(e) => setNewSeriesTitle(e.target.value)}
+                    placeholder="Напр. «Десятичные дроби — 5 класс»"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!newSeriesTitle.trim()}
+                  onClick={async () => {
+                    const res = await createSeriesAction({
+                      title: newSeriesTitle.trim(),
+                      subject: subjectName,
+                      grade,
+                      quarter,
+                    });
+                    if (res.id) {
+                      const newRow: LessonSeriesRow = {
+                        id: res.id,
+                        user_id: "",
+                        title: newSeriesTitle.trim(),
+                        subject: subjectName,
+                        grade,
+                        quarter,
+                        created_at: new Date().toISOString(),
+                      };
+                      setSeries((prev) => [newRow, ...prev]);
+                      setSeriesId(res.id);
+                      setSeriesPosition(1);
+                      setNewSeriesTitle("");
+                      setCreatingSeries(false);
+                    }
+                  }}
+                >
+                  Создать
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setCreatingSeries(false);
+                    setNewSeriesTitle("");
+                  }}
+                >
+                  Отмена
+                </Button>
+              </div>
+            )}
+            {seriesId && seriesPosition && (
+              <span className="text-xs text-slate-500 ml-auto">
+                Этот план — Урок {seriesPosition} в серии «
+                {series.find((s) => s.id === seriesId)?.title ?? "—"}»
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
