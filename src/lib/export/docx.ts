@@ -13,7 +13,7 @@ import {
 } from "docx";
 import type { LessonPlanRow, LessonStage } from "@/lib/types/ksp";
 import { type InteractiveTask, taskTypeLabel } from "@/lib/ksp/tasks";
-import { htmlToDocxParagraphs } from "./html-to-docx";
+import { htmlToDocxParagraphsAsync } from "./html-to-docx";
 
 const BORDER = {
   style: BorderStyle.SINGLE,
@@ -89,9 +89,9 @@ function labelRow(label: string, value: string) {
 }
 
 /** Build "teacher actions" cell content with structure: key questions, actions, tasks. */
-function teacherCellChildren(stage: LessonStage): Paragraph[] {
+async function teacherCellChildren(stage: LessonStage): Promise<Paragraph[]> {
   const out: Paragraph[] = [];
-  out.push(...htmlToDocxParagraphs(stage.teacherActions));
+  out.push(...(await htmlToDocxParagraphsAsync(stage.teacherActions)));
   const kq = stage.keyQuestions?.filter((q) => q.trim()) ?? [];
   if (kq.length > 0) {
     out.push(
@@ -145,8 +145,8 @@ function teacherCellChildren(stage: LessonStage): Paragraph[] {
   return out;
 }
 
-function studentCellChildren(stage: LessonStage): Paragraph[] {
-  return htmlToDocxParagraphs(stage.studentActions);
+async function studentCellChildren(stage: LessonStage): Promise<Paragraph[]> {
+  return htmlToDocxParagraphsAsync(stage.studentActions);
 }
 
 function assessmentCellChildren(stage: LessonStage): Paragraph[] {
@@ -209,18 +209,22 @@ function assessmentCellChildren(stage: LessonStage): Paragraph[] {
   return out;
 }
 
-function stageRow(label: string, stage: LessonStage): TableRow {
+async function stageRow(label: string, stage: LessonStage): Promise<TableRow> {
   const stageCell = new Paragraph({
     children: [
       new TextRun({ text: label, bold: true }),
       ...(stage.time ? [new TextRun({ text: `\n${stage.time}` })] : []),
     ],
   });
+  const [teacher, student] = await Promise.all([
+    teacherCellChildren(stage),
+    studentCellChildren(stage),
+  ]);
   return new TableRow({
     children: [
       cellChildren([stageCell], { width: 14 }),
-      cellChildren(teacherCellChildren(stage), { width: 32 }),
-      cellChildren(studentCellChildren(stage), { width: 22 }),
+      cellChildren(teacher, { width: 32 }),
+      cellChildren(student, { width: 22 }),
       cellChildren(assessmentCellChildren(stage), { width: 18 }),
       cellChildren(
         stage.resources
@@ -384,9 +388,11 @@ export async function buildKspDocx(plan: LessonPlanRow): Promise<Buffer> {
           cellTextOnly("Ресурсы", { bold: true, width: 14 }),
         ],
       }),
-      stageRow("Начало урока", c.stages.beginning),
-      stageRow("Середина урока", c.stages.middle),
-      stageRow("Конец урока", c.stages.end),
+      ...(await Promise.all([
+        stageRow("Начало урока", c.stages.beginning),
+        stageRow("Середина урока", c.stages.middle),
+        stageRow("Конец урока", c.stages.end),
+      ])),
     ],
   });
 
