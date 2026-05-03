@@ -54,3 +54,10 @@ next-env.d.ts
 dl.mjs
 pwtest.mjs
 save2.mjs
+
+# Cloudflare / OpenNext build artifacts
+.open-next/
+.wrangler/
+.dev.vars
+worker-configuration.d.ts
+cloudflare-env.d.ts
