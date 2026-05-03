@@ -24,24 +24,24 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   type KspContent,
-  type LessonStage,
   emptyKsp,
   type SubjectRow,
   type LessonSeriesRow,
 } from "@/lib/types/ksp";
-import type { InteractiveTask } from "@/lib/ksp/tasks";
-import { TaskBuilder } from "./task-builder";
 import { ObjectivesPicker } from "./objectives-picker";
 import { AiEnhanceButton } from "./ai-enhance-button";
 import { ListEditor } from "./list-editor";
-import { RichTextEditor, richTextToPlain } from "./rich-text-editor";
-import { uploadPlanImage } from "@/lib/upload-image";
 import {
   savePlanAction,
   createSeriesAction,
-  autosavePlanAction,
   type SavePlanInput,
 } from "@/app/actions/plans";
+import { StageEditor } from "./plan-form/stage-editor";
+import { collectWarnings, computeProgress } from "./plan-form/helpers";
+import {
+  useDraftAutosave,
+  useCloudAutosave,
+} from "./plan-form/use-plan-autosave";
 
 const DRAFT_KEY_PREFIX = "ksp-draft:";
 const SERIES_NONE = "__none__";
@@ -105,10 +105,6 @@ export function PlanForm({
     initialPlan?.content ?? emptyKsp(),
   );
   const [activeTab, setActiveTab] = useState<string>("meta");
-  const [draftSaved, setDraftSaved] = useState(false);
-  const [cloudSavedAt, setCloudSavedAt] = useState<string | null>(null);
-  const [cloudSaving, setCloudSaving] = useState(false);
-  const [cloudError, setCloudError] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
   const userTouchedRef = useRef(false);
 
@@ -202,54 +198,30 @@ export function PlanForm({
     return () => window.clearTimeout(id);
   }, []);
 
-  // Debounced autosave of the whole form state to localStorage (works for
-  // both new plans and edits — survives browser refresh / tab close).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const h = setTimeout(() => {
-      try {
-        window.localStorage.setItem(
-          draftKey,
-          JSON.stringify({ title, subjectId, grade, quarter, section, visibility, language, content }),
-        );
-        setDraftSaved(true);
-        const t = setTimeout(() => setDraftSaved(false), 1500);
-        return () => clearTimeout(t);
-      } catch {
-        // ignore quota errors
-      }
-    }, 600);
-    return () => clearTimeout(h);
-  }, [title, subjectId, grade, quarter, section, visibility, language, content, draftKey]);
+  const draftSnapshot = useMemo(
+    () => ({
+      title,
+      subjectId,
+      grade,
+      quarter,
+      section,
+      visibility,
+      language,
+      content,
+    }),
+    [title, subjectId, grade, quarter, section, visibility, language, content],
+  );
+  const { draftSaved } = useDraftAutosave({
+    draftKey,
+    snapshot: draftSnapshot,
+  });
 
-  // Server autosave for *existing* plans: 2s debounce, only after the user
-  // touched the form (prevents an immediate write on page load).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!initialPlan?.id) return;
-    if (!userTouchedRef.current) return;
-    const h = window.setTimeout(() => {
-      setCloudSaving(true);
-      setCloudError(null);
-      autosavePlanAction({
-        id: initialPlan.id!,
-        title: title || content.topic || "Без названия",
-        content,
-      })
-        .then((res) => {
-          if ("error" in res && res.error) {
-            setCloudError(res.error);
-          } else if ("savedAt" in res && res.savedAt) {
-            setCloudSavedAt(res.savedAt);
-          }
-        })
-        .catch((e) =>
-          setCloudError(e instanceof Error ? e.message : "save failed"),
-        )
-        .finally(() => setCloudSaving(false));
-    }, 2000);
-    return () => window.clearTimeout(h);
-  }, [title, content, initialPlan?.id]);
+  const { cloudSaving, cloudSavedAt, cloudError } = useCloudAutosave({
+    planId: initialPlan?.id,
+    title,
+    content,
+    userTouchedRef,
+  });
 
   const progress = useMemo(() => computeProgress(content, title), [content, title]);
 
@@ -1084,234 +1056,3 @@ export function PlanForm({
   );
 }
 
-function StageEditor({
-  title,
-  stageKey,
-  stage,
-  onChange,
-  context,
-  availableObjectives,
-}: {
-  title: string;
-  stageKey: "beginning" | "middle" | "end";
-  stage: LessonStage;
-  onChange: (stage: LessonStage) => void;
-  context: { topic: string; grade: number; subject: string; language: "ru" | "kz" };
-  availableObjectives: Array<{ code: string; text: string }>;
-}) {
-  const tasks = stage.tasks ?? [];
-  function setTasks(next: InteractiveTask[]) {
-    onChange({ ...stage, tasks: next });
-  }
-  const timeHint =
-    stageKey === "beginning"
-      ? "1–10 мин"
-      : stageKey === "middle"
-        ? "11–35 мин"
-        : "36–45 мин";
-  return (
-    <div className="border border-slate-200 rounded-lg p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">{title}</h3>
-        <Input
-          className="w-40"
-          value={stage.time}
-          onChange={(e) => onChange({ ...stage, time: e.target.value })}
-          placeholder={timeHint}
-        />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <Label>Действия учителя</Label>
-          <RichTextEditor
-            rows={4}
-            value={stage.teacherActions}
-            onChange={(html) =>
-              onChange({ ...stage, teacherActions: html })
-            }
-            onUploadImage={uploadPlanImage}
-            placeholder="Что делает учитель: объясняет, демонстрирует, направляет…"
-          />
-        </div>
-        <div>
-          <Label>Действия учеников</Label>
-          <RichTextEditor
-            rows={4}
-            value={stage.studentActions}
-            onChange={(html) =>
-              onChange({ ...stage, studentActions: html })
-            }
-            onUploadImage={uploadPlanImage}
-            placeholder="Что делают ученики: записывают, сравнивают, обсуждают…"
-          />
-        </div>
-        <div className="md:col-span-2">
-          <Label>Ресурсы</Label>
-          <Input
-            value={stage.resources}
-            onChange={(e) => onChange({ ...stage, resources: e.target.value })}
-            placeholder="Учебник, презентация, раздаточный материал"
-          />
-        </div>
-        <div>
-          <Label>
-            Ключевые вопросы (кумулятивная беседа){" "}
-            <span className="text-xs text-slate-500">— для активизации</span>
-          </Label>
-          <ListEditor
-            items={stage.keyQuestions ?? []}
-            onChange={(items) => onChange({ ...stage, keyQuestions: items })}
-            placeholder={
-              stageKey === "beginning"
-                ? "Напр. «Что вы помните из предыдущего урока?»"
-                : stageKey === "end"
-                  ? "Напр. «Что нового вы узнали?»"
-                  : "Напр. «Какое свойство вы заметили?»"
-            }
-          />
-        </div>
-        <div>
-          <Label>
-            Дескрипторы оценивания{" "}
-            <span className="text-xs text-slate-500">
-              — что именно делает ученик
-            </span>
-          </Label>
-          <ListEditor
-            items={stage.descriptors ?? []}
-            onChange={(items) => onChange({ ...stage, descriptors: items })}
-            placeholder="Напр. «Записывает определение»"
-          />
-        </div>
-        <div className="md:col-span-2">
-          <Label>Метод оценивания</Label>
-          <Select
-            value={stage.assessmentMethod ?? ""}
-            onValueChange={(v) =>
-              onChange({ ...stage, assessmentMethod: v === "_none" ? "" : v })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Выберите метод" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_none">— не указан —</SelectItem>
-              <SelectItem value="Похвала">Похвала</SelectItem>
-              <SelectItem value="ФО">ФО (формативное)</SelectItem>
-              <SelectItem value="СОР">СОР (суммативное за раздел)</SelectItem>
-              <SelectItem value="Взаимооценивание">Взаимооценивание</SelectItem>
-              <SelectItem value="Самооценивание">Самооценивание</SelectItem>
-              <SelectItem value="ФО + Взаимооценивание">
-                ФО + Взаимооценивание
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {stageKey === "end" && (
-          <>
-            <div className="md:col-span-2">
-              <Label>Итог урока</Label>
-              <Textarea
-                rows={2}
-                value={stage.summary ?? ""}
-                onChange={(e) => onChange({ ...stage, summary: e.target.value })}
-                placeholder="1–2 предложения: что узнали, что закрепили"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Label>
-                Рефлексивные вопросы ученикам{" "}
-                <span className="text-xs text-slate-500">— 3 открытых</span>
-              </Label>
-              <ListEditor
-                items={stage.reflectionQuestions ?? []}
-                onChange={(items) =>
-                  onChange({ ...stage, reflectionQuestions: items })
-                }
-                placeholder="Напр. «Что было сложно?»"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Домашнее задание</Label>
-              <Textarea
-                rows={2}
-                value={stage.homework ?? ""}
-                onChange={(e) =>
-                  onChange({ ...stage, homework: e.target.value })
-                }
-                placeholder="Конкретное задание с комментарием"
-              />
-            </div>
-          </>
-        )}
-      </div>
-      <TaskBuilder
-        tasks={tasks}
-        onChange={setTasks}
-        context={{ stage: stageKey, ...context }}
-        availableObjectives={availableObjectives}
-      />
-    </div>
-  );
-}
-
-function collectWarnings({
-  title,
-  topic,
-  content,
-}: {
-  title: string;
-  topic: string;
-  content: KspContent;
-}): string[] {
-  const out: string[] = [];
-  if (!title.trim()) out.push("Название КСП не заполнено");
-  if (!topic.trim()) out.push("Тема урока не указана");
-  if (content.learningObjectives.length === 0) out.push("Нет целей обучения из программы (ГОСО)");
-  if (content.lessonObjectives.length === 0) out.push("Нет целей урока (SMART)");
-  if (content.assessmentCriteria.length === 0)
-    out.push("Не заданы критерии оценивания");
-  const anyStage = (
-    [content.stages.beginning, content.stages.middle, content.stages.end] as const
-  ).some((s) => richTextToPlain(s.teacherActions).trim().length > 0);
-  if (!anyStage)
-    out.push("Нет действий учителя ни в одном этапе урока");
-  const totalTasks =
-    (content.stages.beginning.tasks?.length ?? 0) +
-    (content.stages.middle.tasks?.length ?? 0) +
-    (content.stages.end.tasks?.length ?? 0);
-  if (totalTasks === 0)
-    out.push(
-      "Нет интерактивных заданий (добавьте хотя бы одно для вовлечения учеников)",
-    );
-  if (!content.evaluation.healthAndSafety.trim())
-    out.push("Не заполнен раздел «Здоровье и ТБ»");
-  return out;
-}
-
-function computeProgress(c: KspContent, title: string): { percent: number; done: number; total: number } {
-  const checks: boolean[] = [
-    title.trim().length > 0,
-    c.topic.trim().length > 0,
-    c.learningObjectives.length > 0,
-    c.lessonObjectives.length > 0,
-    c.assessmentCriteria.length > 0,
-    c.languageObjectives.terms.length + c.languageObjectives.phrases.length > 0,
-    c.values.trim().length > 0,
-    c.priorKnowledge.trim().length > 0,
-    richTextToPlain(c.stages.beginning.teacherActions).trim().length > 0,
-    richTextToPlain(c.stages.middle.teacherActions).trim().length > 0,
-    richTextToPlain(c.stages.end.teacherActions).trim().length > 0,
-    c.evaluation.formativeAssessment.trim().length > 0,
-    c.evaluation.reflection.trim().length > 0,
-    c.evaluation.healthAndSafety.trim().length > 0,
-    // Interactive tasks present anywhere
-    (c.stages.beginning.tasks?.length ?? 0) +
-      (c.stages.middle.tasks?.length ?? 0) +
-      (c.stages.end.tasks?.length ?? 0) >
-      0,
-  ];
-  const total = checks.length;
-  const done = checks.filter(Boolean).length;
-  return { percent: Math.round((done / total) * 100), done, total };
-}

@@ -60,3 +60,30 @@ export async function updateMyProfileAction(
   revalidatePath("/dashboard");
   return { ok: true };
 }
+
+/**
+ * Lightweight server action used by the locale switcher in the header.
+ * Persists the preferred UI language so it follows the user across devices
+ * (the client-side `localStorage` value is just a cache for fast first paint).
+ */
+export async function setMyLocaleAction(
+  locale: "ru" | "kz",
+): Promise<{ ok?: true; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "UNAUTHENTICATED" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({
+      id: user.id,
+      preferred_locale: locale,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", user.id);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}

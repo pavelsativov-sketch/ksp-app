@@ -2,12 +2,19 @@
 
 import Link from "next/link";
 import { useT } from "@/lib/i18n/use-locale";
+import type { Locale } from "@/lib/i18n/dict";
 import { Button } from "@/components/ui/button";
 import { LocaleSwitcher } from "./locale-switcher";
 import { logoutAction } from "@/app/actions/auth";
 
-export function HeaderNav({ userEmail }: { userEmail: string | null }) {
-  const t = useT();
+export function HeaderNav({
+  userEmail,
+  serverLocale,
+}: {
+  userEmail: string | null;
+  serverLocale?: Locale | null;
+}) {
+  const t = useT(serverLocale ?? null);
   return (
     <nav className="flex items-center gap-4 text-sm">
       <Link className="hover:underline" href="/library">
@@ -22,7 +29,7 @@ export function HeaderNav({ userEmail }: { userEmail: string | null }) {
             {t("nav.settings")}
           </Link>
           <span className="text-slate-500 hidden md:inline">{userEmail}</span>
-          <LocaleSwitcher />
+          <LocaleSwitcher serverLocale={serverLocale ?? null} />
           <form action={logoutAction}>
             <Button variant="outline" size="sm" type="submit">
               {t("nav.logout")}
@@ -31,7 +38,7 @@ export function HeaderNav({ userEmail }: { userEmail: string | null }) {
         </>
       ) : (
         <>
-          <LocaleSwitcher />
+          <LocaleSwitcher serverLocale={serverLocale ?? null} />
           <Link className="hover:underline" href="/login">
             {t("nav.login")}
           </Link>
@@ -44,7 +51,11 @@ export function HeaderNav({ userEmail }: { userEmail: string | null }) {
   );
 }
 
-export function FooterTagline() {
-  const t = useT();
+export function FooterTagline({
+  serverLocale,
+}: {
+  serverLocale?: Locale | null;
+}) {
+  const t = useT(serverLocale ?? null);
   return <>{t("footer.tagline")}</>;
 }

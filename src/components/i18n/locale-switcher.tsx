@@ -1,9 +1,16 @@
 "use client";
 
 import { useLocale } from "@/lib/i18n/use-locale";
+import type { Locale } from "@/lib/i18n/dict";
 
-export function LocaleSwitcher({ className }: { className?: string }) {
-  const [locale, setLocale] = useLocale();
+export function LocaleSwitcher({
+  className,
+  serverLocale,
+}: {
+  className?: string;
+  serverLocale?: Locale | null;
+}) {
+  const [locale, setLocale] = useLocale(serverLocale ?? null);
   const base =
     "text-xs font-medium px-2 py-1 rounded transition-colors border";
   const on = "bg-slate-900 text-white border-slate-900";

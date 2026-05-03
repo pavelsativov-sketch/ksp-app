@@ -516,10 +516,11 @@ function MatchingInput({
   disabled: boolean;
 }) {
   // Same fix as ORDERING: delay+tolerance prevents click-vs-drag stickiness on
-  // macOS Chrome / mobile Safari.
+  // macOS Chrome / mobile Safari. KeyboardSensor uses
+  // sortableKeyboardCoordinates so Tab → Space → arrows works for matching too.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
-    useSensor(KeyboardSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const assigned = new Map<number, number>(
     answer.pairs.map((p) => [p.rightIndex, p.leftIndex]),
