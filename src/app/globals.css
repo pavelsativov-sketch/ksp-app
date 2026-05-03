@@ -104,27 +104,55 @@ body {
     sans-serif;
 }
 
-/* Print styles: rendered clean when exporting via window.print() */
+/* Print styles: rendered clean when exporting via window.print() / Save-as-PDF.
+   Use black borders/text to match the .docx export. */
 @media print {
   @page {
     size: A4;
     margin: 15mm;
   }
+  html,
   body {
-    background: white;
+    background: white !important;
+    color: #000 !important;
   }
   .no-print {
     display: none !important;
   }
+  /* Avoid awkward page breaks inside individual rows / cards. */
+  table,
+  tr,
+  td,
+  th,
+  section,
+  .keep-together {
+    page-break-inside: avoid;
+  }
+  a {
+    color: #000 !important;
+    text-decoration: none !important;
+  }
+  .print-plan {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
   .print-plan h1 {
     font-size: 18pt;
     margin-bottom: 8pt;
+    text-align: center;
   }
   .print-plan h2 {
     font-size: 13pt;
     margin-top: 10pt;
-    border-bottom: 1px solid #999;
+    border-bottom: 1px solid #000;
     padding-bottom: 2pt;
+    page-break-after: avoid;
+  }
+  .print-plan h3 {
+    font-size: 12pt;
+    margin-top: 8pt;
+    page-break-after: avoid;
   }
   .print-plan table {
     border-collapse: collapse;
@@ -133,12 +161,27 @@ body {
   }
   .print-plan th,
   .print-plan td {
-    border: 1px solid #666;
+    border: 1px solid #000;
     padding: 4pt;
     vertical-align: top;
     text-align: left;
+    color: #000;
   }
-  .print-plan ul {
+  .print-plan ul,
+  .print-plan ol {
     padding-left: 18pt;
+  }
+  .print-plan img {
+    max-width: 100%;
+    height: auto;
+    page-break-inside: avoid;
+  }
+  /* For the offline interactive HTML — a hint shown only in print so the
+     teacher can hand it out as a worksheet without the controls. */
+  .interactive-print-only {
+    display: block !important;
+  }
+  .interactive-screen-only {
+    display: none !important;
   }
 }

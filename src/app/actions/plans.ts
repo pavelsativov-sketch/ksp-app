@@ -130,6 +130,31 @@ export async function createSeriesAction(input: {
   return { id: data.id };
 }
 
+/**
+ * Server-side autosave for an existing plan. Lighter than `savePlanAction`:
+ *   - only updates the plan content + title
+ *   - skips Zod validation (we accept any content shape for resilience)
+ *   - returns { ok, savedAt } so the UI can show a "saved at HH:MM" hint
+ *
+ * Owner-only via the `eq("owner_id", user.id)` filter — RLS would also block
+ * this, but we keep the explicit check.
+ */
+export async function autosavePlanAction(input: {
+  id: string;
+  title: string;
+  content: KspContent;
+}): Promise<{ ok?: true; savedAt?: string; error?: string }> {
+  if (!input.id) return { error: "missing id" };
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase
+    .from("lesson_plans")
+    .update({ title: input.title, content: input.content })
+    .eq("id", input.id)
+    .eq("owner_id", user.id);
+  if (error) return { error: error.message };
+  return { ok: true, savedAt: new Date().toISOString() };
+}
+
 export async function deletePlanAction(id: string) {
   const { supabase, user } = await requireUser();
   const { error } = await supabase

@@ -31,6 +31,13 @@ export interface PlanListItem {
   updated_at: string;
   visibility?: "private" | "unlisted" | "public";
   topic?: string | null;
+  /**
+   * Pre-computed lower-cased haystack of plan content (title, topic, learning
+   * objectives text, lesson objectives, teacher/student actions, etc.) used by
+   * the in-page search box. The server builds this from `content` jsonb so we
+   * don't ship the full plan payload to the client.
+   */
+  search_text?: string | null;
 }
 
 export interface PlansFilterProps {
@@ -80,8 +87,9 @@ export function PlansFilter({
         } else if (String(p.quarter) !== quarter) return false;
       }
       if (needle) {
-        const hay =
-          `${p.title} ${p.topic ?? ""} ${p.subject_name ?? ""}`.toLowerCase();
+        const hay = (
+          `${p.title} ${p.topic ?? ""} ${p.subject_name ?? ""} ${p.search_text ?? ""}`
+        ).toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
@@ -115,7 +123,7 @@ export function PlansFilter({
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Поиск по названию или теме…"
+            placeholder="Поиск по названию, теме, целям, ходу урока…"
             className="pl-8"
           />
         </div>

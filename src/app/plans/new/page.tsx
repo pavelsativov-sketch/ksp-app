@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { PlanForm } from "@/components/ksp/plan-form";
+import { getMyProfile } from "@/app/actions/profile";
 import type { LessonSeriesRow, SubjectRow } from "@/lib/types/ksp";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export default async function NewPlanPage({
 
   const sp = (await searchParams) ?? {};
 
-  const [{ data: subjects }, { data: seriesList }] = await Promise.all([
+  const [{ data: subjects }, { data: seriesList }, profile] = await Promise.all([
     supabase
       .from("subjects")
       .select("id, name_ru, name_kz, grade_min, grade_max")
@@ -30,7 +31,17 @@ export default async function NewPlanPage({
       .select("id, user_id, title, subject, grade, quarter, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
+    getMyProfile(),
   ]);
+
+  // Pre-fill the lesson header with the teacher's saved profile defaults so
+  // they don't have to retype school/ФИО for every new plan. Passed as a
+  // separate prop so the form can apply them ON TOP of any restored draft.
+  const profileDefaults = {
+    teacherName: profile?.full_name ?? null,
+    school: profile?.school ?? null,
+  };
+  const initialGrade = profile?.default_grade ?? undefined;
 
   // If ?series=<id> is supplied, suggest the next position for new plan in that series.
   let presetSeriesId: string | null = null;
@@ -62,6 +73,8 @@ export default async function NewPlanPage({
         seriesList={(seriesList as LessonSeriesRow[] | null) ?? []}
         presetSeriesId={presetSeriesId}
         presetSeriesPosition={presetPosition}
+        profileDefaults={profileDefaults}
+        initialPlan={initialGrade ? { grade: initialGrade } : undefined}
       />
     </div>
   );

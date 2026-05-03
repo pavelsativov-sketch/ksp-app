@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import { FileText, Plus } from "lucide-react";
 import { PlansFilter, type PlanListItem } from "@/components/ksp/plans-filter";
+import { buildPlanSearchText } from "@/lib/ksp/search-text";
+import type { KspContent } from "@/lib/types/ksp";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +44,31 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/dashboard");
 
-  const [plansRes, subjectsRes] = await Promise.all([
+  const [plansRes, subjectsRes, seriesRes] = await Promise.all([
     supabase
       .from("lesson_plans")
-      .select("id, title, grade, subject_id, quarter, updated_at, visibility, content")
+      .select(
+        "id, title, grade, subject_id, quarter, updated_at, visibility, content, series_id, series_position",
+      )
       .eq("owner_id", user.id)
       .order("updated_at", { ascending: false }),
     supabase.from("subjects").select("id, name_ru").order("name_ru"),
+    supabase
+      .from("lesson_series")
+      .select("id, title, subject, grade, quarter, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
   ]);
+
+  const seriesList =
+    (seriesRes.data as Array<{
+      id: string;
+      title: string;
+      subject: string | null;
+      grade: number | null;
+      quarter: number | null;
+      created_at: string;
+    }> | null) ?? [];
 
   const subjects = (subjectsRes.data as Array<{ id: string; name_ru: string }> | null) ?? [];
   const subjectMap = new Map(subjects.map((s) => [s.id, s.name_ru]));
@@ -61,8 +80,17 @@ export default async function DashboardPage() {
     quarter: number | null;
     updated_at: string;
     visibility: "private" | "unlisted" | "public";
-    content: { topic?: string } | null;
+    content: KspContent | null;
+    series_id: string | null;
+    series_position: number | null;
   }> | null) ?? [];
+
+  // Count plans per series so we can show "5 уроков" on the series card.
+  const seriesCounts = new Map<string, number>();
+  for (const p of rawPlans) {
+    if (!p.series_id) continue;
+    seriesCounts.set(p.series_id, (seriesCounts.get(p.series_id) ?? 0) + 1);
+  }
 
   const plans: PlanListItem[] = rawPlans.map((p) => ({
     id: p.id,
@@ -74,6 +102,7 @@ export default async function DashboardPage() {
     updated_at: p.updated_at,
     visibility: p.visibility,
     topic: p.content?.topic ?? null,
+    search_text: buildPlanSearchText(p.content),
   }));
 
   return (
@@ -91,6 +120,33 @@ export default async function DashboardPage() {
           </Link>
         </Button>
       </div>
+
+      {seriesList.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold text-slate-700">
+            Серии уроков
+          </h2>
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            {seriesList.map((s) => (
+              <Link
+                key={s.id}
+                href={`/series/${s.id}`}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              >
+                <div className="font-medium text-sm text-slate-800 line-clamp-1">
+                  {s.title}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {s.subject ? `${s.subject} · ` : ""}
+                  {s.grade ? `${s.grade} класс · ` : ""}
+                  {seriesCounts.get(s.id) ?? 0}{" "}
+                  {(seriesCounts.get(s.id) ?? 0) === 1 ? "урок" : "уроков"}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {plans.length === 0 ? (
         <Card>

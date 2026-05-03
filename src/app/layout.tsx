@@ -63,6 +63,12 @@ export default async function RootLayout({
                   <Link className="hover:underline" href="/dashboard">
                     Мои КСП
                   </Link>
+                  <Link
+                    className="hover:underline text-slate-600"
+                    href="/settings"
+                  >
+                    Настройки
+                  </Link>
                   <span className="text-slate-500 hidden md:inline">
                     {userEmail}
                   </span>
