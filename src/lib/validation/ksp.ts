@@ -66,6 +66,16 @@ const stageSchema = z.object({
   studentActions: z.string().trim().default(""),
   resources: z.string().trim().default(""),
   tasks: z.array(taskSchema).default([]),
+  // Optional pedagogical fields produced by the AI prompt (KEY_REQUIREMENT
+  // No. 2 in src/lib/ai/prompt.ts). Without these fields in the schema, zod's
+  // default `strip` mode silently drops them on save — losing all the rich
+  // KSP content the AI generates.
+  keyQuestions: z.array(z.string().trim()).optional(),
+  descriptors: z.array(z.string().trim()).optional(),
+  assessmentMethod: z.string().trim().optional(),
+  homework: z.string().trim().optional(),
+  summary: z.string().trim().optional(),
+  reflectionQuestions: z.array(z.string().trim()).optional(),
 });
 
 const headerSchema = z.object({
@@ -86,6 +96,16 @@ export const kspContentSchema = z.object({
     .default([]),
   lessonObjectives: z.array(z.string().trim()).default([]),
   assessmentCriteria: z.array(z.string().trim()).default([]),
+  // 10-point scoring scale (KEY_REQUIREMENT No. 3 in the AI prompt).
+  // Optional so legacy plans don't break, but must be preserved on save.
+  pointsScale: z
+    .array(
+      z.object({
+        label: z.string().trim().default(""),
+        points: z.number().int().min(0).max(20).default(0),
+      }),
+    )
+    .optional(),
   languageObjectives: z
     .object({
       terms: z.array(z.string().trim()).default([]),

@@ -4,6 +4,7 @@ import Link from "next/link";
 import "./globals.css";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { HeaderNav, FooterTagline } from "@/components/i18n/header-nav";
+import type { Locale } from "@/lib/i18n/dict";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,12 +27,23 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const configured = isSupabaseConfigured();
   let userEmail: string | null = null;
+  let serverLocale: Locale | null = null;
   if (configured) {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     userEmail = user?.email ?? null;
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("preferred_locale")
+        .eq("id", user.id)
+        .maybeSingle();
+      const v = (profile as { preferred_locale: string | null } | null)
+        ?.preferred_locale;
+      serverLocale = v === "kz" ? "kz" : v === "ru" ? "ru" : null;
+    }
   }
 
   return (
@@ -53,12 +65,12 @@ export default async function RootLayout({
             <Link href="/" className="font-semibold text-lg">
               КСП<span className="text-blue-600">.app</span>
             </Link>
-            <HeaderNav userEmail={userEmail} />
+            <HeaderNav userEmail={userEmail} serverLocale={serverLocale} />
           </div>
         </header>
         <main className="flex-1 w-full">{children}</main>
         <footer className="bg-white border-t border-slate-200 text-xs text-slate-500 py-4 text-center no-print">
-          <FooterTagline />
+          <FooterTagline serverLocale={serverLocale} />
         </footer>
       </body>
     </html>

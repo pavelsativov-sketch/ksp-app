@@ -83,6 +83,12 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
         <BulletList items={c.assessmentCriteria} />
       </Section>
 
+      {c.pointsScale && c.pointsScale.length > 0 && (
+        <Section title="Шкала оценивания за урок (10 баллов)">
+          <PointsScaleTable items={c.pointsScale} />
+        </Section>
+      )}
+
       <Section title="Языковые цели">
         <p>
           <strong>Термины: </strong>
@@ -157,6 +163,50 @@ function TableRow({ label, value }: { label: string; value: string }) {
       <td className="py-1.5 pr-3 text-slate-500 w-1/3 align-top">{label}</td>
       <td className="py-1.5 align-top">{value || "—"}</td>
     </tr>
+  );
+}
+
+function PointsScaleTable({
+  items,
+}: {
+  items: NonNullable<LessonPlanRow["content"]["pointsScale"]>;
+}) {
+  const total = items.reduce((s, it) => s + (it.points || 0), 0);
+  return (
+    <table className="w-full text-sm border border-slate-300">
+      <thead>
+        <tr className="bg-slate-50">
+          <th
+            scope="col"
+            className="text-left font-semibold border-b border-slate-300 px-3 py-1.5"
+          >
+            За что начисляется балл
+          </th>
+          <th
+            scope="col"
+            className="text-right font-semibold border-b border-l border-slate-300 px-3 py-1.5 w-24"
+          >
+            Баллы
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((it, i) => (
+          <tr key={i} className="border-b border-slate-200 last:border-b-0">
+            <td className="px-3 py-1.5 align-top">{it.label || "—"}</td>
+            <td className="px-3 py-1.5 text-right border-l border-slate-200 font-mono">
+              {it.points}
+            </td>
+          </tr>
+        ))}
+        <tr className="bg-slate-50 font-semibold">
+          <td className="px-3 py-1.5 text-right">Итого:</td>
+          <td className="px-3 py-1.5 text-right border-l border-slate-300 font-mono">
+            {total}
+          </td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
