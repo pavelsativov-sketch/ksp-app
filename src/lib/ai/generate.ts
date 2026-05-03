@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import type { KspContent } from "@/lib/types/ksp";
 import {
   buildSystemPrompt,
@@ -7,42 +6,32 @@ import {
   type AiKspPayload,
   type GenerateKspInput,
 } from "./prompt";
+import { completeJson, isAiConfigured } from "./client";
 
+export { isAiConfigured };
+
+/** @deprecated alias kept for compatibility — use isAiConfigured(). */
 export function isOpenAIConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return isAiConfigured();
 }
 
 /**
  * Generate a KSP body (everything except header and learningObjectives).
- * If OPENAI_API_KEY is not set, returns a heuristic stub so the UI
- * flow works end-to-end for demos.
+ * Uses Gemini if `GEMINI_API_KEY` is set, OpenAI otherwise. If no provider
+ * is configured the call returns a heuristic stub so the UI still works
+ * end-to-end for demos.
  */
 export async function generateKsp(
   input: GenerateKspInput,
 ): Promise<AiKspPayload> {
-  if (!isOpenAIConfigured()) {
-    return stubKsp(input);
-  }
-
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  if (!isAiConfigured()) return stubKsp(input);
+  return completeJson<AiKspPayload>({
+    system: buildSystemPrompt(input.language),
+    user: buildUserPrompt(input),
+    schema: OPENAI_JSON_SCHEMA.schema,
+    schemaName: OPENAI_JSON_SCHEMA.name,
     temperature: 0.7,
-    messages: [
-      { role: "system", content: buildSystemPrompt(input.language) },
-      { role: "user", content: buildUserPrompt(input) },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: OPENAI_JSON_SCHEMA,
-    },
   });
-
-  const raw = response.choices[0]?.message.content;
-  if (!raw) throw new Error("AI не вернул ответ");
-  const parsed = JSON.parse(raw) as AiKspPayload;
-  return parsed;
 }
 
 export function mergeAiIntoKsp(
@@ -64,7 +53,7 @@ export function mergeAiIntoKsp(
   };
 }
 
-/** Deterministic high-quality stub used when OPENAI_API_KEY is missing. */
+/** Deterministic high-quality stub used when no AI provider is configured. */
 function stubKsp(input: GenerateKspInput): AiKspPayload {
   const { grade, subject, topic } = input;
   return {
