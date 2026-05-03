@@ -81,6 +81,18 @@ export interface PointsScaleItem {
   points: number;
 }
 
+/**
+ * Общий уровневый дескриптор за урок — что именно умеет ученик, набравший
+ * соответствующее количество баллов (1–10). Один пункт на каждый уровень.
+ * Используется учителем для итоговой отметки и обратной связи.
+ */
+export interface OverallRubricItem {
+  /** Балл 1–10. */
+  points: number;
+  /** Что умеет/демонстрирует ученик на этом уровне. */
+  descriptor: string;
+}
+
 /** Полный шаблон КСП */
 export interface KspContent {
   header: LessonHeader;
@@ -101,6 +113,12 @@ export interface KspContent {
    * старые планы не сломаются.
    */
   pointsScale?: PointsScaleItem[];
+  /**
+   * Общий уровневый дескриптор урока: ровно 10 строк, по одной на каждый
+   * балл от 1 до 10. Описывает, что именно умеет/демонстрирует ученик,
+   * получивший этот балл. Опционально — старые планы не сломаются.
+   */
+  overallRubric?: OverallRubricItem[];
   /** Языковые цели: термины и ключевые фразы */
   languageObjectives: {
     terms: string[];

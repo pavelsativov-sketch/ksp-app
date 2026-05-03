@@ -118,6 +118,12 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
         <StageTable title="Конец урока" stage={c.stages.end} />
       </Section>
 
+      {c.overallRubric && c.overallRubric.length > 0 && (
+        <Section title="Общий дескриптор за урок (1–10 баллов)">
+          <OverallRubricTable items={c.overallRubric} />
+        </Section>
+      )}
+
       <Section title="Оценивание и рефлексия">
         <p>
           <strong>Формативное оценивание: </strong>
@@ -205,6 +211,47 @@ function PointsScaleTable({
             {total}
           </td>
         </tr>
+      </tbody>
+    </table>
+  );
+}
+
+function OverallRubricTable({
+  items,
+}: {
+  items: NonNullable<LessonPlanRow["content"]["overallRubric"]>;
+}) {
+  // Sort by points ascending so the rubric reads from "low" to "high".
+  const sorted = [...items].sort((a, b) => a.points - b.points);
+  return (
+    <table className="w-full text-sm border border-slate-300">
+      <thead>
+        <tr className="bg-slate-50">
+          <th
+            scope="col"
+            className="text-right font-semibold border-b border-slate-300 px-3 py-1.5 w-20"
+          >
+            Балл
+          </th>
+          <th
+            scope="col"
+            className="text-left font-semibold border-b border-l border-slate-300 px-3 py-1.5"
+          >
+            Что демонстрирует ученик
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((it, i) => (
+          <tr key={i} className="border-b border-slate-200 last:border-b-0">
+            <td className="px-3 py-1.5 text-right font-mono align-top">
+              {it.points}
+            </td>
+            <td className="px-3 py-1.5 align-top border-l border-slate-200">
+              {it.descriptor || "—"}
+            </td>
+          </tr>
+        ))}
       </tbody>
     </table>
   );
