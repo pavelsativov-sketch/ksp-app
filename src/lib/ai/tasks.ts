@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import {
   type InteractiveTask,
   type McqTask,
@@ -9,7 +8,7 @@ import {
   type TaskType,
   emptyTask,
 } from "@/lib/ksp/tasks";
-import { isOpenAIConfigured } from "./generate";
+import { completeJson, isAiConfigured } from "./client";
 
 export interface GenerateTasksInput {
   topic: string;
@@ -137,11 +136,10 @@ export async function generateTasks(
   input: GenerateTasksInput,
 ): Promise<InteractiveTask[]> {
   const count = input.count ?? 3;
-  if (!isOpenAIConfigured()) {
+  if (!isAiConfigured()) {
     return stubTasks(input, count);
   }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const stageName =
     input.stage === "beginning"
       ? "начала урока (разминка, актуализация)"
@@ -170,22 +168,13 @@ export async function generateTasks(
 Предпочтительно разнообразь типы заданий. Для NUMERIC используй реальные вычисления по теме.
 Верни ровно ${count} заданий.`;
 
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  const parsed = await completeJson<{ tasks: RawTask[] }>({
+    system,
+    user,
+    schema: OPENAI_TASKS_SCHEMA.schema,
+    schemaName: OPENAI_TASKS_SCHEMA.name,
     temperature: 0.7,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: OPENAI_TASKS_SCHEMA,
-    },
   });
-
-  const raw = response.choices[0]?.message.content;
-  if (!raw) throw new Error("AI не вернул ответ");
-  const parsed = JSON.parse(raw) as { tasks: RawTask[] };
   return parsed.tasks.map(materialize);
 }
 

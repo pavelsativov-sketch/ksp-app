@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { completeJson, isAiConfigured } from "@/lib/ai/client";
 
 const bodySchema = z.object({
   section: z.enum([
@@ -59,19 +60,18 @@ export async function POST(request: Request) {
   const { section, current, context } = parsed.data;
   const isList = Array.isArray(current);
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  if (!isAiConfigured()) {
     return NextResponse.json({
       improved: fallbackImprove(section, current, context),
       isList,
       stub: true,
       note:
-        "AI-улучшение в демо-режиме (OPENAI_API_KEY не задан). Добавьте ключ в .env для реальной AI-обработки.",
+        "AI-улучшение в демо-режиме (не задан GEMINI_API_KEY или OPENAI_API_KEY).",
     });
   }
 
   try {
-    const improved = await callOpenAi(section, current, context, apiKey);
+    const improved = await callAi(section, current, context);
     return NextResponse.json({ improved, isList, stub: false });
   } catch (e) {
     return NextResponse.json(
@@ -161,11 +161,10 @@ function appendText(current: string | string[], extra: string): string {
   return `${trimmed}\n\n${extra}`;
 }
 
-async function callOpenAi(
+async function callAi(
   section: Section,
   current: string | string[],
   ctx: { topic?: string; subject?: string; grade?: number; language?: "ru" | "kz" },
-  apiKey: string,
 ): Promise<string | string[]> {
   const isList = Array.isArray(current);
   const sectionLabel: Record<Section, string> = {
@@ -180,9 +179,7 @@ async function callOpenAi(
     differentiation: "Дифференциация",
   };
 
-  const system = `Ты методист, помогающий учителю казахстанской школы. Улучшай только запрошенный раздел КСП: делай формулировки конкретнее, измеримее, с опорой на тему и возраст. Отвечай ${
-    isList ? "JSON-массивом строк" : "текстом (без markdown-списков)"
-  } без пояснений.`;
+  const system = `Ты методист, помогающий учителю казахстанской школы. Улучшай только запрошенный раздел КСП: делай формулировки конкретнее, измеримее, с опорой на тему и возраст.`;
   const user = `Раздел: ${sectionLabel[section]}
 Предмет: ${ctx.subject || "—"}
 Класс: ${ctx.grade ?? "—"}
@@ -192,42 +189,37 @@ async function callOpenAi(
 Текущее содержание:
 ${Array.isArray(current) ? current.map((x, i) => `${i + 1}. ${x}`).join("\n") : current || "(пусто)"}
 
-Верни улучшенную версию ${isList ? "массивом JSON" : "одной строкой"}.`;
+Верни улучшенную версию в виде JSON: ${
+    isList
+      ? '{ "items": ["…", "…"] }'
+      : '{ "text": "…" }'
+  }.`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.6,
-      response_format: isList ? { type: "json_object" } : undefined,
-      messages: [
-        { role: "system", content: system },
-        {
-          role: "user",
-          content: isList ? `${user}\n\nФормат: {"items": ["…", "…"]}` : user,
+  const schema: Record<string, unknown> = isList
+    ? {
+        type: "object",
+        required: ["items"],
+        properties: {
+          items: { type: "array", items: { type: "string" } },
         },
-      ],
-    }),
-  });
+      }
+    : {
+        type: "object",
+        required: ["text"],
+        properties: { text: { type: "string" } },
+      };
 
-  if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-  const data = (await res.json()) as {
-    choices: Array<{ message: { content: string } }>;
-  };
-  const raw = data.choices?.[0]?.message?.content?.trim() ?? "";
-  if (!isList) return raw;
-  try {
-    const parsed = JSON.parse(raw) as { items?: string[] };
-    if (Array.isArray(parsed.items)) return parsed.items.filter((x) => typeof x === "string");
-  } catch {
-    // fall through
+  const parsed = await completeJson<{ items?: string[]; text?: string }>({
+    system,
+    user,
+    schema,
+    schemaName: isList ? "enhanced_list" : "enhanced_text",
+    temperature: 0.6,
+  });
+  if (isList) {
+    return Array.isArray(parsed.items)
+      ? parsed.items.filter((x) => typeof x === "string")
+      : [];
   }
-  return raw
-    .split("\n")
-    .map((l) => l.replace(/^[\s•\-\d.)]+/, "").trim())
-    .filter(Boolean);
+  return typeof parsed.text === "string" ? parsed.text.trim() : "";
 }
