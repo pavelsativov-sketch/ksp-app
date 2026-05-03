@@ -44,16 +44,22 @@ export async function prefetchImages(
   let m;
   while ((m = re.exec(html))) urls.add(m[1]);
   if (urls.size === 0) return cache;
-  // dynamic import sharp lazily — not all callers are server-only
-  type SharpFn = (buf: Buffer | Uint8Array) => {
-    metadata: () => Promise<{ width?: number; height?: number; format?: string }>;
+  // Pure-JS image dimension probing via `image-size` — works on Node.js,
+  // Cloudflare Workers, edge runtimes. Only reads the file header (a few KB),
+  // never decodes the full image, so it's safe to call inline.
+  type ImageSizeFn = (buf: Uint8Array) => {
+    width?: number;
+    height?: number;
+    type?: string;
   };
-  let sharp: SharpFn | null = null;
+  let imageSize: ImageSizeFn | null = null;
   try {
-    const mod = (await import("sharp")) as unknown as { default: SharpFn };
-    sharp = mod.default;
+    const mod = (await import("image-size")) as unknown as {
+      imageSize: ImageSizeFn;
+    };
+    imageSize = mod.imageSize;
   } catch {
-    // sharp unavailable — we'll skip dimension probing
+    // image-size unavailable — we'll fall back to default dimensions
   }
   await Promise.all(
     Array.from(urls).map(async (url) => {
@@ -68,9 +74,9 @@ export async function prefetchImages(
         if (buf.byteLength > 6 * 1024 * 1024) return;
         let width = 480;
         let height = 320;
-        if (sharp) {
+        if (imageSize) {
           try {
-            const meta = await sharp(buf).metadata();
+            const meta = imageSize(buf);
             if (meta.width && meta.height) {
               const max = 480;
               if (meta.width > max) {
