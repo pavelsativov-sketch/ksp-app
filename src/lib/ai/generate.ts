@@ -44,6 +44,7 @@ export function mergeAiIntoKsp(
     lessonObjectives: ai.lessonObjectives,
     assessmentCriteria: ai.assessmentCriteria,
     pointsScale: ai.pointsScale ?? current.pointsScale,
+    overallRubric: ai.overallRubric ?? current.overallRubric,
     languageObjectives: ai.languageObjectives,
     values: ai.values,
     crossCurricularLinks: ai.crossCurricularLinks,
@@ -75,6 +76,18 @@ function stubKsp(input: GenerateKspInput): AiKspPayload {
       { label: "Работа в паре / взаимооценивание", points: 1 },
       { label: "Правильность итоговой задачи / мини-СОР", points: 2 },
       { label: "Домашнее задание", points: 1 },
+    ],
+    overallRubric: [
+      { points: 1, descriptor: `Не приступил к работе по теме «${topic}». Не отвечает на вопросы.` },
+      { points: 2, descriptor: `Узнаёт термин «${topic}», но не может назвать ни одного признака.` },
+      { points: 3, descriptor: `Называет 1–2 признака темы, но не связывает их между собой.` },
+      { points: 4, descriptor: `Распознаёт ключевые понятия в готовом примере, не объясняет.` },
+      { points: 5, descriptor: `Решает базовые задания по теме с подсказкой/опорой.` },
+      { points: 6, descriptor: `Самостоятельно выполняет типовые задания, иногда ошибается.` },
+      { points: 7, descriptor: `Уверенно решает типовые задачи, объясняет своё решение.` },
+      { points: 8, descriptor: `Обобщает и сравнивает, видит закономерности темы.` },
+      { points: 9, descriptor: `Переносит изученное в новый контекст, обосновывает ответ.` },
+      { points: 10, descriptor: `Объясняет тему другим, формулирует исследовательский вопрос.` },
     ],
     languageObjectives: {
       terms: [

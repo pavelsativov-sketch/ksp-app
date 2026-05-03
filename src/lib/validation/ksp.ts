@@ -106,6 +106,16 @@ export const kspContentSchema = z.object({
       }),
     )
     .optional(),
+  // Overall 10-level rubric (1..10) — what the student demonstrates at each
+  // score. Optional so legacy plans don't break, but must be preserved on save.
+  overallRubric: z
+    .array(
+      z.object({
+        points: z.number().int().min(1).max(10),
+        descriptor: z.string().trim().default(""),
+      }),
+    )
+    .optional(),
   languageObjectives: z
     .object({
       terms: z.array(z.string().trim()).default([]),

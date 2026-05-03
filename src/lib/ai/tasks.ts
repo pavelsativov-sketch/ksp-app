@@ -168,12 +168,19 @@ export async function generateTasks(
 Предпочтительно разнообразь типы заданий. Для NUMERIC используй реальные вычисления по теме.
 Верни ровно ${count} заданий.`;
 
+  // Gemini 2.5 Flash sometimes hangs >100s on complex structured-output
+  // schemas (the upstream returns 524). Tasks are small + bounded — switch
+  // to flash-lite (configurable via GEMINI_TASKS_MODEL), with a tighter
+  // timeout and an automatic retry on transient errors.
   const parsed = await completeJson<{ tasks: RawTask[] }>({
     system,
     user,
     schema: OPENAI_TASKS_SCHEMA.schema,
     schemaName: OPENAI_TASKS_SCHEMA.name,
     temperature: 0.7,
+    geminiModel: process.env.GEMINI_TASKS_MODEL ?? "gemini-2.5-flash-lite",
+    timeoutMs: 45_000,
+    maxRetries: 2,
   });
   return parsed.tasks.map(materialize);
 }

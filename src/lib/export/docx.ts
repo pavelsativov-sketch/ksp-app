@@ -556,6 +556,46 @@ export async function buildKspDocx(
           }),
           flow,
 
+          ...(c.overallRubric && c.overallRubric.length > 0
+            ? [
+                new Paragraph({
+                  text: "Общий дескриптор за урок (1–10 баллов)",
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 300, after: 100 },
+                }),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      tableHeader: true,
+                      children: [
+                        cellTextOnly("Балл", { bold: true, width: 15 }),
+                        cellTextOnly("Что демонстрирует ученик", {
+                          bold: true,
+                          width: 85,
+                        }),
+                      ],
+                    }),
+                    ...[...c.overallRubric]
+                      .sort((a, b) => a.points - b.points)
+                      .map(
+                        (item) =>
+                          new TableRow({
+                            children: [
+                              cellTextOnly(String(item.points), {
+                                width: 15,
+                              }),
+                              cellTextOnly(item.descriptor || "—", {
+                                width: 85,
+                              }),
+                            ],
+                          }),
+                      ),
+                  ],
+                }),
+              ]
+            : []),
+
           new Paragraph({
             text: "Дифференциация / Здоровье и ТБ / Рефлексия учителя",
             heading: HeadingLevel.HEADING_2,
