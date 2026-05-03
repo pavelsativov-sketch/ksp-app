@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Save, Loader2, Check, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ import { uploadPlanImage } from "@/lib/upload-image";
 import {
   savePlanAction,
   createSeriesAction,
+  autosavePlanAction,
   type SavePlanInput,
 } from "@/app/actions/plans";
 
@@ -51,6 +52,15 @@ interface PlanFormProps {
   seriesList?: LessonSeriesRow[];
   presetSeriesId?: string | null;
   presetSeriesPosition?: number | null;
+  /**
+   * Profile defaults — auto-filled into the lesson header on first edit if
+   * the corresponding fields are still empty (so we don't overwrite a
+   * user-supplied or restored draft value).
+   */
+  profileDefaults?: {
+    teacherName?: string | null;
+    school?: string | null;
+  };
 }
 
 export function PlanForm({
@@ -59,6 +69,7 @@ export function PlanForm({
   seriesList = [],
   presetSeriesId = null,
   presetSeriesPosition = null,
+  profileDefaults,
 }: PlanFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -95,7 +106,11 @@ export function PlanForm({
   );
   const [activeTab, setActiveTab] = useState<string>("meta");
   const [draftSaved, setDraftSaved] = useState(false);
+  const [cloudSavedAt, setCloudSavedAt] = useState<string | null>(null);
+  const [cloudSaving, setCloudSaving] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
+  const userTouchedRef = useRef(false);
 
   const subjectName =
     subjects.find((s) => s.id === subjectId)?.name_ru ?? "Предмет";
@@ -103,35 +118,71 @@ export function PlanForm({
   const draftKey = `${DRAFT_KEY_PREFIX}${initialPlan?.id ?? "new"}`;
 
   // Restore draft on first mount (only when no initialPlan.content was supplied).
+  // After restoration, fill in any *still-empty* header fields from the saved
+  // teacher profile (so a returning teacher with school/ФИО saved doesn't have
+  // to retype them, but anything they typed previously wins).
   useEffect(() => {
-    if (initialPlan?.content) return;
     if (typeof window === "undefined") return;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      try {
-        const raw = window.localStorage.getItem(draftKey);
-        if (!raw) return;
-        const saved = JSON.parse(raw) as {
-          title?: string;
-          subjectId?: string;
-          grade?: number;
-          quarter?: number | null;
-          section?: string;
-          visibility?: "private" | "unlisted" | "public";
-          language?: "ru" | "kz";
-          content?: KspContent;
-        };
-        if (saved.title !== undefined) setTitle(saved.title);
-        if (saved.subjectId !== undefined && saved.subjectId) setSubjectId(saved.subjectId);
-        if (saved.grade !== undefined) setGrade(saved.grade);
-        if (saved.quarter !== undefined) setQuarter(saved.quarter);
-        if (saved.section !== undefined) setSection(saved.section);
-        if (saved.visibility !== undefined) setVisibility(saved.visibility);
-        if (saved.language !== undefined) setLanguage(saved.language);
-        if (saved.content) setContent(saved.content);
-      } catch {
-        // ignore corrupted draft
+      let restored: KspContent | null = null;
+      if (!initialPlan?.content) {
+        try {
+          const raw = window.localStorage.getItem(draftKey);
+          if (raw) {
+            const saved = JSON.parse(raw) as {
+              title?: string;
+              subjectId?: string;
+              grade?: number;
+              quarter?: number | null;
+              section?: string;
+              visibility?: "private" | "unlisted" | "public";
+              language?: "ru" | "kz";
+              content?: KspContent;
+            };
+            if (saved.title !== undefined) setTitle(saved.title);
+            if (saved.subjectId !== undefined && saved.subjectId)
+              setSubjectId(saved.subjectId);
+            if (saved.grade !== undefined) setGrade(saved.grade);
+            if (saved.quarter !== undefined) setQuarter(saved.quarter);
+            if (saved.section !== undefined) setSection(saved.section);
+            if (saved.visibility !== undefined) setVisibility(saved.visibility);
+            if (saved.language !== undefined) setLanguage(saved.language);
+            if (saved.content) {
+              restored = saved.content;
+              setContent(saved.content);
+            }
+          }
+        } catch {
+          // ignore corrupted draft
+        }
+      }
+
+      if (profileDefaults) {
+        // Apply profile defaults only on top of empty header fields.
+        const base = restored ?? initialPlan?.content ?? null;
+        const teacherEmpty = !base?.header.teacherName?.trim();
+        const schoolEmpty = !base?.header.school?.trim();
+        if (
+          (teacherEmpty && profileDefaults.teacherName) ||
+          (schoolEmpty && profileDefaults.school)
+        ) {
+          setContent((prev) => ({
+            ...prev,
+            header: {
+              ...prev.header,
+              teacherName:
+                !prev.header.teacherName?.trim() && profileDefaults.teacherName
+                  ? profileDefaults.teacherName
+                  : prev.header.teacherName,
+              school:
+                !prev.header.school?.trim() && profileDefaults.school
+                  ? profileDefaults.school
+                  : prev.header.school,
+            },
+          }));
+        }
       }
     });
     return () => {
@@ -140,7 +191,19 @@ export function PlanForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Debounced autosave of the whole form state.
+  // Mark form as user-touched once any state setter fires after the initial
+  // render. The initial mount restoration of localStorage/profileDefaults
+  // shouldn't count as a user edit (so we don't autosave a freshly opened plan
+  // without changes).
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      userTouchedRef.current = true;
+    }, 200);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  // Debounced autosave of the whole form state to localStorage (works for
+  // both new plans and edits — survives browser refresh / tab close).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const h = setTimeout(() => {
@@ -158,6 +221,35 @@ export function PlanForm({
     }, 600);
     return () => clearTimeout(h);
   }, [title, subjectId, grade, quarter, section, visibility, language, content, draftKey]);
+
+  // Server autosave for *existing* plans: 2s debounce, only after the user
+  // touched the form (prevents an immediate write on page load).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!initialPlan?.id) return;
+    if (!userTouchedRef.current) return;
+    const h = window.setTimeout(() => {
+      setCloudSaving(true);
+      setCloudError(null);
+      autosavePlanAction({
+        id: initialPlan.id!,
+        title: title || content.topic || "Без названия",
+        content,
+      })
+        .then((res) => {
+          if ("error" in res && res.error) {
+            setCloudError(res.error);
+          } else if ("savedAt" in res && res.savedAt) {
+            setCloudSavedAt(res.savedAt);
+          }
+        })
+        .catch((e) =>
+          setCloudError(e instanceof Error ? e.message : "save failed"),
+        )
+        .finally(() => setCloudSaving(false));
+    }, 2000);
+    return () => window.clearTimeout(h);
+  }, [title, content, initialPlan?.id]);
 
   const progress = useMemo(() => computeProgress(content, title), [content, title]);
 
@@ -263,11 +355,31 @@ export function PlanForm({
       <div className="bg-white border border-slate-200 rounded-lg p-3 sticky top-0 z-10 backdrop-blur">
         <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
           <span>Заполнено: {progress.percent}% ({progress.done}/{progress.total})</span>
-          <span className="flex items-center gap-1 text-emerald-600">
-            {draftSaved && (
-              <>
+          <span className="flex items-center gap-2">
+            {cloudSaving && (
+              <span className="text-slate-500 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> Сохраняем в облако…
+              </span>
+            )}
+            {!cloudSaving && cloudSavedAt && (
+              <span className="text-emerald-600 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Сохранено в облаке (
+                {new Date(cloudSavedAt).toLocaleTimeString("ru-RU", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                )
+              </span>
+            )}
+            {!cloudSaving && !cloudSavedAt && draftSaved && (
+              <span className="text-emerald-600 flex items-center gap-1">
                 <Check className="w-3 h-3" /> Черновик сохранён
-              </>
+              </span>
+            )}
+            {cloudError && (
+              <span className="text-red-600 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> {cloudError}
+              </span>
             )}
           </span>
         </div>

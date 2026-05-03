@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.create-python-ksp.mjs
+.dl-python-ksp.mjs
+.dl-verify.mjs
+.regen-python-ksp.mjs
+.add-matching.mjs
+.add-numeric.mjs
+.fill-matching.mjs
+.fill-numeric.mjs
+.fill-title.mjs
+.helper.mjs
+.login-helper.mjs
+.save-plan.mjs
+dl.mjs
+pwtest.mjs
+save2.mjs

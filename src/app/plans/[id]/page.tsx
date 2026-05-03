@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { PlanView } from "@/components/ksp/plan-view";
-import { PrintButton } from "@/components/ksp/print-button";
 import { ClonePlanButton } from "@/components/ksp/clone-plan-button";
 import { SeriesNav } from "@/components/ksp/series-nav";
+import { PlanHistoryButton } from "@/components/ksp/plan-history";
 import type { LessonPlanRow, LessonSeriesRow } from "@/lib/types/ksp";
 import { Archive, Download, Edit, Plus, Printer } from "lucide-react";
 
@@ -86,6 +86,7 @@ export default async function PlanViewPage({
               </Link>
             </Button>
           )}
+          {isOwner && <PlanHistoryButton planId={plan.id} isOwner={isOwner} />}
           {user && <ClonePlanButton planId={plan.id} />}
           <Button asChild variant="outline">
             <a href={`/api/export/docx/${plan.id}`}>
@@ -97,9 +98,16 @@ export default async function PlanViewPage({
               <Archive /> Пакет (.zip)
             </a>
           </Button>
-          <PrintButton>
-            <Printer /> PDF
-          </PrintButton>
+          <Button asChild variant="outline">
+            <a
+              href={`/plans/${plan.id}/print`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Открыть печатную версию для сохранения в PDF"
+            >
+              <Printer /> PDF / печать
+            </a>
+          </Button>
         </div>
       </div>
       {series && (
@@ -109,18 +117,18 @@ export default async function PlanViewPage({
             seriesTitle={series.title}
             plans={seriesPlans}
           />
-          {isOwner && (
-            <Button
-              asChild
-              size="sm"
-              variant="outline"
-              className="ml-auto"
-            >
-              <Link href={`/plans/new?series=${plan.series_id}`}>
-                <Plus className="w-3.5 h-3.5" /> Добавить урок в серию
-              </Link>
+          <div className="ml-auto flex gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/series/${plan.series_id}`}>Все уроки серии</Link>
             </Button>
-          )}
+            {isOwner && (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/plans/new?series=${plan.series_id}`}>
+                  <Plus className="w-3.5 h-3.5" /> Добавить урок в серию
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
       )}
       <PlanView plan={plan} />

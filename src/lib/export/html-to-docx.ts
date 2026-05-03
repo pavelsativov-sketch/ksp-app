@@ -8,8 +8,96 @@ import { Paragraph, TextRun, ExternalHyperlink, ImageRun } from "docx";
  * <ul>/<ol>/<li>, <h2>/<h3>, <blockquote>, <img>.
  *
  * Falls back to simple paragraph splitting for legacy plain-text inputs.
+ *
+ * Two flavors:
+ * - {@link htmlToDocxParagraphs}: synchronous; renders <img> as a grey italic
+ *   placeholder "[фото: alt]". Use when callers cannot await fetches.
+ * - {@link htmlToDocxParagraphsAsync}: pre-fetches every <img src=> URL,
+ *   probes its dimensions via sharp, and emits a real {@link ImageRun} so the
+ *   image is embedded in the .docx.
  */
 export function htmlToDocxParagraphs(html: string | undefined | null): Paragraph[] {
+  return renderAll(html, undefined);
+}
+
+export type ImageCache = Map<
+  string,
+  { data: Buffer; width: number; height: number }
+>;
+
+export async function htmlToDocxParagraphsAsync(
+  html: string | undefined | null,
+): Promise<Paragraph[]> {
+  if (!html) return [];
+  const cache = await prefetchImages(html);
+  return renderAll(html, cache);
+}
+
+/** Pre-fetch every <img src=> URL referenced in `html`, in parallel. */
+export async function prefetchImages(
+  html: string | undefined | null,
+): Promise<ImageCache> {
+  const cache: ImageCache = new Map();
+  if (!html) return cache;
+  const urls = new Set<string>();
+  const re = /<img[^>]+src=["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(html))) urls.add(m[1]);
+  if (urls.size === 0) return cache;
+  // dynamic import sharp lazily — not all callers are server-only
+  type SharpFn = (buf: Buffer | Uint8Array) => {
+    metadata: () => Promise<{ width?: number; height?: number; format?: string }>;
+  };
+  let sharp: SharpFn | null = null;
+  try {
+    const mod = (await import("sharp")) as unknown as { default: SharpFn };
+    sharp = mod.default;
+  } catch {
+    // sharp unavailable — we'll skip dimension probing
+  }
+  await Promise.all(
+    Array.from(urls).map(async (url) => {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) return;
+        const ct = r.headers.get("content-type") || "";
+        // Only embed real raster images; skip svg/data: schemes for simplicity
+        if (!/^image\/(png|jpe?g|gif|webp|bmp)$/i.test(ct)) return;
+        const buf = Buffer.from(await r.arrayBuffer());
+        // cap at 5 MB; anything larger likely the upload limit anyway
+        if (buf.byteLength > 6 * 1024 * 1024) return;
+        let width = 480;
+        let height = 320;
+        if (sharp) {
+          try {
+            const meta = await sharp(buf).metadata();
+            if (meta.width && meta.height) {
+              const max = 480;
+              if (meta.width > max) {
+                height = Math.round((meta.height * max) / meta.width);
+                width = max;
+              } else {
+                width = meta.width;
+                height = meta.height;
+              }
+            }
+          } catch {
+            // keep defaults
+          }
+        }
+        cache.set(url, { data: buf, width, height });
+      } catch {
+        // network/timeout — skip; sync placeholder will render instead
+      }
+    }),
+  );
+  return cache;
+}
+
+function renderAll(
+  html: string | undefined | null,
+  imageCache: ImageCache | undefined,
+): Paragraph[] {
   if (!html) return [];
   if (!/<\w+[^>]*>/.test(html)) {
     return html
@@ -21,7 +109,7 @@ export function htmlToDocxParagraphs(html: string | undefined | null): Paragraph
   const out: Paragraph[] = [];
   const blocks = splitBlocks(html);
   for (const block of blocks) {
-    out.push(...renderBlock(block));
+    out.push(...renderBlock(block, imageCache));
   }
   return out;
 }
@@ -56,13 +144,13 @@ function splitBlocks(html: string): Block[] {
   return result;
 }
 
-function renderBlock(b: Block): Paragraph[] {
+function renderBlock(b: Block, imageCache: ImageCache | undefined): Paragraph[] {
   switch (b.tag) {
     case "h2":
       return [
         new Paragraph({
           spacing: { before: 100, after: 40 },
-          children: parseInline(b.inner, { bold: true }),
+          children: parseInline(b.inner, { bold: true }, imageCache),
         }),
       ];
     case "h3":
@@ -70,7 +158,7 @@ function renderBlock(b: Block): Paragraph[] {
       return [
         new Paragraph({
           spacing: { before: 80, after: 30 },
-          children: parseInline(b.inner, { bold: true, italics: true }),
+          children: parseInline(b.inner, { bold: true, italics: true }, imageCache),
         }),
       ];
     case "ul":
@@ -80,7 +168,7 @@ function renderBlock(b: Block): Paragraph[] {
         (m) =>
           new Paragraph({
             bullet: { level: 0 },
-            children: parseInline(m[1]),
+            children: parseInline(m[1], {}, imageCache),
           }),
       );
     }
@@ -88,7 +176,7 @@ function renderBlock(b: Block): Paragraph[] {
       return [
         new Paragraph({
           indent: { left: 360 },
-          children: parseInline(b.inner, { italics: true }),
+          children: parseInline(b.inner, { italics: true }, imageCache),
         }),
       ];
     case "pre": {
@@ -106,7 +194,7 @@ function renderBlock(b: Block): Paragraph[] {
     case "p":
     default: {
       // <br/> splits into multiple lines but stays in one paragraph (TextRun break)
-      const children = parseInline(b.inner);
+      const children = parseInline(b.inner, {}, imageCache);
       if (children.length === 0) return [];
       return [new Paragraph({ children })];
     }
@@ -121,9 +209,36 @@ interface Style {
   font?: string;
 }
 
+function imageRunFor(
+  src: string,
+  alt: string,
+  imageCache: ImageCache | undefined,
+): TextRun | ImageRun {
+  const cached = imageCache?.get(src);
+  if (cached) {
+    // Detect format hint from src for ImageRun.type
+    const lower = src.toLowerCase();
+    let type: "png" | "jpg" | "gif" | "bmp" = "png";
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) type = "jpg";
+    else if (lower.endsWith(".gif")) type = "gif";
+    else if (lower.endsWith(".bmp")) type = "bmp";
+    return new ImageRun({
+      data: cached.data,
+      type,
+      transformation: { width: cached.width, height: cached.height },
+    });
+  }
+  const label = alt || src || "изображение";
+  return new TextRun({
+    text: ` [фото: ${label}] `,
+    italics: true,
+  });
+}
+
 function parseInline(
   html: string,
   inherit: Style = {},
+  imageCache: ImageCache | undefined,
 ): Array<TextRun | ExternalHyperlink | ImageRun> {
   const result: Array<TextRun | ExternalHyperlink | ImageRun> = [];
   let i = 0;
@@ -148,17 +263,11 @@ function parseInline(
       continue;
     }
     if (raw.startsWith("img")) {
-      // <img src=... alt=...> — represent as italic [фото: alt] in docx
       const srcMatch = raw.match(/src=["']([^"']+)["']/i);
       const altMatch = raw.match(/alt=["']([^"']*)["']/i);
-      const label = altMatch?.[1] || srcMatch?.[1] || "изображение";
-      result.push(
-        new TextRun({
-          text: ` [фото: ${label}] `,
-          italics: true,
-          color: "888888",
-        }),
-      );
+      const src = srcMatch?.[1] || "";
+      const alt = altMatch?.[1] || "";
+      result.push(imageRunFor(src, alt, imageCache));
       i = tagEnd + 1;
       continue;
     }
@@ -214,7 +323,7 @@ function parseInline(
       default:
         break;
     }
-    const innerNodes = parseInline(inner, nextStyle);
+    const innerNodes = parseInline(inner, nextStyle, imageCache);
     if (isLink && href) {
       const linkRuns = innerNodes.filter(
         (n) => n instanceof TextRun,
@@ -228,7 +337,6 @@ function parseInline(
                 new TextRun({
                   text: (r as unknown as { options?: { text?: string } }).options?.text ?? "",
                   ...nextStyle,
-                  color: "0F62FE",
                   underline: { type: "single" },
                 }),
             ),

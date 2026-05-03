@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, XCircle, RotateCcw, Lightbulb, Timer, GripVertical } from "lucide-react";
+import { CheckCircle2, XCircle, RotateCcw, Lightbulb, Timer, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import confetti from "canvas-confetti";
 import {
   DndContext,
@@ -515,7 +515,12 @@ function MatchingInput({
   onChange: (a: TaskAnswer) => void;
   disabled: boolean;
 }) {
-  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
+  // Same fix as ORDERING: delay+tolerance prevents click-vs-drag stickiness on
+  // macOS Chrome / mobile Safari.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
+    useSensor(KeyboardSensor),
+  );
   const assigned = new Map<number, number>(
     answer.pairs.map((p) => [p.rightIndex, p.leftIndex]),
   );
@@ -677,7 +682,13 @@ function OrderingInput({
   disabled: boolean;
 }) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    // delay+tolerance activation: on macOS Chrome the previous distance-only
+    // mode could "stick" if a click started a tiny drag motion. Requiring a
+    // 120ms hold cleanly separates clicks from drags and works on both mouse
+    // and touch.
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 120, tolerance: 6 },
+    }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -691,20 +702,33 @@ function OrderingInput({
     onChange({ type: "ORDERING", order: arrayMove(answer.order, oldIdx, newIdx) });
   }
 
+  function move(pos: number, dir: -1 | 1) {
+    if (disabled) return;
+    const target = pos + dir;
+    if (target < 0 || target >= answer.order.length) return;
+    onChange({ type: "ORDERING", order: arrayMove(answer.order, pos, target) });
+  }
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext
         items={answer.order.map((v) => `o-${v}`)}
         strategy={verticalListSortingStrategy}
       >
-        <ol className="space-y-1">
+        <ol
+          className="space-y-1"
+          aria-label="Упорядочьте элементы перетаскиванием или стрелками"
+        >
           {answer.order.map((itemIdx, pos) => (
             <SortableItem
               key={`o-${itemIdx}`}
               id={`o-${itemIdx}`}
               position={pos + 1}
+              total={answer.order.length}
               label={task.items[itemIdx]}
               disabled={disabled}
+              onMoveUp={() => move(pos, -1)}
+              onMoveDown={() => move(pos, +1)}
             />
           ))}
         </ol>
@@ -716,13 +740,19 @@ function OrderingInput({
 function SortableItem({
   id,
   position,
+  total,
   label,
   disabled,
+  onMoveUp,
+  onMoveDown,
 }: {
   id: string;
   position: number;
+  total: number;
   label: string;
   disabled: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -733,10 +763,14 @@ function SortableItem({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+  const isFirst = position === 1;
+  const isLast = position === total;
   return (
     <li
       ref={setNodeRef}
       style={style}
+      role="listitem"
+      aria-label={`Позиция ${position} из ${total}: ${label}`}
       className={
         "flex items-center gap-2 p-2 rounded border bg-white touch-none " +
         (disabled ? "border-slate-200" : "border-slate-300 shadow-sm")
@@ -747,15 +781,37 @@ function SortableItem({
         {...listeners}
         {...attributes}
         disabled={disabled}
-        aria-label="Перетащить"
+        aria-label={`Перетащить «${label}» (или используйте кнопки вверх/вниз)`}
         className={
           "text-slate-400 " + (disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing")
         }
       >
         <GripVertical className="w-4 h-4" />
       </button>
-      <span className="text-xs text-slate-400 w-6">{position}.</span>
+      <span className="text-xs text-slate-400 w-6" aria-hidden="true">
+        {position}.
+      </span>
       <span className="flex-1 text-sm">{label}</span>
+      <span className="flex items-center gap-0.5 print:hidden" aria-hidden={disabled}>
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={disabled || isFirst}
+          aria-label={`Переместить «${label}» вверх`}
+          className="p-1 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <ArrowUp className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={disabled || isLast}
+          aria-label={`Переместить «${label}» вниз`}
+          className="p-1 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <ArrowDown className="w-4 h-4" />
+        </button>
+      </span>
     </li>
   );
 }

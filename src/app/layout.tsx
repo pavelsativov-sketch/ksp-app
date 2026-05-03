@@ -3,8 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { logoutAction } from "./actions/auth";
-import { Button } from "@/components/ui/button";
+import { HeaderNav, FooterTagline } from "@/components/i18n/header-nav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,40 +53,12 @@ export default async function RootLayout({
             <Link href="/" className="font-semibold text-lg">
               КСП<span className="text-blue-600">.app</span>
             </Link>
-            <nav className="flex items-center gap-4 text-sm">
-              <Link className="hover:underline" href="/library">
-                Библиотека
-              </Link>
-              {userEmail ? (
-                <>
-                  <Link className="hover:underline" href="/dashboard">
-                    Мои КСП
-                  </Link>
-                  <span className="text-slate-500 hidden md:inline">
-                    {userEmail}
-                  </span>
-                  <form action={logoutAction}>
-                    <Button variant="outline" size="sm" type="submit">
-                      Выйти
-                    </Button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <Link className="hover:underline" href="/login">
-                    Войти
-                  </Link>
-                  <Button asChild size="sm">
-                    <Link href="/register">Регистрация</Link>
-                  </Button>
-                </>
-              )}
-            </nav>
+            <HeaderNav userEmail={userEmail} />
           </div>
         </header>
         <main className="flex-1 w-full">{children}</main>
         <footer className="bg-white border-t border-slate-200 text-xs text-slate-500 py-4 text-center no-print">
-          КСП.app · Инструмент для учителей · Обновлённое содержание РК
+          <FooterTagline />
         </footer>
       </body>
     </html>

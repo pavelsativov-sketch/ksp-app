@@ -195,6 +195,35 @@ main#app{display:grid;grid-template-columns:280px 1fr;gap:0;min-height:calc(100v
 .breakdown li{display:flex;justify-content:space-between;padding:10px 14px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;font-size:14px}
 .breakdown li .sc{font-variant-numeric:tabular-nums;font-weight:600}
 #confetti-canvas{position:fixed;inset:0;pointer-events:none;z-index:100}
+.print-only{display:none}
+@media print{
+  @page{size:A4;margin:14mm}
+  html,body{background:#fff !important;color:#000 !important}
+  .hdr{background:#fff !important;border-bottom:1pt solid #000;padding:0 0 6pt 0;display:block}
+  .hdr h1{font-size:16pt;margin:0}
+  .sub{font-size:11pt;margin:2pt 0}
+  .score-hdr{display:none}
+  main#app{display:block;min-height:0}
+  .nav{display:none}
+  .stage{padding:0;max-width:100%}
+  .task-card{break-inside:avoid;page-break-inside:avoid;border:1pt solid #000 !important;margin:6pt 0;padding:8pt;box-shadow:none}
+  .task-head{display:block}
+  .task-meta{font-size:9pt;color:#000;margin-bottom:2pt}
+  .task-card .question{font-size:12pt;font-weight:600;margin:2pt 0 6pt 0}
+  .task-card input[type=text],
+  .task-card input[type=number],
+  .task-card textarea{
+    border:none !important;border-bottom:1pt solid #000 !important;border-radius:0 !important;
+    background:transparent !important;width:100%;min-height:18pt;padding:2pt 0
+  }
+  .ftr,.btn,#confetti-canvas,.actions,.feedback{display:none !important}
+  .print-only{display:block !important}
+  /* Worksheet caption appended to the top of the printout */
+  .print-worksheet-title{display:block;text-align:center;font-size:14pt;font-weight:700;margin-bottom:8pt;border-bottom:1pt solid #000;padding-bottom:4pt}
+  /* Show plain answer lines in MCQ/TF instead of clickable buttons */
+  .opt{border:1pt solid #000 !important;background:#fff !important;color:#000 !important;margin:1pt 4pt 1pt 0;padding:2pt 6pt;display:inline-block}
+  .opt.selected,.opt.correct,.opt.wrong{background:#fff !important;color:#000 !important}
+}
 `;
 
 // --- Runtime JS ------------------------------------------------------------

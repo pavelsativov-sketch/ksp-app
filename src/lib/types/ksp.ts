@@ -73,6 +73,14 @@ export interface LessonHeader {
   studentsAbsent: number | null;
 }
 
+/** Шкала оценивания за урок — за что и сколько баллов получает ученик. Сумма = 10. */
+export interface PointsScaleItem {
+  /** Что именно оценивается (например, «Активное участие в кумулятивной беседе»). */
+  label: string;
+  /** Сколько баллов начисляется. */
+  points: number;
+}
+
 /** Полный шаблон КСП */
 export interface KspContent {
   header: LessonHeader;
@@ -87,6 +95,12 @@ export interface KspContent {
   lessonObjectives: string[];
   /** Критерии оценивания */
   assessmentCriteria: string[];
+  /**
+   * Шкала оценивания за урок (детализация 10 баллов): за что именно и сколько
+   * баллов получает ученик в течение урока. Сумма должна быть 10. Опционально —
+   * старые планы не сломаются.
+   */
+  pointsScale?: PointsScaleItem[];
   /** Языковые цели: термины и ключевые фразы */
   languageObjectives: {
     terms: string[];

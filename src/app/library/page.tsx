@@ -6,6 +6,8 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { PlansFilter, type PlanListItem } from "@/components/ksp/plans-filter";
+import { buildPlanSearchText } from "@/lib/ksp/search-text";
+import type { KspContent } from "@/lib/types/ksp";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +47,7 @@ export default async function LibraryPage() {
     subject_id: string | null;
     quarter: number | null;
     updated_at: string;
-    content: { topic?: string } | null;
+    content: KspContent | null;
   }> | null) ?? [];
 
   const plans: PlanListItem[] = rawPlans.map((p) => ({
@@ -57,6 +59,7 @@ export default async function LibraryPage() {
     quarter: p.quarter,
     updated_at: p.updated_at,
     topic: p.content?.topic ?? null,
+    search_text: buildPlanSearchText(p.content),
   }));
 
   return (
