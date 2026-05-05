@@ -9,10 +9,11 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
-import { FileText, Plus } from "lucide-react";
+import { ClipboardCheck, FileText, Plus } from "lucide-react";
 import { PlansFilter, type PlanListItem } from "@/components/ksp/plans-filter";
 import { buildPlanSearchText } from "@/lib/ksp/search-text";
 import type { KspContent } from "@/lib/types/ksp";
+import type { AssessmentKind } from "@/lib/types/assessment";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,7 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/dashboard");
 
-  const [plansRes, subjectsRes, seriesRes] = await Promise.all([
+  const [plansRes, subjectsRes, seriesRes, assessmentsRes] = await Promise.all([
     supabase
       .from("lesson_plans")
       .select(
@@ -58,7 +59,28 @@ export default async function DashboardPage() {
       .select("id, title, subject, grade, quarter, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("assessment_papers")
+      .select(
+        "id, kind, title, grade, subject_id, quarter, section, total_points, updated_at",
+      )
+      .eq("owner_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(60),
   ]);
+
+  const assessments =
+    (assessmentsRes.data as Array<{
+      id: string;
+      kind: AssessmentKind;
+      title: string;
+      grade: number;
+      subject_id: string | null;
+      quarter: number | null;
+      section: string | null;
+      total_points: number | null;
+      updated_at: string;
+    }> | null) ?? [];
 
   const seriesList =
     (seriesRes.data as Array<{
@@ -116,12 +138,67 @@ export default async function DashboardPage() {
             Все созданные вами краткосрочные планы.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/plans/new">
-            <Plus /> Создать КСП
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link href="/plans/new">
+              <Plus /> Создать КСП
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/assessments/new">
+              <ClipboardCheck /> СОР / СОЧ
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      {assessments.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-slate-700">
+              Суммативные оценивания
+            </h2>
+            <Link
+              href="/assessments/new"
+              className="text-xs text-blue-600 hover:underline"
+            >
+              + новое СОР / СОЧ
+            </Link>
+          </div>
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            {assessments.map((a) => (
+              <Link
+                key={a.id}
+                href={`/assessments/${a.id}`}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                      a.kind === "sor"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-violet-50 text-violet-700 border border-violet-200"
+                    }`}
+                  >
+                    {a.kind === "sor" ? "СОР" : "СОЧ"}
+                  </span>
+                  <div className="font-medium text-sm text-slate-800 line-clamp-1">
+                    {a.title}
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {a.grade} класс
+                  {a.quarter ? ` · ${a.quarter} четв.` : ""}
+                  {a.section ? ` · ${a.section}` : ""}
+                  {a.total_points != null
+                    ? ` · ${a.total_points} б.`
+                    : ""}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {seriesList.length > 0 && (
         <div className="space-y-3">

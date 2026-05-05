@@ -58,6 +58,7 @@ export const AI_RATE_LIMITS = {
   "ai/generate-tasks": 30,
   "ai/enhance": 60,
   "ai/critique": 30,
+  "ai/generate-assessment": 15,
   "ai/translate": 10,
 } as const;
 
