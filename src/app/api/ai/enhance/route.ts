@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { completeJson, isAiConfigured } from "@/lib/ai/client";
+import { guardAiRoute } from "@/lib/server/ai-guard";
+import { elapsedMs, logError, logEvent } from "@/lib/server/log";
 
 const bodySchema = z.object({
   section: z.enum([
@@ -32,15 +33,9 @@ type Section = z.infer<typeof bodySchema>["section"];
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  const started = Date.now();
+  const guard = await guardAiRoute("ai/enhance");
+  if (!guard.ok) return guard.response;
 
   let json: unknown;
   try {
@@ -72,14 +67,27 @@ export async function POST(request: Request) {
 
   try {
     const improved = await callAi(section, current, context);
+    logEvent("ai.enhance.ok", {
+      userId: guard.userId,
+      durationMs: elapsedMs(started),
+      section,
+      isList,
+    });
     return NextResponse.json({ improved, isList, stub: false });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "AI error";
+    logError("ai.enhance.error", {
+      userId: guard.userId,
+      durationMs: elapsedMs(started),
+      section,
+      errorMessage: msg,
+    });
     return NextResponse.json(
       {
         improved: fallbackImprove(section, current, context),
         isList,
         stub: true,
-        note: e instanceof Error ? e.message : "AI error, показан демо-результат",
+        note: msg,
       },
       { status: 200 },
     );
