@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateTasks } from "@/lib/ai/tasks";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { guardAiRoute } from "@/lib/server/ai-guard";
+import { elapsedMs, logError, logEvent } from "@/lib/server/log";
 
 const bodySchema = z.object({
   topic: z.string().trim().min(1),
@@ -15,15 +16,9 @@ const bodySchema = z.object({
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  const started = Date.now();
+  const guard = await guardAiRoute("ai/generate-tasks");
+  if (!guard.ok) return guard.response;
 
   let json: unknown;
   try {
@@ -42,9 +37,20 @@ export async function POST(request: Request) {
 
   try {
     const tasks = await generateTasks(parsed.data);
+    logEvent("ai.generate-tasks.ok", {
+      userId: guard.userId,
+      durationMs: elapsedMs(started),
+      stage: parsed.data.stage,
+      count: tasks.length,
+    });
     return NextResponse.json({ tasks });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "AI error";
+    logError("ai.generate-tasks.error", {
+      userId: guard.userId,
+      durationMs: elapsedMs(started),
+      errorMessage: msg,
+    });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -72,7 +72,7 @@ export async function completeJson<T = unknown>(
  * Gemini's responseSchema does not allow `additionalProperties` (the API
  * rejects the request). Strip it from any nested objects before sending.
  */
-function sanitizeForGemini(schema: unknown): unknown {
+export function sanitizeForGemini(schema: unknown): unknown {
   if (Array.isArray(schema)) return schema.map(sanitizeForGemini);
   if (schema && typeof schema === "object") {
     const out: Record<string, unknown> = {};
@@ -93,7 +93,7 @@ function sanitizeForGemini(schema: unknown): unknown {
  */
 const TRANSIENT_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504, 524]);
 
-async function withRetry<T>(
+export async function withRetry<T>(
   attempt: () => Promise<T>,
   maxRetries: number,
 ): Promise<T> {
