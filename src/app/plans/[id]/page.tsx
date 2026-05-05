@@ -9,6 +9,7 @@ import { PlanHistoryButton } from "@/components/ksp/plan-history";
 import type { LessonPlanRow, LessonSeriesRow } from "@/lib/types/ksp";
 import { Archive, Download, Edit, Plus, Printer } from "lucide-react";
 import { ShareDialog } from "@/components/ksp/share-dialog";
+import { StartSessionButton } from "@/components/ksp/start-session-button";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,7 @@ export default async function PlanViewPage({
               initialVisibility={plan.visibility}
             />
           )}
+          {isOwner && <StartSessionButton planId={plan.id} />}
           {user && <ClonePlanButton planId={plan.id} />}
           <Button asChild variant="outline">
             <a href={`/api/export/docx/${plan.id}`}>

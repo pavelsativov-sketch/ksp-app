@@ -35,7 +35,7 @@ import {
 export interface TaskPlayerProps {
   task: InteractiveTask;
   /** When set, called after submit with the evaluation result (for quiz mode). */
-  onComplete?: (result: TaskResult, hintsUsed: number) => void;
+  onComplete?: (result: TaskResult, hintsUsed: number, answer: TaskAnswer) => void;
   /** Hide the "Пройти снова" button (quiz mode flows forward). */
   hideReset?: boolean;
 }
@@ -94,7 +94,7 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
     } else {
       setShakeKey((k) => k + 1);
     }
-    onComplete?.(final, hintsUsed);
+    onComplete?.(final, hintsUsed, answer);
   }
 
   function reset() {
