@@ -17,7 +17,7 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
     (c.stages.middle.tasks?.length ?? 0) +
     (c.stages.end.tasks?.length ?? 0);
   return (
-    <div className="print-plan bg-white border border-slate-200 rounded-lg p-6 md:p-8 space-y-6">
+    <div className="print-plan bg-white border border-slate-200 rounded-lg p-3 sm:p-6 md:p-8 space-y-6">
       <h1 className="text-2xl font-bold text-center">{plan.title}</h1>
 
       {totalTasks > 0 && (
@@ -45,7 +45,7 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
         />
       )}
 
-      <table className="w-full text-sm">
+      <table className="w-full text-sm table-fixed">
         <tbody>
           <TableRow label="Раздел долгосрочного плана" value={c.header.longTermPlanSection} />
           <TableRow label="Школа" value={c.header.school} />
@@ -166,8 +166,10 @@ function Section({
 function TableRow({ label, value }: { label: string; value: string }) {
   return (
     <tr className="border-b border-slate-200">
-      <td className="py-1.5 pr-3 text-slate-500 w-1/3 align-top">{label}</td>
-      <td className="py-1.5 align-top">{value || "—"}</td>
+      <td className="py-1.5 pr-3 text-slate-500 w-2/5 sm:w-1/3 align-top text-xs sm:text-sm">
+        {label}
+      </td>
+      <td className="py-1.5 align-top break-words">{value || "—"}</td>
     </tr>
   );
 }
@@ -413,27 +415,81 @@ function StageTable({
 
 function StageBody({ stage }: { stage: LessonStage }) {
   return (
-    <table className="w-full text-sm border border-slate-300">
-      <thead>
-        <tr className="bg-slate-100">
-          <th className="border border-slate-300 p-2 text-left w-[15%]">Время</th>
-          <th className="border border-slate-300 p-2 text-left w-[40%]">Действия учителя</th>
-          <th className="border border-slate-300 p-2 text-left w-[30%]">Действия учеников</th>
-          <th className="border border-slate-300 p-2 text-left w-[15%]">Ресурсы</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.time || "—"}</td>
-          <td className="border border-slate-300 p-2 align-top">
-            <RichTextRender value={stage.teacherActions} />
-          </td>
-          <td className="border border-slate-300 p-2 align-top">
-            <RichTextRender value={stage.studentActions} />
-          </td>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.resources || "—"}</td>
-        </tr>
-      </tbody>
-    </table>
+    <>
+      {/* Mobile / narrow viewport: stacked card layout. */}
+      <div className="sm:hidden print:hidden border border-slate-300 rounded">
+        <MobileStageRow label="Время" value={stage.time} />
+        <MobileStageRich label="Действия учителя" rich={stage.teacherActions} />
+        <MobileStageRich label="Действия учеников" rich={stage.studentActions} />
+        <MobileStageRow label="Ресурсы" value={stage.resources} last />
+      </div>
+      {/* sm+ and print: real 4-column table. */}
+      <div className="hidden sm:block print:block overflow-x-auto">
+        <table className="w-full text-sm border border-slate-300">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 p-2 text-left w-[15%]">Время</th>
+              <th className="border border-slate-300 p-2 text-left w-[40%]">Действия учителя</th>
+              <th className="border border-slate-300 p-2 text-left w-[30%]">Действия учеников</th>
+              <th className="border border-slate-300 p-2 text-left w-[15%]">Ресурсы</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">
+                {stage.time || "—"}
+              </td>
+              <td className="border border-slate-300 p-2 align-top">
+                <RichTextRender value={stage.teacherActions} />
+              </td>
+              <td className="border border-slate-300 p-2 align-top">
+                <RichTextRender value={stage.studentActions} />
+              </td>
+              <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">
+                {stage.resources || "—"}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function MobileStageRow({
+  label,
+  value,
+  last,
+}: {
+  label: string;
+  value?: string | null;
+  last?: boolean;
+}) {
+  return (
+    <div className={`px-3 py-2 ${last ? "" : "border-b border-slate-200"}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </p>
+      <p className="text-sm whitespace-pre-wrap">{value || "—"}</p>
+    </div>
+  );
+}
+
+function MobileStageRich({
+  label,
+  rich,
+}: {
+  label: string;
+  rich: string;
+}) {
+  return (
+    <div className="px-3 py-2 border-b border-slate-200">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </p>
+      <div className="text-sm">
+        <RichTextRender value={rich} />
+      </div>
+    </div>
   );
 }

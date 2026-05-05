@@ -155,6 +155,101 @@ export async function autosavePlanAction(input: {
   return { ok: true, savedAt: new Date().toISOString() };
 }
 
+/**
+ * Generate (or rotate) a share slug for a plan and switch visibility to
+ * `unlisted` so anyone with the slug can read it. Owner-only.
+ *
+ * Slug = 12 url-safe base64 chars derived from `crypto.getRandomValues`. Even
+ * at 1M plans the chance of collision per single insert is < 1e-12, but we
+ * still loop on the unique-violation just in case.
+ */
+export async function sharePlanAction(input: {
+  id: string;
+  rotate?: boolean;
+}): Promise<{ slug?: string; error?: string }> {
+  if (!input.id) return { error: "missing id" };
+  const { supabase, user } = await requireUser();
+
+  // If a slug already exists and the caller doesn't want to rotate, just
+  // surface the existing slug + ensure visibility=unlisted.
+  if (!input.rotate) {
+    const { data: existing } = await supabase
+      .from("lesson_plans")
+      .select("slug")
+      .eq("id", input.id)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (existing?.slug) {
+      const { error: vErr } = await supabase
+        .from("lesson_plans")
+        .update({ visibility: "unlisted" })
+        .eq("id", input.id)
+        .eq("owner_id", user.id);
+      if (vErr) return { error: vErr.message };
+      revalidatePath(`/plans/${input.id}`);
+      return { slug: existing.slug };
+    }
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const slug = randomSlug(12);
+    const { error } = await supabase
+      .from("lesson_plans")
+      .update({ slug, visibility: "unlisted" })
+      .eq("id", input.id)
+      .eq("owner_id", user.id);
+    if (!error) {
+      revalidatePath(`/plans/${input.id}`);
+      revalidatePath(`/p/${slug}`);
+      return { slug };
+    }
+    // 23505 = unique_violation; try a different slug.
+    if (
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "23505"
+    ) {
+      continue;
+    }
+    return { error: error.message };
+  }
+  return { error: "Не удалось сгенерировать уникальный slug — попробуйте ещё раз" };
+}
+
+/**
+ * Make a previously-shared plan private again. Keeps the slug column so the
+ * caller can re-share without rotating; just flips visibility back so RLS
+ * stops returning the row to anonymous viewers.
+ */
+export async function unsharePlanAction(id: string): Promise<{
+  ok?: true;
+  error?: string;
+}> {
+  if (!id) return { error: "missing id" };
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase
+    .from("lesson_plans")
+    .update({ visibility: "private" })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath(`/plans/${id}`);
+  return { ok: true };
+}
+
+function randomSlug(length: number): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  // url-safe base64 alphabet, no padding.
+  const alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let out = "";
+  for (let i = 0; i < length; i += 1) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+  return out;
+}
+
 export async function deletePlanAction(id: string) {
   const { supabase, user } = await requireUser();
   const { error } = await supabase

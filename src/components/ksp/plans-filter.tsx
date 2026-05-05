@@ -30,6 +30,7 @@ export interface PlanListItem {
   quarter?: number | null;
   updated_at: string;
   visibility?: "private" | "unlisted" | "public";
+  language?: "ru" | "kz";
   topic?: string | null;
   /**
    * Pre-computed lower-cased haystack of plan content (title, topic, learning
@@ -75,9 +76,20 @@ export function PlansFilter({
   const [subjectId, setSubjectId] = useState<string>(ALL);
   const [grade, setGrade] = useState<string>(ALL);
   const [quarter, setQuarter] = useState<string>(ALL);
+  const [language, setLanguage] = useState<string>(ALL);
+  // Date range: ALL | "7" | "30" | "90" | "365" — days back from now.
+  const [dateRange, setDateRange] = useState<string>(ALL);
+  const [visibilityFilter, setVisibilityFilter] = useState<string>(ALL);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    // Date.now() drift between renders is fine here — cutoff just shifts
+    // the "recent" window by milliseconds.
+    const cutoffMs =
+      dateRange === ALL
+        ? null
+        // eslint-disable-next-line react-hooks/purity
+        : Date.now() - Number(dateRange) * 86_400_000;
     return plans.filter((p) => {
       if (subjectId !== ALL && p.subject_id !== subjectId) return false;
       if (grade !== ALL && String(p.grade) !== grade) return false;
@@ -86,6 +98,15 @@ export function PlansFilter({
           if (p.quarter != null) return false;
         } else if (String(p.quarter) !== quarter) return false;
       }
+      if (language !== ALL && p.language !== language) return false;
+      if (
+        visibilityFilter !== ALL &&
+        showVisibility &&
+        p.visibility !== visibilityFilter
+      )
+        return false;
+      if (cutoffMs != null && new Date(p.updated_at).getTime() < cutoffMs)
+        return false;
       if (needle) {
         const hay = (
           `${p.title} ${p.topic ?? ""} ${p.subject_name ?? ""} ${p.search_text ?? ""}`
@@ -94,7 +115,17 @@ export function PlansFilter({
       }
       return true;
     });
-  }, [plans, q, subjectId, grade, quarter]);
+  }, [
+    plans,
+    q,
+    subjectId,
+    grade,
+    quarter,
+    language,
+    visibilityFilter,
+    showVisibility,
+    dateRange,
+  ]);
 
   const usedSubjectIds = useMemo(
     () =>
@@ -113,7 +144,18 @@ export function PlansFilter({
   );
 
   const filtersActive =
-    q.trim() !== "" || subjectId !== ALL || grade !== ALL || quarter !== ALL;
+    q.trim() !== "" ||
+    subjectId !== ALL ||
+    grade !== ALL ||
+    quarter !== ALL ||
+    language !== ALL ||
+    dateRange !== ALL ||
+    visibilityFilter !== ALL;
+
+  const hasMultipleLanguages = useMemo(
+    () => new Set(plans.map((p) => p.language).filter(Boolean)).size > 1,
+    [plans],
+  );
 
   return (
     <div className="space-y-4">
@@ -170,6 +212,43 @@ export function PlansFilter({
             <SelectItem value="none">Без четверти</SelectItem>
           </SelectContent>
         </Select>
+        {hasMultipleLanguages && (
+          <Select value={language} onValueChange={setLanguage}>
+            <SelectTrigger className="w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Любой язык</SelectItem>
+              <SelectItem value="ru">Русский</SelectItem>
+              <SelectItem value="kz">Қазақ</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={dateRange} onValueChange={setDateRange}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Любые даты</SelectItem>
+            <SelectItem value="7">За неделю</SelectItem>
+            <SelectItem value="30">За месяц</SelectItem>
+            <SelectItem value="90">За квартал</SelectItem>
+            <SelectItem value="365">За год</SelectItem>
+          </SelectContent>
+        </Select>
+        {showVisibility && (
+          <Select value={visibilityFilter} onValueChange={setVisibilityFilter}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Любая видимость</SelectItem>
+              <SelectItem value="private">Приватные</SelectItem>
+              <SelectItem value="unlisted">По ссылке</SelectItem>
+              <SelectItem value="public">Публичные</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         {filtersActive && (
           <Button
             type="button"
@@ -180,6 +259,9 @@ export function PlansFilter({
               setSubjectId(ALL);
               setGrade(ALL);
               setQuarter(ALL);
+              setLanguage(ALL);
+              setDateRange(ALL);
+              setVisibilityFilter(ALL);
             }}
           >
             <X className="w-4 h-4" /> Сброс

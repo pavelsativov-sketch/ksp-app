@@ -198,6 +198,8 @@ export interface LessonPlanRow {
   updated_at: string;
   series_id: string | null;
   series_position: number | null;
+  /** Stable URL-safe slug for sharing via /p/[slug]. Null until first share. */
+  slug?: string | null;
 }
 
 export interface LessonSeriesRow {
