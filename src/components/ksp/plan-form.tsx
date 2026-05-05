@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Save, Loader2, Check, AlertTriangle } from "lucide-react";
+import {
+  Sparkles,
+  Save,
+  Loader2,
+  Check,
+  AlertTriangle,
+  ListChecks,
+} from "lucide-react";
+import { postSse } from "@/lib/client/sse";
+import { CritiqueDialog } from "./critique-dialog";
+import { TranslateButton } from "./translate-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,8 +84,12 @@ export function PlanForm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiProgress, setAiProgress] = useState<{ message: string; pct: number } | null>(
+    null,
+  );
   const [aiError, setAiError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [critiqueOpen, setCritiqueOpen] = useState(false);
 
   const [title, setTitle] = useState(initialPlan?.title ?? "");
   const [subjectId, setSubjectId] = useState(
@@ -227,46 +241,69 @@ export function PlanForm({
 
   async function generateWithAi() {
     setAiError(null);
+    setAiProgress(null);
     if (!content.topic.trim()) {
       setAiError("Укажите тему урока для AI-генерации");
       return;
     }
     setAiLoading(true);
     try {
-      const res = await fetch("/api/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      let received: Omit<KspContent, "header" | "learningObjectives"> | null =
+        null;
+      let streamError: string | null = null;
+      await postSse("/api/ai/generate-stream", {
+        body: {
           grade,
           subject: subjectName,
           topic: content.topic,
           learningObjectives: content.learningObjectives.map((o) => o.text),
           language,
-        }),
+        },
+        onEvent: (e) => {
+          if (e.event === "progress") {
+            const d = e.data as { message?: string; pct?: number };
+            setAiProgress({
+              message: d.message ?? "",
+              pct: typeof d.pct === "number" ? d.pct : 0,
+            });
+          } else if (e.event === "done") {
+            const d = e.data as {
+              content: Omit<KspContent, "header" | "learningObjectives">;
+            };
+            received = d.content;
+          } else if (e.event === "error") {
+            const d = e.data as { message?: string };
+            streamError = d.message ?? "Ошибка AI";
+          }
+        },
       });
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t || "Ошибка AI");
-      }
-      const data = (await res.json()) as {
-        content: Omit<KspContent, "header" | "learningObjectives">;
-      };
+      if (streamError) throw new Error(streamError);
+      if (!received) throw new Error("AI не вернул содержимое");
+      const ai = received as Omit<KspContent, "header" | "learningObjectives">;
       setContent((prev) => ({
         ...prev,
-        topic: data.content.topic || prev.topic,
-        lessonObjectives: data.content.lessonObjectives,
-        assessmentCriteria: data.content.assessmentCriteria,
-        languageObjectives: data.content.languageObjectives,
-        values: data.content.values,
-        crossCurricularLinks: data.content.crossCurricularLinks,
-        priorKnowledge: data.content.priorKnowledge,
-        stages: data.content.stages,
-        evaluation: data.content.evaluation,
+        topic: ai.topic || prev.topic,
+        lessonObjectives: ai.lessonObjectives,
+        assessmentCriteria: ai.assessmentCriteria,
+        // PR-11: also propagate pointsScale + overallRubric. Without these the
+        // 10-point scale and the 1–10 rubric the AI generated were silently
+        // discarded by the UI even though the schema accepted them.
+        pointsScale: ai.pointsScale ?? prev.pointsScale,
+        overallRubric: ai.overallRubric ?? prev.overallRubric,
+        languageObjectives: ai.languageObjectives,
+        values: ai.values,
+        crossCurricularLinks: ai.crossCurricularLinks,
+        priorKnowledge: ai.priorKnowledge,
+        stages: ai.stages,
+        evaluation: ai.evaluation,
       }));
+      setAiProgress({ message: "Готово", pct: 100 });
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Не удалось сгенерировать");
     } finally {
       setAiLoading(false);
+      // Hide the progress bar shortly after completion so it doesn't linger.
+      window.setTimeout(() => setAiProgress(null), 1500);
     }
   }
 
@@ -614,26 +651,47 @@ export function PlanForm({
 
         <TabsContent value="goals" className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
           <div>
             <CardTitle>Тема урока</CardTitle>
             <CardDescription>
               Короткая формулировка темы из учебной программы.
             </CardDescription>
           </div>
-          <Button
-            type="button"
-            onClick={generateWithAi}
-            disabled={aiLoading}
-            className="shrink-0"
-          >
-            {aiLoading ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <Sparkles />
-            )}
-            AI-заполнение
-          </Button>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCritiqueOpen(true)}
+              disabled={aiLoading || !content.topic.trim()}
+              title="AI-проверка плана на соответствие стандартам"
+            >
+              <ListChecks />
+              Проверить план
+            </Button>
+            <TranslateButton
+              content={content}
+              currentLanguage={language}
+              disabled={aiLoading}
+              onTranslated={(translated, target) => {
+                setContent(translated);
+                setLanguage(target);
+              }}
+            />
+            <Button
+              type="button"
+              onClick={generateWithAi}
+              disabled={aiLoading}
+            >
+              {aiLoading ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Sparkles />
+              )}
+              AI-заполнение
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input
@@ -644,6 +702,23 @@ export function PlanForm({
             placeholder="Напр. «Сложение многозначных чисел»"
             className={showValidation && !content.topic.trim() ? "border-red-400 focus-visible:ring-red-400" : ""}
           />
+          {aiProgress && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-sm text-slate-600">
+                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                <span className="truncate">{aiProgress.message}</span>
+                <span className="ml-auto tabular-nums text-xs text-slate-500">
+                  {aiProgress.pct}%
+                </span>
+              </div>
+              <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${aiProgress.pct}%` }}
+                />
+              </div>
+            </div>
+          )}
           {aiError && (
             <p className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200">
               {aiError}
@@ -651,6 +726,12 @@ export function PlanForm({
           )}
         </CardContent>
       </Card>
+      <CritiqueDialog
+        open={critiqueOpen}
+        onOpenChange={setCritiqueOpen}
+        content={content}
+        language={language}
+      />
 
       <Card>
         <CardHeader>
