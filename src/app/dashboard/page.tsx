@@ -9,7 +9,7 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
-import { ClipboardCheck, FileText, Plus } from "lucide-react";
+import { ClipboardCheck, FileText, FileUp, Plus } from "lucide-react";
 import { PlansFilter, type PlanListItem } from "@/components/ksp/plans-filter";
 import { buildPlanSearchText } from "@/lib/ksp/search-text";
 import type { KspContent } from "@/lib/types/ksp";
@@ -147,6 +147,11 @@ export default async function DashboardPage() {
           <Button asChild variant="outline">
             <Link href="/assessments/new">
               <ClipboardCheck /> СОР / СОЧ
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/plans/import">
+              <FileUp /> Импорт .docx
             </Link>
           </Button>
         </div>
