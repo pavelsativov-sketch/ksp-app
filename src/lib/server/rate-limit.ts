@@ -60,6 +60,7 @@ export const AI_RATE_LIMITS = {
   "ai/critique": 30,
   "ai/generate-assessment": 15,
   "ai/translate": 10,
+  "ai/import-docx": 20,
 } as const;
 
 export type AiEndpoint = keyof typeof AI_RATE_LIMITS;
