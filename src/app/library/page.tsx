@@ -31,7 +31,7 @@ export default async function LibraryPage() {
   const [plansRes, subjectsRes] = await Promise.all([
     supabase
       .from("lesson_plans")
-      .select("id, title, grade, subject_id, quarter, updated_at, content")
+      .select("id, title, grade, subject_id, quarter, language, updated_at, content")
       .eq("visibility", "public")
       .order("updated_at", { ascending: false })
       .limit(120),
@@ -46,6 +46,7 @@ export default async function LibraryPage() {
     grade: number;
     subject_id: string | null;
     quarter: number | null;
+    language: "ru" | "kz" | null;
     updated_at: string;
     content: KspContent | null;
   }> | null) ?? [];
@@ -57,6 +58,7 @@ export default async function LibraryPage() {
     subject_id: p.subject_id,
     subject_name: p.subject_id ? subjectMap.get(p.subject_id) ?? null : null,
     quarter: p.quarter,
+    language: p.language ?? undefined,
     updated_at: p.updated_at,
     topic: p.content?.topic ?? null,
     search_text: buildPlanSearchText(p.content),

@@ -48,7 +48,7 @@ export default async function DashboardPage() {
     supabase
       .from("lesson_plans")
       .select(
-        "id, title, grade, subject_id, quarter, updated_at, visibility, content, series_id, series_position",
+        "id, title, grade, subject_id, quarter, language, updated_at, visibility, content, series_id, series_position",
       )
       .eq("owner_id", user.id)
       .order("updated_at", { ascending: false }),
@@ -78,6 +78,7 @@ export default async function DashboardPage() {
     grade: number;
     subject_id: string | null;
     quarter: number | null;
+    language: "ru" | "kz" | null;
     updated_at: string;
     visibility: "private" | "unlisted" | "public";
     content: KspContent | null;
@@ -99,6 +100,7 @@ export default async function DashboardPage() {
     subject_id: p.subject_id,
     subject_name: p.subject_id ? subjectMap.get(p.subject_id) ?? null : null,
     quarter: p.quarter,
+    language: p.language ?? undefined,
     updated_at: p.updated_at,
     visibility: p.visibility,
     topic: p.content?.topic ?? null,
