@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { PlanView } from "@/components/ksp/plan-view";
+import { PlanInlineEditWrapper } from "@/components/ksp/plan-inline-edit-wrapper";
 import { ClonePlanButton } from "@/components/ksp/clone-plan-button";
 import { SeriesNav } from "@/components/ksp/series-nav";
 import { PlanHistoryButton } from "@/components/ksp/plan-history";
@@ -141,7 +142,11 @@ export default async function PlanViewPage({
           </div>
         </div>
       )}
-      <PlanView plan={plan} />
+      {isOwner ? (
+        <PlanInlineEditWrapper plan={plan} />
+      ) : (
+        <PlanView plan={plan} />
+      )}
     </div>
   );
 }
