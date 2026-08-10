@@ -26,6 +26,13 @@ export interface BaseTask {
   timeLimitSec?: number;
   /** When true, MCQ options are shuffled on each render for the student. */
   shuffle?: boolean;
+  /**
+   * Per-task assessment descriptors — short, checkable statements that
+   * describe what the student should demonstrate ("Записывает определение",
+   * "Объясняет смысл операции"). Surfaced in .docx and on the offline
+   * interactive page after the student answers.
+   */
+  descriptors?: string[];
 }
 
 export interface McqTask extends BaseTask {

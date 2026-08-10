@@ -907,6 +907,18 @@ const RUNTIME_JS = `
       var r = state.results[idx];
       var s = r ? (Math.max(0, r.score - 2*(state.hintsUsed[idx]||0)) + '/' + r.maxScore) : '—';
       html += '<li><span>'+(idx+1)+'. '+escapeHtml(it.task.question||"")+'</span><span class="sc">'+s+'</span></li>';
+      var descs = it.task.descriptors || [];
+      if(descs.length > 0 && r && r.ok){
+        html += '<li style="padding-left:20px;background:transparent;border:0;font-size:13px"><div style="color:#666">Дескрипторы:</div></li>';
+        descs.forEach(function(d){
+          html += '<li style="padding-left:20px;background:transparent;border:0;font-size:13px;color:#16a34a"><span>✓ '+escapeHtml(d)+'</span><span class="sc"></span></li>';
+        });
+      } else if(descs.length > 0){
+        html += '<li style="padding-left:20px;background:transparent;border:0;font-size:13px"><div style="color:#666">Дескрипторы (не достигнуты):</div></li>';
+        descs.forEach(function(d){
+          html += '<li style="padding-left:20px;background:transparent;border:0;font-size:13px;color:#9ca3af"><span>○ '+escapeHtml(d)+'</span><span class="sc"></span></li>';
+        });
+      }
     });
     html += '</ul>'
       + '<div style="margin-top:24px"><button class="btn btn-outline" id="retry-all">Пройти снова</button> <button class="btn btn-primary" id="review">К первому заданию</button></div>'

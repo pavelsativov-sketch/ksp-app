@@ -27,6 +27,7 @@ import {
   type NumericTask,
 } from "@/lib/ksp/tasks";
 import { TaskPlayer } from "./task-player";
+import { ListEditor } from "./list-editor";
 
 const TYPES: TaskType[] = [
   "MCQ",
@@ -282,8 +283,8 @@ function TaskOptions({
   const hasObjectives = availableObjectives.some((o) => o.code);
   return (
     <details className="group">
-      <summary className="text-xs text-slate-500 cursor-pointer select-none">
-        Доп. настройки — подсказка, таймер, перемешивание
+      <summary className="text-xs text-slate-500 cursor-pointer select-none hover:text-slate-700 transition">
+        Доп. настройки — подсказка, таймер, дескрипторы, привязка к ГОСО
       </summary>
       <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-3">
@@ -319,6 +320,22 @@ function TaskOptions({
             </Label>
           </div>
         )}
+        <div className="md:col-span-3">
+          <Label>
+            Дескрипторы оценивания{" "}
+            <span className="text-xs text-slate-500">
+              — что именно делает ученик в этом задании
+            </span>
+          </Label>
+          <ListEditor
+            items={task.descriptors ?? []}
+            onChange={(items) =>
+              onChange({ ...task, descriptors: items.length ? items : undefined })
+            }
+            placeholder="Напр. «Записывает ответ с единицами измерения»"
+            size="sm"
+          />
+        </div>
         <div className="md:col-span-3">
           <Label>Привязка к цели ГОСО</Label>
           {hasObjectives ? (

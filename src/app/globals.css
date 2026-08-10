@@ -30,6 +30,70 @@ body {
   80% { transform: translateX(4px); }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+
+/* Tiptap / rich text content baseline */
+.tiptap-content :where(p):not(:last-child) { margin-bottom: 0.5rem; }
+.tiptap-content :where(ul) { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
+.tiptap-content :where(ol) { list-style: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
+.tiptap-content :where(li) { margin: 0.1rem 0; }
+.tiptap-content :where(strong) { font-weight: 600; }
+.tiptap-content :where(em) { font-style: italic; }
+.tiptap-content :where(blockquote) {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 0.75rem;
+  color: #475569;
+  font-style: italic;
+  margin: 0.25rem 0;
+}
+.tiptap-content :where(code) {
+  background: #f1f5f9;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-family: var(--font-geist-mono), Consolas, monospace;
+  font-size: 0.85em;
+}
+.tiptap-content :where(pre) {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  font-family: var(--font-geist-mono), Consolas, monospace;
+  font-size: 0.8em;
+  overflow-x: auto;
+}
+.tiptap-content :where(a) { color: #0284c7; text-decoration: underline; }
+.tiptap-content :where(img) {
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  max-width: 100%;
+  height: auto;
+  margin: 0.5rem 0;
+}
+.tiptap-content :where(h2) { font-size: 1.05rem; font-weight: 600; margin: 0.5rem 0 0.25rem; }
+.tiptap-content :where(h3) { font-size: 0.95rem; font-weight: 600; margin: 0.4rem 0 0.2rem; }
+
+/* Mobile-friendly tabs: enable horizontal scroll if needed */
+@media (max-width: 640px) {
+  [role="tablist"].mobile-scroll {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  [role="tablist"].mobile-scroll::-webkit-scrollbar { display: none; }
+  [role="tablist"].mobile-scroll [role="tab"] {
+    flex-shrink: 0;
+  }
+}
+
 body {
   font-family:
     var(--font-geist-sans),
