@@ -1,0 +1,153 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--background);
+  color: var(--ink);
+}
+
+.sidebar {
+  width: 260px;
+  background-color: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  transition: transform 0.2s ease;
+}
+
+.schoolHeader {
+  padding: 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.schoolName {
+  font-family: var(--font-manrope);
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.schoolSubtitle {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+}
+
+.nav {
+  padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.section {
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.sectionHeader {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  padding: 0 1.25rem;
+  font-weight: 600;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  color: var(--ink);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.navLink:hover {
+  background-color: var(--muted);
+}
+
+.navLink.active {
+  background-color: var(--ink);
+  color: white;
+}
+
+.navLink.active .icon {
+  color: white;
+}
+
+.icon {
+  color: var(--muted-foreground);
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  height: 3.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  background-color: var(--background);
+}
+
+.breadcrumbs {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.user {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.content {
+  padding: 2rem;
+  flex: 1;
+}
+
+/* Mobile styles */
+.menuButton {
+  display: none;
+  padding: 0.5rem;
+  margin-left: -0.5rem;
+  color: var(--ink);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .menuButton {
+    display: block;
+  }
+  
+  .sidebar {
+    position: fixed;
+    z-index: 50;
+    transform: translateX(-100%);
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+  }
+  
+  .sidebar.mobileOpen {
+    transform: translateX(0);
+  }
+  
+  .content {
+    padding: 1rem;
+  }
+}

@@ -1,0 +1,465 @@
+{
+  "createdAt": "2026-09-15T05:45:45.770Z",
+  "results": [
+    {
+      "ok": true,
+      "provider": "Groq",
+      "model": "openai/gpt-oss-120b",
+      "kind": "plan",
+      "timeMs": 3588,
+      "chars": 3634,
+      "score": 131,
+      "maxScore": 140,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-3.8-flash",
+      "kind": "plan",
+      "timeMs": 24460,
+      "error": "503 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-3.7-flash",
+      "kind": "plan",
+      "timeMs": 21503,
+      "error": "503 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-2.5-flash",
+      "kind": "plan",
+      "timeMs": 230,
+      "error": "404 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Cerebras",
+      "model": "gpt-oss-120b",
+      "kind": "plan",
+      "timeMs": 584,
+      "error": "402 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": true,
+      "provider": "Groq",
+      "model": "openai/gpt-oss-20b",
+      "kind": "tasks",
+      "timeMs": 1985,
+      "chars": 621,
+      "score": 120,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": true,
+      "provider": "Groq",
+      "model": "qwen/qwen3.8-27b",
+      "kind": "tasks",
+      "timeMs": 1192,
+      "chars": 1330,
+      "score": 120,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-3.8-flash",
+      "kind": "tasks",
+      "timeMs": 25290,
+      "error": "503 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-3.7-flash",
+      "kind": "tasks",
+      "timeMs": 35010,
+      "error": "Request was aborted.",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-2.5-flash",
+      "kind": "tasks",
+      "timeMs": 522,
+      "error": "404 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-2.5-flash-lite",
+      "kind": "tasks",
+      "timeMs": 616,
+      "error": "404 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Cerebras",
+      "model": "qwen-3.8-27b",
+      "kind": "tasks",
+      "timeMs": 407,
+      "error": "402 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Cerebras",
+      "model": "gemma-4-31b",
+      "kind": "tasks",
+      "timeMs": 617,
+      "error": "404 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": true,
+      "provider": "Groq",
+      "model": "openai/gpt-oss-120b",
+      "kind": "enhance",
+      "timeMs": 1903,
+      "chars": 805,
+      "score": 88,
+      "maxScore": 100,
+      "notes": [
+        "no \"задани\" marker",
+        "no \"критери\" marker"
+      ]
+    },
+    {
+      "ok": true,
+      "provider": "Groq",
+      "model": "qwen/qwen3.8-27b",
+      "kind": "enhance",
+      "timeMs": 768,
+      "chars": 802,
+      "score": 88,
+      "maxScore": 100,
+      "notes": [
+        "no \"задани\" marker",
+        "no \"критери\" marker"
+      ]
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-3.8-flash",
+      "kind": "enhance",
+      "timeMs": 25180,
+      "error": "503 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-2.5-flash",
+      "kind": "enhance",
+      "timeMs": 306,
+      "error": "404 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Google Gemini",
+      "model": "gemini-2.5-flash-lite",
+      "kind": "enhance",
+      "timeMs": 313,
+      "error": "404 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Cerebras",
+      "model": "gpt-oss-120b",
+      "kind": "enhance",
+      "timeMs": 708,
+      "error": "402 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    },
+    {
+      "ok": false,
+      "provider": "Cerebras",
+      "model": "qwen-3.8-27b",
+      "kind": "enhance",
+      "timeMs": 508,
+      "error": "402 status code (no body)",
+      "score": 0,
+      "maxScore": 100,
+      "notes": []
+    }
+  ],
+  "byKind": {
+    "plan": [
+      {
+        "ok": true,
+        "provider": "Groq",
+        "model": "openai/gpt-oss-120b",
+        "kind": "plan",
+        "timeMs": 3588,
+        "chars": 3634,
+        "score": 131,
+        "maxScore": 140,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-2.5-flash",
+        "kind": "plan",
+        "timeMs": 230,
+        "error": "404 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Cerebras",
+        "model": "gpt-oss-120b",
+        "kind": "plan",
+        "timeMs": 584,
+        "error": "402 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-3.7-flash",
+        "kind": "plan",
+        "timeMs": 21503,
+        "error": "503 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-3.8-flash",
+        "kind": "plan",
+        "timeMs": 24460,
+        "error": "503 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      }
+    ],
+    "tasks": [
+      {
+        "ok": true,
+        "provider": "Groq",
+        "model": "qwen/qwen3.8-27b",
+        "kind": "tasks",
+        "timeMs": 1192,
+        "chars": 1330,
+        "score": 120,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": true,
+        "provider": "Groq",
+        "model": "openai/gpt-oss-20b",
+        "kind": "tasks",
+        "timeMs": 1985,
+        "chars": 621,
+        "score": 120,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Cerebras",
+        "model": "qwen-3.8-27b",
+        "kind": "tasks",
+        "timeMs": 407,
+        "error": "402 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-2.5-flash",
+        "kind": "tasks",
+        "timeMs": 522,
+        "error": "404 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-2.5-flash-lite",
+        "kind": "tasks",
+        "timeMs": 616,
+        "error": "404 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Cerebras",
+        "model": "gemma-4-31b",
+        "kind": "tasks",
+        "timeMs": 617,
+        "error": "404 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-3.8-flash",
+        "kind": "tasks",
+        "timeMs": 25290,
+        "error": "503 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-3.7-flash",
+        "kind": "tasks",
+        "timeMs": 35010,
+        "error": "Request was aborted.",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      }
+    ],
+    "enhance": [
+      {
+        "ok": true,
+        "provider": "Groq",
+        "model": "qwen/qwen3.8-27b",
+        "kind": "enhance",
+        "timeMs": 768,
+        "chars": 802,
+        "score": 88,
+        "maxScore": 100,
+        "notes": [
+          "no \"задани\" marker",
+          "no \"критери\" marker"
+        ]
+      },
+      {
+        "ok": true,
+        "provider": "Groq",
+        "model": "openai/gpt-oss-120b",
+        "kind": "enhance",
+        "timeMs": 1903,
+        "chars": 805,
+        "score": 88,
+        "maxScore": 100,
+        "notes": [
+          "no \"задани\" marker",
+          "no \"критери\" marker"
+        ]
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-2.5-flash",
+        "kind": "enhance",
+        "timeMs": 306,
+        "error": "404 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-2.5-flash-lite",
+        "kind": "enhance",
+        "timeMs": 313,
+        "error": "404 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Cerebras",
+        "model": "qwen-3.8-27b",
+        "kind": "enhance",
+        "timeMs": 508,
+        "error": "402 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Cerebras",
+        "model": "gpt-oss-120b",
+        "kind": "enhance",
+        "timeMs": 708,
+        "error": "402 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      },
+      {
+        "ok": false,
+        "provider": "Google Gemini",
+        "model": "gemini-3.8-flash",
+        "kind": "enhance",
+        "timeMs": 25180,
+        "error": "503 status code (no body)",
+        "score": 0,
+        "maxScore": 100,
+        "notes": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,364 @@
+.header,
+.footer {
+  background: #f8fbff;
+  color: #172447;
+  font-family: var(--font-manrope), sans-serif;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  border-bottom: 1px solid #e9eff8;
+  background: rgba(248, 251, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.header.scrolled {
+  box-shadow: 0 4px 24px rgba(48, 76, 145, 0.08);
+  border-bottom-color: rgba(66, 99, 235, 0.12);
+}
+
+.headerInner,
+.footerInner {
+  width: 100%;
+  max-width: 1180px;
+  margin-inline: auto;
+  padding-inline: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.headerInner {
+  height: 72px;
+}
+
+.brand {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 11px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: #172447;
+}
+
+.brandIcon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4263eb, #25c4db);
+  color: #fff;
+  box-shadow: 0 9px 22px rgba(66, 99, 235, 0.28);
+  transform: rotate(-5deg);
+  transition: transform 0.3s ease;
+}
+
+.brand:hover .brandIcon {
+  transform: rotate(8deg) scale(1.06);
+}
+
+.brandCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.brandName {
+  font-family: var(--font-nunito), sans-serif;
+  font-size: 27px;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.brandSuffix {
+  color: #4263eb;
+}
+
+.tagline {
+  color: #71809e;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.desktopNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.navLink,
+.signup,
+.logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #5b6884;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.navLink:hover {
+  color: #4263eb;
+  background: #edf1ff;
+}
+
+.signup {
+  margin-left: 10px;
+  padding-inline: 20px;
+  border-radius: 14px;
+  color: #fff;
+  background: #4263eb;
+  box-shadow: 0 10px 22px rgba(66, 99, 235, 0.22);
+}
+
+.signup:hover {
+  background: #2847c7;
+  box-shadow: 0 15px 28px rgba(66, 99, 235, 0.3);
+  transform: translateY(-2px);
+}
+
+.logout {
+  cursor: pointer;
+  border-color: #dde5f3;
+  background: #fff;
+  font-family: inherit;
+}
+
+.logout:hover {
+  color: #4263eb;
+  background: #edf1ff;
+  border-color: #c9d6f5;
+}
+
+.brand:focus-visible,
+.navLink:focus-visible,
+.signup:focus-visible,
+.logout:focus-visible,
+.menuToggle:focus-visible {
+  outline: 2px solid #4263eb;
+  outline-offset: 4px;
+}
+
+.mobileMenu {
+  display: none;
+  position: relative;
+}
+
+.menuToggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  list-style: none;
+  cursor: pointer;
+  border: 0;
+  border-radius: 12px;
+  background: #edf1ff;
+  color: #4263eb;
+  transition: background-color 0.2s ease;
+}
+
+.menuToggle::-webkit-details-marker {
+  display: none;
+}
+
+.menuToggle:hover,
+.mobileMenu[open] .menuToggle {
+  background: #dfe6ff;
+}
+
+.mobileNav {
+  position: absolute;
+  top: calc(100% + 14px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(280px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid #e9eff8;
+  border-radius: 19px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(48, 76, 145, 0.13);
+  animation: mobileNavIn 0.2s ease-out;
+}
+
+@keyframes mobileNavIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mobileMenu:not([open]) .mobileNav {
+  display: none;
+}
+
+.mobileNav .navLink {
+  justify-content: flex-start;
+  border-radius: 10px;
+}
+
+.mobileNav .signup,
+.mobileNav .logout {
+  width: 100%;
+  margin: 4px 0 0;
+  border-radius: 12px;
+}
+
+.footer {
+  border-top: 1px solid #e9eff8;
+  padding-block: 40px;
+  background: #fff;
+}
+
+.footerIdentity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.footerDescription {
+  margin: 0;
+  color: #71809e;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.footerNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 1023px) {
+  .desktopNav {
+    display: none;
+  }
+
+  .mobileMenu {
+    display: block;
+  }
+}
+
+@media (max-width: 599px) {
+  .headerInner,
+  .footerInner {
+    padding-inline: 16px;
+    gap: 16px;
+  }
+
+  .brand {
+    gap: 10px;
+  }
+
+  .brandName {
+    font-size: 24px;
+  }
+
+  .footerInner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .footerNav {
+    gap: 2px;
+    margin-left: -14px;
+  }
+}
+
+/* Dark mode */
+.dark .header {
+  background: rgba(13, 18, 32, 0.82);
+  border-bottom-color: #232d45;
+}
+
+.dark .header.scrolled {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  border-bottom-color: rgba(66, 99, 235, 0.2);
+}
+
+.dark .footer {
+  background: #151c2e;
+  border-top-color: #232d45;
+}
+
+.dark .navLink {
+  color: #9aa8c2;
+}
+
+.dark .navLink:hover {
+  color: #7b93ff;
+  background: #1c2540;
+}
+
+.dark .logout {
+  background: #151c2e;
+  border-color: #2b3652;
+  color: #9aa8c2;
+}
+
+.dark .logout:hover {
+  color: #7b93ff;
+  background: #1c2540;
+  border-color: #465674;
+}
+
+.dark .menuToggle {
+  background: #1c2540;
+  color: #7b93ff;
+}
+
+.dark .menuToggle:hover,
+.dark .mobileMenu[open] .menuToggle {
+  background: #253154;
+}
+
+.dark .mobileNav {
+  background: #151c2e;
+  border-color: #2b3652;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+.dark .footerDescription {
+  color: #9aa8c2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navLink,
+  .signup,
+  .logout,
+  .brandIcon,
+  .header,
+  .mobileNav {
+    transition: none;
+    animation: none;
+    transform: none;
+  }
+}

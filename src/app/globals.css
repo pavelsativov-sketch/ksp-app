@@ -1,0 +1,352 @@
+@import "tailwindcss";
+
+:root {
+  /* Mekty application palette, shared by controls and internal pages. */
+  --ink: #4263eb;
+  --ink-hover: #2847c7;
+  --cyan: #25c4db;
+  --cyan-soft: #e3f9fc;
+  --cyan-foreground: #08798c;
+  --yellow: #ffc857;
+  --yellow-soft: #fff4d5;
+  --yellow-foreground: #795516;
+  --background: #f8fbff;
+  --foreground: #172447;
+  --surface: #ffffff;
+  --muted: #f3f6fc;
+  --muted-foreground: #64728e;
+  --graphite: var(--muted-foreground);
+  --line: #e9eff8;
+  --border: #dde5f3;
+  --border-strong: #9eacc7;
+  --primary-soft: #edf1ff;
+  --primary-soft-hover: #dfe6ff;
+  --font-body: var(--font-manrope), Arial, sans-serif;
+  --mekty-font-heading: var(--font-nunito), Arial, sans-serif;
+  --mekty-radius-control: 0.875rem;
+  --mekty-radius-card: 1.5rem;
+  --mekty-shadow-card: 0 12px 35px rgb(48 76 145 / 8%);
+  --mekty-shadow-popover: 0 24px 70px rgb(48 76 145 / 13%);
+  --mekty-shadow-button: 0 8px 20px rgb(66 99 235 / 18%);
+  --success: #2f5b4f;
+  --warning: #9b651f;
+  --danger: #a84023;
+  --danger-soft: #f7e6e1;
+  /* Compatibility aliases for existing consumers; document overrides below. */
+  --accent: var(--ink);
+  --accent-hover: var(--ink-hover);
+  --pine: var(--ink);
+  --pine-hover: var(--ink-hover);
+  --forest: var(--success);
+  --pro-gold: var(--yellow-foreground);
+  --pro-gold-bright: var(--yellow);
+  --pen: #dc2626;
+  --margin-rule: var(--cyan);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-graphite: var(--graphite);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-pen: var(--pen);
+  --color-pine: var(--pine);
+  --color-pine-hover: var(--pine-hover);
+  --color-pro-gold: var(--pro-gold);
+  --color-pro-gold-bright: var(--pro-gold-bright);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--ink);
+  --color-primary-hover: var(--ink-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-hover: var(--primary-soft-hover);
+  --color-brand-cyan: var(--cyan);
+  --color-cyan-soft: var(--cyan-soft);
+  --color-cyan-foreground: var(--cyan-foreground);
+  --color-brand-yellow: var(--yellow);
+  --color-yellow-soft: var(--yellow-soft);
+  --color-yellow-foreground: var(--yellow-foreground);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --radius-control: var(--mekty-radius-control);
+  --radius-card: var(--mekty-radius-card);
+  --shadow-card: var(--mekty-shadow-card);
+  --shadow-popover: var(--mekty-shadow-popover);
+  --shadow-button: var(--mekty-shadow-button);
+  --font-heading: var(--mekty-font-heading);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-lora);
+  --font-mono: var(--font-geist-mono);
+}
+
+html { scroll-behavior: smooth; }
+
+/* Тёмная тема.
+   Переопределяются только токены — компоненты используют семантические
+   переменные, поэтому не нужно переписывать ни одного className.
+   Флаг ставится на <html> скриптом до отрисовки, иначе при перезагрузке
+   страница мигнёт светлой. */
+.dark {
+  --background: #0d1220;
+  --foreground: #e6ecf7;
+  --surface: #151c2e;
+  --muted: #1c2437;
+  --muted-foreground: #9aa8c2;
+  --line: #232d45;
+  --border: #2b3652;
+  --border-strong: #465674;
+  --primary-soft: #1c2540;
+  --primary-soft-hover: #253154;
+
+  --ink: #7b93ff;
+  --ink-hover: #9aabff;
+  --cyan-soft: #10303a;
+  --cyan-foreground: #5fd8e8;
+  --yellow-soft: #3a2f11;
+  --yellow-foreground: #f0c96b;
+  --success: #6fc3ab;
+  --warning: #e0a35a;
+  --danger: #f08a70;
+  --danger-soft: #351f1c;
+  --pen: #f87171;
+
+  --mekty-shadow-card: 0 12px 35px rgb(0 0 0 / 35%);
+  --mekty-shadow-popover: 0 24px 70px rgb(0 0 0 / 50%);
+  --mekty-shadow-button: 0 8px 20px rgb(0 0 0 / 35%);
+
+  color-scheme: dark;
+}
+
+/* Печать всегда светлая: тёмная тема на бумаге превращается в заливку. */
+@media print {
+  .dark {
+    --background: #ffffff;
+    --foreground: #172447;
+    --surface: #ffffff;
+    --muted: #f3f6fc;
+    --muted-foreground: #64728e;
+    --line: #e9eff8;
+    --border: #dde5f3;
+    --border-strong: #9eacc7;
+    --primary-soft: #edf1ff;
+    --primary-soft-hover: #dfe6ff;
+    --ink: #4263eb;
+    --ink-hover: #2847c7;
+    --cyan-soft: #e3f9fc;
+    --cyan-foreground: #08798c;
+    --yellow-soft: #fff4d5;
+    --yellow-foreground: #795516;
+    --success: #2f5b4f;
+    --warning: #9b651f;
+    --danger: #a84023;
+    --danger-soft: #f7e6e1;
+    --pen: #dc2626;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+}
+
+::selection { background: var(--primary-soft-hover); color: var(--foreground); }
+
+/* Legacy display name retained for internal page compatibility. */
+.editorial-display {
+  font-family: var(--mekty-font-heading);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.dossier-kicker,
+.editorial-kicker {
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.editorial-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 0.18em;
+}
+
+.editorial-link:hover {
+  background: var(--primary-soft);
+  text-decoration-color: currentColor;
+}
+
+/* Keep the legacy CTA class working; primary actions now use blue ink. */
+.cta-pine,
+.cta-ink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--mekty-radius-control);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--mekty-shadow-button);
+  transition: background-color 150ms;
+}
+.cta-pine:hover, .cta-ink:hover { background: var(--ink-hover); }
+
+/* Compatibility utilities now share the same clean application surfaces. */
+.app-hero, .notebook-bg {
+  background: linear-gradient(125deg, var(--primary-soft), var(--cyan-soft));
+}
+.app-shell, .notebook-shell { width: min(100%, 1180px); margin-inline: auto; padding-inline: 24px; }
+.notebook-hero { border-bottom: 1px solid var(--line); }
+.app-card, .notebook-card {
+  border: 1px solid var(--border);
+  border-radius: var(--mekty-radius-card);
+  background: var(--surface);
+  box-shadow: var(--mekty-shadow-card);
+}
+.notebook-margin { position: relative; }
+.app-note, .pen-note {
+  display: inline-block;
+  color: var(--cyan-foreground);
+  font-family: var(--mekty-font-heading);
+  font-weight: 800;
+}
+.app-underline, .pen-underline {
+  text-decoration: underline;
+  text-decoration-color: var(--yellow);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 0.15em;
+}
+.notebook-stamp {
+  display: grid;
+  place-content: center;
+  flex-shrink: 0;
+  width: 112px;
+  height: 112px;
+  border: 1px solid var(--border);
+  border-radius: var(--mekty-radius-card);
+  color: var(--ink);
+  background: var(--primary-soft);
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.7;
+  font-weight: 700;
+}
+.notebook-spiral { position: relative; }
+.lesson-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; line-height: 1.65; }
+.lesson-table th, .lesson-table td { border: 1px solid var(--border-strong); padding: 10px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+.lesson-table thead th { background: var(--primary-soft); color: var(--ink-hover); font-weight: 600; }
+.app-pro, .notebook-pro { border: 2px solid var(--ink); box-shadow: var(--mekty-shadow-card); }
+
+@media (max-width: 479px) {
+  .app-shell, .notebook-shell { padding-inline: 16px; }
+  .lesson-table th, .lesson-table td { padding: 6px; }
+}
+
+/* Pro gold utilities */
+.pro-gold-text {
+  color: var(--yellow-foreground);
+}
+
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid var(--yellow);
+  background: var(--yellow-soft);
+  color: var(--yellow-foreground);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.65rem;
+}
+
+/* Focus-visible respects tokens */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  /* Пометка бесплатного тарифа на каждой печатной странице. */
+  .print-watermark {
+    display: block !important;
+    position: fixed;
+    bottom: 6mm;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 9pt;
+    color: #999;
+  }
+}
+@media screen {
+  .print-watermark { display: none; }
+}
+
+@media print {
+  @page { size: A4; margin: 15mm; }
+  body { background: white; }
+  .no-print { display: none !important; }
+  .print-plan { border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+  .print-plan h1 { font-size: 18pt; margin-bottom: 8pt; }
+  .print-plan h2 { font-size: 13pt; margin-top: 10pt; border-bottom: 1px solid #999; padding-bottom: 2pt; }
+  .print-plan table { border-collapse: collapse; width: 100%; font-size: 10pt; }
+  .print-plan th, .print-plan td { border: 1px solid #666; padding: 4pt; vertical-align: top; text-align: left; }
+  .print-plan ul { padding-left: 18pt; }
+}
+/* Printed/exported lesson content keeps its established document typography. */
+@layer base {
+  h1, h2, h3, h4 { font-family: var(--mekty-font-heading); }
+}
+.print-plan {
+  --ink: #1d4ed8;
+  --ink-hover: #1e40af;
+  --accent: #c0512f;
+  --accent-hover: #a84023;
+  color: #211c17;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.print-plan h3 { font-family: inherit; }
+.print-plan .editorial-display {
+  font-family: var(--font-lora), Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  line-height: 1.05;
+}
+.print-plan .no-print {
+  --ink: #4263eb;
+  --ink-hover: #2847c7;
+  font-family: var(--font-body);
+}
+@media print {
+  body { color: #211c17; font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+}

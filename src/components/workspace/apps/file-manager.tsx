@@ -1,0 +1,193 @@
+'use client';
+
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  FolderOpen, FileText, Image, Music, Film, Archive, Code,
+  LayoutGrid, List, RefreshCw, File, Loader2, Terminal,
+} from 'lucide-react';
+import { useActiveAgentTask } from '@/components/agents/agent-dock';
+
+interface FsItem {
+  name: string;
+  size: number;
+  sizeLabel: string;
+  modified: string;
+}
+
+/**
+ * Реальный файловый менеджер: показывает файлы песочницы активной задачи
+ * (workspace-data/agent-sessions/<taskId>), а не выдуманное дерево.
+ * Клик по файлу — просмотр содержимого, скачивание — по кнопке.
+ */
+export function FileManagerApp() {
+  const task = useActiveAgentTask();
+  const [files, setFiles] = useState<FsItem[] | null>(null);
+  const [view, setView] = useState<'grid' | 'list'>('list');
+  const [selected, setSelected] = useState<{ name: string; content: string; truncated: boolean } | null>(null);
+  const [loadingFile, setLoadingFile] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!task) return;
+    setFiles(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/agents/sandbox?taskId=${task.id}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('load failed');
+      const data = (await res.json()) as { files: FsItem[] };
+      setFiles(data.files ?? []);
+    } catch {
+      setError('Не удалось прочитать песочницу');
+      setFiles([]);
+    }
+  }, [task]);
+
+  useEffect(() => {
+    // Загрузка — асинхронная операция, поэтому первый setState происходит
+    // уже после await, а не синхронно в теле эффекта. Раньше эффект был
+    // записан как `() => load()`, и линтер react-hooks справедливо
+    // предупреждал о каскадном рендере.
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  async function openFile(name: string) {
+    if (!task) return;
+    setLoadingFile(true);
+    setSelected(null);
+    try {
+      const res = await fetch(`/api/agents/sandbox?taskId=${task.id}&file=${encodeURIComponent(name)}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('open failed');
+      const data = (await res.json()) as { content: string; truncated: boolean };
+      setSelected({ name, content: data.content, truncated: data.truncated });
+    } catch {
+      setSelected({ name, content: 'Не удалось прочитать файл', truncated: false });
+    }
+    setLoadingFile(false);
+  }
+
+  if (!task) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-center">
+        <div className="max-w-xs space-y-2 text-sm text-white/45">
+          <FolderOpen className="mx-auto size-8 text-white/25" />
+          <p>Песочница привязана к задаче. Запустите задачу агенту — её файлы появятся здесь.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col bg-[#141225] text-slate-200">
+      <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
+        <Terminal className="size-3.5 text-emerald-400" />
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/50">
+          workspace-data/agent-sessions/{task.id.slice(-6)}
+        </span>
+        <button type="button" onClick={() => setView(view === 'list' ? 'grid' : 'list')} className="rounded p-1 hover:bg-white/10" aria-label="Вид">
+          {view === 'list' ? <LayoutGrid className="size-3.5" /> : <List className="size-3.5" />}
+        </button>
+        <button type="button" onClick={() => void load()} className="rounded p-1 hover:bg-white/10" aria-label="Обновить">
+          <RefreshCw className="size-3.5" />
+        </button>
+      </div>
+
+      {files === null && (
+        <p className="flex flex-1 items-center justify-center gap-2 text-sm text-white/40"><Loader2 className="size-4 animate-spin" /> Читаю песочницу…</p>
+      )}
+      {files?.length === 0 && (
+        <p className="flex flex-1 items-center justify-center p-6 text-center text-sm text-white/40">
+          Песочница пуста. Как только агент создаст файлы — они появятся здесь.
+        </p>
+      )}
+      {error && <p className="p-3 text-xs text-red-300">{error}</p>}
+
+      {files !== null && files.length > 0 && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          {view === 'list' ? (
+            <ul className="space-y-0.5">
+              {files.map((f) => (
+                <li key={f.name}>
+                  <button
+                    type="button"
+                    onClick={() => void openFile(f.name)}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left hover:bg-white/10"
+                  >
+                    <FileIcon name={f.name} />
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.name}</span>
+                    <span className="shrink-0 text-[10px] text-white/40">{f.sizeLabel}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {files.map((f) => (
+                <button
+                  key={f.name}
+                  type="button"
+                  onClick={() => void openFile(f.name)}
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 p-3 hover:bg-white/10"
+                >
+                  <FileIcon name={f.name} />
+                  <span className="w-full truncate text-center text-[10px]">{f.name}</span>
+                  <span className="text-[10px] text-white/40">{f.sizeLabel}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selected && (
+        <div className="flex max-h-[55%] shrink-0 flex-col border-t border-white/10 bg-black/40">
+          <div className="flex shrink-0 items-center gap-2 px-3 py-1.5">
+            <FileText className="size-3.5 text-sky-300" />
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{selected.name}</span>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("mekty:editor-open", { detail: selected.name }))}
+              className="rounded px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-white/10"
+            >
+              В редактор
+            </button>
+            <button
+              type="button"
+              onClick={() => { void fetch(`/api/agents/sandbox?file=${encodeURIComponent(selected.name)}`, { method: "DELETE" }).then(() => { setSelected(null); void load(); }); }}
+              className="rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-white/10"
+            >
+              Удалить
+            </button>
+            <a
+              href={`/api/agents/sandbox?taskId=${task.id}&file=${encodeURIComponent(selected.name)}`}
+              download={selected.name}
+              className="rounded px-1.5 py-0.5 text-[10px] text-white/60 hover:bg-white/10"
+            >
+              Скачать
+            </a>
+            <button type="button" onClick={() => setSelected(null)} className="rounded px-1.5 py-0.5 text-[10px] text-white/60 hover:bg-white/10">Закрыть</button>
+          </div>
+          {loadingFile ? (
+            <p className="flex items-center gap-2 px-3 pb-3 text-xs text-white/40"><Loader2 className="size-3.5 animate-spin" /> Читаю…</p>
+          ) : (
+            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 pb-3 font-mono text-[11px] leading-relaxed text-slate-300">
+              {selected.content}
+              {selected.truncated && '\n… (файл показан частично)'}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FileIcon({ name }: { name: string }) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (['png', 'jpg', 'jpeg', 'gif'].includes(ext ?? '')) return <Image className="size-4 text-cyan-400" />;
+  if (['mp3', 'wav'].includes(ext ?? '')) return <Music className="size-4 text-purple-400" />;
+  if (['mp4', 'webm'].includes(ext ?? '')) return <Film className="size-4 text-pink-400" />;
+  if (['zip', 'rar', '7z'].includes(ext ?? '')) return <Archive className="size-4 text-yellow-500" />;
+  if (['js', 'ts', 'py', 'json', 'sh', 'bat', 'cmd'].includes(ext ?? '')) return <Code className="size-4 text-emerald-400" />;
+  if (['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext ?? '')) return <FileText className="size-4 text-sky-300" />;
+  return <File className="size-4 text-gray-400" />;
+}

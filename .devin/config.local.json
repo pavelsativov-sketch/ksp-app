@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(ls)",
+      "Exec(wc)",
+      "Exec(cat)",
+      "Exec(node)",
+      "Exec(grep)",
+      "Exec(npx tsc)",
+      "Exec(npm install)",
+      "Exec(npm run)",
+      "Exec(npx vitest)",
+      "Exec(npx next)",
+      "Exec(git status)",
+      "Exec(find)",
+      "Exec(curl)",
+      "Exec(npm)",
+      "Exec(nslookup)",
+      "Exec(npx opennextjs-cloudflare)",
+      "Exec(rm)",
+      "Exec(npx wrangler)",
+      "Exec(timeout npx)",
+      "Exec(sleep)"
+    ]
+  }
+}

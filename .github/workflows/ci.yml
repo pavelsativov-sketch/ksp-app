@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Audit known vulnerabilities
+        # Не блокирует сборку на advisory низкой важности, но ломает на high/critical.
+        run: npm audit --audit-level=high
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Coverage thresholds
+        # Пороги заданы в vitest.config.ts: покрытие не должно падать молча.
+        run: npx vitest run --coverage
+
+      - name: Production build
+        run: npm run build
+        env:
+          # Сборка не требует реальных секретов: все страницы под БД —
+          # force-dynamic и не рендерятся на этапе сборки.
+          AUTH_SECRET: ci-build-only-secret-value-32-chars-long!!
+          MONGODB_URI: mongodb://localhost:27017
+
+  e2e:
+    # Раньше smoke-тесты Playwright существовали, но в CI не запускались —
+    # соответствие реальному UI держалось только на ручной дисциплине.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E smoke
+        run: npm run test:e2e
+        env:
+          AUTH_SECRET: ci-e2e-only-secret-value-32-chars-long!!!
+          MONGODB_URI: mongodb://localhost:27017

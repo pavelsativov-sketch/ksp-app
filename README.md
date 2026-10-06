@@ -1,93 +1,287 @@
-# kspkz
+# КСП App
 
+Веб-приложение для учителей Казахстана: конструктор краткосрочных планов урока (КСП) по стандарту обновлённого содержания РК.
 
+**Ключевые фичи:**
 
-## Getting started
+- Создание КСП по официальному шаблону РК (цели обучения, языковые цели, ценности, дифференциация, рефлексия и т.д.)
+- AI-генерация плана по классу, предмету и теме (OpenAI) с качественным фолбэком без API-ключа
+- **Точечное AI-улучшение каждой секции** (рефлексия, активити, домашка, дескрипторы и т.д.) — не нужно перегенерировать весь план
+- **Полный справочник целей обучения ГОСО РК** (24 предмета, 1–11 класс, 5 461 цель) — через `npm run seed:goso` или offline-фолбэк из встроенного JSON
+- **RAG учебника**: загрузка PDF → чанкинг → embeddings (`text-embedding-3-small`) → MongoDB → AI цитирует учебник при генерации КСП
+- **Генерация раздаточных материалов**: рабочий лист, флэш-карточки, кроссворд (с автораскладкой) → экспорт в .docx
+- **Классы и группы** учителя с привязкой планов (фильтр в архиве, удаление класса не трогает планы)
+- **Шаблоны КСП**: сохранить удавшийся урок как заготовку и создавать по ней новые уроки
+- **Сохранённые комплекты** материалов: лист + памятки одним Word-файлом, повторно без траты AI-квоты
+- **QR-код на план** — ученик или коллега открывает телефоном, без регистрации
+- **Тёмная тема** с сохранением выбора и системной темой по умолчанию
+- Библиотека публичных планов от других учителей
+- Экспорт в **Word (.docx)** и **PDF** (через печать браузера)
+- Многопользовательская БД на **MongoDB** (сессии — JWT-cookie, rate-limit и live-квиз — тоже в БД)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Технологический стек
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- **Next.js 16** (App Router, TypeScript, Turbopack)
+- **Tailwind CSS 4** + кастомные shadcn-style компоненты
+- **MongoDB** — планы, цели, учебники RAG, live-квиз, rate-limit (индексы создаются автоматически)
+- **AI-фоллбэк из нескольких провайдеров**: Groq → Cerebras → Gemini → OpenRouter (`src/lib/ai/providers.ts`)
+- **docx** для экспорта в Word
+- **zod** + `react-hook-form` (частично) для валидации
 
-## Add your files
+## Быстрый старт
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+### 1. Установка
+
+```bash
+npm install
+```
+
+### 2. Настройте MongoDB
+
+1. Создайте кластер в MongoDB Atlas (бесплатный тариф) или используйте локальный `mongod`.
+2. В `.env.local` укажите подключение:
+
+   ```
+   MONGODB_URI=mongodb+srv://<user>:<password>@<host>/?retryWrites=true
+   MONGODB_DB=ksp
+   ```
+
+   Индексы (unique-ключи, TTL для live-квиза и rate-limit) создаются автоматически при первом обращении к БД — миграции не нужны.
+3. Импорт целей обучения ГОСО (5 461 цель):
+
+   ```bash
+   npm run seed:goso
+   ```
+
+### 3. Переменные окружения
+
+Скопируйте `.env.example` в `.env.local` и заполните:
+
+```bash
+cp .env.example .env.local
+```
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/vitaliy-group2/kspkz.git
-git branch -M main
-git push -uf origin main
+MONGODB_URI=mongodb+srv://<user>:<password>@<host>/?retryWrites=true
+MONGODB_DB=ksp
+
+# Секрет подписи сессий (минимум 32 символа) — обязателен в проде:
+AUTH_SECRET=<openssl rand -base64 32>
+
+# Необязательно — без AI-ключей генерация работает в режиме заглушки:
+GROQ_API_KEY=...
+GEMINI_API_KEY=...
+CEREBRAS_API_KEY=...
+OPENROUTER_API_KEY=...
 ```
 
-## Integrate with your tools
+### 4. Запуск
 
-* [Set up project integrations](https://gitlab.com/vitaliy-group2/kspkz/-/settings/integrations)
+```bash
+npm run dev
+```
 
-## Collaborate with your team
+Приложение откроется на http://localhost:3000.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Скрипты
 
-## Test and Deploy
+| Команда | Что делает |
+|---|---|
+| `npm run dev` | Dev-сервер с Turbopack |
+| `npm run build` | Продакшн-сборка |
+| `npm run start` | Запуск продакшн-сборки |
+| `npm run lint` | ESLint |
+| `npm run test` | Юнит-тесты (Vitest) — раздаточные, КСП-экспорт, оценивание заданий, live-квиз, биллинг |
+| `npm run test:coverage` | Тесты с отчётом покрытия; порог 40% по `src/lib` и API-роутам (настроен в `vitest.config.ts`) |
+| `npm run test:ai` | Бенчмарк стабильных AI-моделей на генерации КСП, интерактивных заданий и улучшении секций; пишет отчёт в `.devin/ai-benchmark/` |
+| `npm run test:ai:free` | То же самое, но с OpenRouter `:free` моделями; может быть медленнее из-за очередей и лимитов бесплатных маршрутов |
+| `npm run test:watch` | Vitest в watch-режиме |
+| `npm run test:e2e` | Playwright smoke-тесты (требует `npx playwright install`) |
+| `npm run seed:goso` | Импорт справочника целей обучения ГОСО в MongoDB |
 
-Use the built-in continuous integration in GitLab.
+## Структура репозитория
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+```
+src/
+  app/
+    (public landing, layout, auth)
+    dashboard/        — список своих КСП
+    plans/
+      new/            — визард создания (ручной / AI)
+      [id]/           — просмотр
+      [id]/edit/      — редактирование
+    library/          — публичные КСП
+    api/
+      ai/generate/    — AI-эндпоинт
+      export/docx/[id]/ — экспорт в Word
+    actions/          — server actions (auth, plans)
+  components/
+    ui/               — базовые компоненты (button, input, card, select...)
+    ksp/              — бизнес-компоненты (plan-form, plan-view)
+  lib/
+    mongo.ts          — подключение к MongoDB + автосоздание индексов
+    ai/               — промпты и генерация
+    export/           — .docx builder
+    types/            — типы KSP
+    validation/       — zod-схемы
+scripts/
+  seed-goso.mjs       — импорт целей ГОСО в MongoDB
+```
 
-***
+## Модель данных
 
-# Editing this README
+- `users` — пользователи (bcrypt-хэш пароля, JWT-сессия в httpOnly cookie)
+- `subjects` — справочник предметов
+- `learning_objectives` — цели обучения из программы РК (по коду, напр. `5.1.2.1`)
+- `lesson_plans` — сами КСП (весь шаблон хранится в `content`)
+- `textbooks` / `textbook_chunks` — RAG учебника
+- `quiz_rooms` / `quiz_events` — live-квиз (TTL 6 часов)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Доступ проверяется на сервере: приватные планы видит только владелец, публичные и unlisted — все (в т.ч. неавторизованные).
 
-## Suggestions for a good README
+## RAG учебника
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+1. Откройте `/textbooks`, загрузите PDF (до 50 МБ).
+2. Сервер извлечёт текст постранично (`pdf-parse` v2 / pdfjs), разобьёт на чанки ~700 символов с перекрытием 100, посчитает embeddings (`text-embedding-3-small`, 1536 dim) и сохранит в коллекцию `textbook_chunks`.
+3. На странице визарда КСП в блоке «Тема урока» появится селектор учебника. При AI-генерации плана через `POST /api/ai/generate` передаётся `textbookId`, сервер делает k=6 поиск по cosine-похожести (или keyword-fallback) и подсовывает релевантные цитаты в system-prompt.
 
-## Name
-Choose a self-explaining name for your project.
+Без `OPENAI_API_KEY`: индексация и retrieval работают на детерминированном embed-stub (для UI/демо). Реальная семантика появится с настоящим ключом.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## Раздаточные материалы
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+На странице просмотра плана — отдельные кнопки:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- **Рабочий лист**: задания с критериями и шкалой 10 баллов (sort, checklist, кейсы, match, интерактив, творческое) → .docx
+- **Памятки**: карточки «термин ↔ определение» → .docx
+- **Кроссворд**: AI подбирает слова по теме и классу либо принимает свои слова → серверная раскладка → .docx
+- **Комплект**: лист + памятки в одном документе (переключатель «Объединить»)
+- **Сохранённые комплекты** (`/kits`): «Сохранить комплект» в предпросмотре кладёт материалы в архив; скачивание — одним .docx, повторно без новой генерации. Лимит комплекта 3 МБ (картинки хранятся в base64).
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## Классы, шаблоны, QR
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+- **Классы и группы** (`/profile` → «Классы и группы»): название свободным текстом («5-А», «7б», «Кружок робототехники»), номер класса 1–11 — отдельно, для подсчёта нагрузки. Есть быстрое создание параллелей 1–11 с буквой. Планы привязываются к классу в конструкторе и фильтруются в архиве. Привязка проверяется на сервере: чужой класс подставить нельзя. Удаление класса **не удаляет планы** — пропадает только привязка.
+- **Шаблоны КСП** (`/templates`): «Сохранить как шабло��» на странице плана. В шаблон уходят цели, критерии и формулировки, но **не** тема, задания, время этапов и домашняя работа — иначе новый урок унаследует чужое содержание. Применение: указать тему и перейти в конструктор.
+- **QR-плашка** на странице плана (владельцу, для плана не скрытого модерацией). Печать отдельной карточкой или копирование ссылки. Кодирование — библиотекой `qrcode`; свой кодировщик нечитаем камерой и не подходит.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Тёмная тема
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Переключатель в шапке. Тема применяется скриптом в `<head>` до первой отрисовки — при перезагрузке страница не мигает светлой. По умолчанию берётся системная (`prefers-color-scheme`), выбор сохраняется в `localStorage`. Реализовано переопределением CSS-токенов в `.dark`, поэтому `className` компонентов не менялись. При печати тема всегда светлая.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+API: `POST /api/handouts/generate` — JSON для предпросмотра; `POST /api/handouts/combined` — комплект; `POST /api/handouts/docx` — сразу .docx.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## AI-генерация
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Проект использует мульти-провайдерный фоллбэк в `src/lib/ai/providers.ts`:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+- `generation` / полное КСП: Groq `openai/gpt-oss-120b` → Gemini → Cerebras → OpenRouter free.
+- `enhance` / улучшение секций: Groq Qwen → Groq `openai/gpt-oss-120b` → Cerebras → Gemini → OpenRouter free.
+- `tasks` / интерактивные задания: Groq Qwen → Groq `openai/gpt-oss-20b` → Cerebras Qwen → Gemini → OpenRouter free.
 
-## License
-For open source projects, say how it is licensed.
+Чтобы выбрать лучшие модели под текущие лимиты и качество JSON, запустите:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```bash
+npm run test:ai
+```
+
+Скрипт проверяет реальные ответы моделей на трех задачах приложения: создание КСП, генерация интерактивных заданий и улучшение фрагмента плана. Итоговый JSON-отчёт сохраняется в `.devin/ai-benchmark/`. Для отдельной проверки бесплатных OpenRouter-маршрутов используйте `npm run test:ai:free`.
+
+Эндпоинт `POST /api/ai/generate` принимает:
+
+```json
+{
+  "grade": 5,
+  "subject": "Математика",
+  "topic": "Сложение многозначных чисел",
+  "learningObjectives": ["5.1.2.1 — Выполнять сложение натуральных чисел"],
+  "language": "ru"
+}
+```
+
+И возвращает заполненный шаблон КСП (все секции кроме шапки и `learningObjectives`).
+
+Если ни один AI-ключ не задан — возвращает детерминированную заглушку (для демо и e2e-тестов).
+
+## Экспорт
+
+- **Word (.docx)** — `GET /api/export/docx/:id`, файл с официальным табличным форматом КСП.
+- **Презентация (.pptx)** — `GET /api/export/pptx/:id`. Автогенерация слайд-колоды из плана: титул, цели, критерии успеха, языковые цели, по слайду на этап (учитель/ученики/ключевые вопросы), по слайду на каждое интерактивное задание (готово к проектору), рефлексия, ДЗ, финальный слайд. Использует `pptxgenjs`.
+- **PDF** — через `window.print()` на странице просмотра: печать в PDF из браузера. Страница имеет `@media print` стили (A4, поля 15мм, таблицы с бордерами).
+
+## Live-квиз (Kahoot-style)
+
+На странице плана у владельца появляется кнопка «Live-квиз», если в плане есть интерактивные задания. Поток:
+
+1. Учитель нажимает «Live-квиз» → открывается `/quiz/host/[id]`. Генерится 6-значный код комнаты.
+2. Ученики на телефоне открывают `/quiz/join?code=NNNNNN`, вводят имя и попадают в лобби.
+3. Учитель видит присоединившихся в реальном времени и нажимает «Начать».
+4. Каждый вопрос публикуется через `POST /api/quiz/NNNNNN` в MongoDB (`quiz_rooms`/`quiz_events`); обе стороны поллят `GET /api/quiz/NNNNNN?since=seq` каждые ~1.5 с. Ученики отвечают; учитель видит счётчик ответивших и таймер. По истечении таймера или по кнопке — открывается правильный ответ + лидерборд.
+5. Очки = `points × speedBonus(1.0..1.5)` за верный ответ и подсчитываются **на сервере**: время ответа измеряется сервером (клиентское `ms` игнорируется), правильные ответы хранятся в документе комнаты (`secretTask`) и не рассылаются ученикам, повторные и поздние ответы (с допуском 2 с на сеть) отклоняются атомарно. Лидерборд в `host:reveal/state/end` формируется сервером и заменяет клиентский.
+6. По окончании показывается финальный лидерборд + конфетти.
+
+Архитектура: комната и счёт живут в MongoDB, права хоста привязаны к `ownerId`. При обновлении страницы хостом (`/quiz/host/[id]`) активная комната плана подхватывается обратно (код, фаза, вопрос, лидерборд) — урок продолжается. Канал — polling поверх MongoDB (TTL-индексы чистят комнаты и события через 6 часов), никаких миграций не требуется.
+
+Сетевой протокол описан в `src/lib/ksp/live-quiz.ts` (events: `host:state`, `host:question`, `host:reveal`, `host:end`, `student:join`, `student:leave`, `student:answer`).
+
+## Картинки в раздаточных
+
+В попапе «Раздаточные» → «Памятки» появилась галка «ИИ-иллюстрации». При включении после генерации текста сервер генерирует иконку-иллюстрацию для каждой карточки через Cloudflare Workers AI (FLUX.1) и встраивает её в .docx (см. `src/lib/handouts/images.ts`). Без `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` галка ничего не делает (стуб не имитирует картинки, чтобы не раздувать .docx).
+
+Каждая картинка независимо от точки входа резервирует слот квоты тарифа (`limits.images`) **до** обращения к провайдеру: иначе расход шёл бы мимо тарифа через `/api/handouts/*`. При исчерпании квоты набор прерывается, а материал остаётся пригодным (задания без картинок).
+
+## Квоты тарифа
+
+| Операция | Счётчик | Free | Pro |
+|---|---|---|---|
+| Полный КСП (`kspPerMonth`) | `ai_events.task=generation` | 3/мес | без лимита |
+| Вспомогательные AI-операции (`assistPerMonth`): улучшение секций, генерация заданий, рабочие листы, памятки, кроссворды | `ai_events.task=assist` | 30/мес | без лимита |
+| Изображения (`images`) | `ai_events.task=image` | — (выключены) | 50/мес |
+| Учебники (`textbooks`) | `textbooks` владельца | — (выключены) | 3 |
+
+Все точки входа, которые вызывают AI-провайдеров, проходят через `reserveQuota` (`src/lib/billing/quota.ts`) — не только `/api/ai/generate`. Rate-limit (30/час) остаётся отдельным слоем защиты от перегрузки и не заменяет тарифную квоту.
+
+## Дорожная карта
+
+- [x] Модерация библиотеки (жалобы, скрытие, админ-очередь)
+- [x] КТП как фича Pro (paywall на роуте и в UI)
+- [x] Управление аккаунтом (имя, пароль, выгрузка, удаление)
+- [x] Базовый KZ-интерфейс (шапка/подвал, лендинг, тарифы, вход, архив, библиотека, раздаточные материалы, домашние выдачи, онбординг; cookie `locale`, переключатель RU/ҚЗ)
+- [x] Гейт качества КСП и отчёт о готовности урока
+- [x] Домашние выдачи по ссылке: проверка на сервере, повтор, лучший результат
+- [x] Классы и группы учителя с привязкой планов
+- [x] Шаблоны КСП и сохранённые комплекты материалов
+- [x] QR-плашка на план, тёмная тема
+- [x] Тарифные квоты на всех AI-точках входа (не только генерация КСП)
+- [x] Мониторинг: структурированный логгер + Sentry по `SENTRY_DSN`
+- [ ] Полный KZ-перевод глубоких форм (редактор КСП, конструктор, админка)
+- [ ] i18n KZ/RU через `next-intl` (при росте числа языков)
+- [ ] Совместное редактирование, комментарии коллег
+- [ ] Долгосрочный и среднесрочный план (ДСП/ССП)
+- [ ] Журнал и ведомость успеваемости (выгрузка в Excel) — данные об оценках уже собираются
+- [ ] Импорт КСП из чужого .docx в конструктор
+- [ ] Дифференциация заданий по уровням + таблица балансировки
+- [ ] Таймер этапа урока и режим ведения урока
+- [ ] Рецензирование КСП коллегами
+- [ ] Поиск по библиотеке на русском и казахском (сейчас только по названию)
+- [ ] Интеграция с BilimClass.kz — план в `docs/bilimclass-plan.md`, ждёт документацию API и токен
+
+## Мониторинг и логи
+
+Все серверные сообщения идут через `src/lib/logger.ts`: единый JSON-формат
+с уровнем и `requestId`, уровень регулируется `LOG_LEVEL` (`debug`/`info`/`warn`/`error`).
+
+Если задан `SENTRY_DSN`, ошибки дополнительно уходят в Sentry — пакет
+`@sentry/nextjs` при этом не нужен, отправка идёт напрямую по DSN.
+
+## Доступ и безопасность
+
+- `src/proxy.ts` (Next 16) — ранний отсев приватных страниц без входа.
+  Это defence-in-depth: каждый роут и API проверяют доступ самостоятельно.
+- Сессия — JWT в httpOnly-cookie, сверка `session_version` в MongoDB,
+  поэтому смена пароля отзывает все активные сессии.
+- Публичные выдачи и комнаты квиза защищены rate-limit по IP; коды выдач
+  генерируются CSPRNG.
+- Удаление аккаунта удаляет и выдачи с результатами учеников (PII несовершеннолетних).
+
+## Лицензия
+
+MIT
