@@ -7,7 +7,7 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "vars": {
     "APP_URL": "https://ksp-app.pavelsativov.workers.dev",
-    "GITLAB_PROJECT_ID": "87334759",
+    "GITLAB_PROJECT_ID": "87341910",
     "GITLAB_REF": "main"
   },
   "browser": { "binding": "BROWSER" },
