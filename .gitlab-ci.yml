@@ -2,18 +2,23 @@ spec:
   inputs:
     runner_execution_id:
       type: string
+      default: "00000000-0000-0000-0000-000000000000"
       regex: '^[0-9a-f-]{36}$'
     runner_user_id:
       type: string
+      default: "000000000000000000000000"
       regex: '^[a-fA-F0-9]{24}$'
     runner_expires_at:
       type: string
+      default: "0000000000000"
       regex: '^[0-9]{13}$'
     runner_signature:
       type: string
+      default: "0000000000000000000000000000000000000000000000000000000000000000"
       regex: '^[a-f0-9]{64}$'
     runner_app_url:
       type: string
+      default: "https://invalid.local"
       regex: '^https://[A-Za-z0-9.-]+(:[0-9]+)?$'
 ---
 
