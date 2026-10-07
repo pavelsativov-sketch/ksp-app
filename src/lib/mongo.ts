@@ -1,5 +1,4 @@
 import { MongoClient, ObjectId, type Db } from "mongodb";
-import { after } from "next/server";
 import { mongoRequestState } from "@/lib/mongo-request-context";
 
 const URI = process.env.MONGODB_URI;
@@ -34,7 +33,7 @@ export function getClient(): Promise<MongoClient> {
       connectTimeoutMS: 10_000,
       socketTimeoutMS: 20_000,
       // Workers cannot share TCP sockets across requests. The Worker wrapper
-      // gives each request its own client, which is closed with Next's after().
+      // scopes this client to one request instead of keeping a global pool.
       maxPoolSize: requestState ? 2 : 10,
       maxConnecting: requestState ? 1 : 2,
       retryWrites: true,
@@ -46,17 +45,6 @@ export function getClient(): Promise<MongoClient> {
     });
     if (requestState) requestState.clientPromise = promise;
     else global.__mongoClientPromise = promise;
-  }
-  if (requestState && !requestState.cleanupScheduled) {
-    requestState.cleanupScheduled = true;
-    after(async () => {
-      try {
-        const client = await requestState.clientPromise;
-        await client?.close();
-      } catch {
-        // A failed connection has nothing to close; preserve the response.
-      }
-    });
   }
   return requestState ? requestState.clientPromise! : global.__mongoClientPromise!;
 }
