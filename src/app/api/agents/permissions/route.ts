@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
-import { listPending, resolvePermission } from "@/lib/agents/permissions";
+import { alwaysAllows, listPending, resolvePermission, revokeAlwaysAllow } from "@/lib/agents/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,9 +10,20 @@ export async function GET() {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
   return NextResponse.json(
-    { pending: listPending(auth.user.id) },
+    {
+      pending: await listPending(auth.user.id),
+      alwaysAllowed: await alwaysAllows(auth.user.id),
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
+}
+
+/** Revoke the account-level "always allow high-risk commands" preference. */
+export async function DELETE() {
+  const auth = await requireApiAuth();
+  if (auth.response) return auth.response;
+  await revokeAlwaysAllow(auth.user.id);
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /** Решение пользователя: allow/deny (+always для MVP-политики). */
@@ -29,7 +40,7 @@ export async function POST(req: Request) {
   if (typeof body.id !== "string" || typeof body.allow !== "boolean") {
     return NextResponse.json({ error: "Нужны id и allow" }, { status: 400 });
   }
-  const ok = resolvePermission(auth.user.id, body.id, body.allow, body.always === true);
+  const ok = await resolvePermission(auth.user.id, body.id, body.allow, body.always === true);
   if (!ok) return NextResponse.json({ error: "Запрос не найден или уже решён" }, { status: 404 });
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

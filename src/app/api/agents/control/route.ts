@@ -10,7 +10,7 @@ export async function GET() {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
   return NextResponse.json(
-    { control: getControlOwner(auth.user.id) },
+    { control: await getControlOwner(auth.user.id) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -29,6 +29,6 @@ export async function POST(req: Request) {
   if (body.control !== "user" && body.control !== "ai") {
     return NextResponse.json({ error: "control должен быть 'user' или 'ai'" }, { status: 400 });
   }
-  setControlOwner(auth.user.id, body.control);
+  await setControlOwner(auth.user.id, body.control);
   return NextResponse.json({ ok: true, control: body.control }, { headers: { "Cache-Control": "no-store" } });
 }

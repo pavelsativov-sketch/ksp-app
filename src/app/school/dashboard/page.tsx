@@ -2,9 +2,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { getSchoolOverview } from "@/lib/school-analytics";
-import { requireSchoolAccess } from "@/lib/school";
 import { NoSchool } from "@/components/school/no-school";
-import { SeedButton } from "@/components/school/seed-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, AlertTriangle, GraduationCap, School, Users, ClipboardCheck, BookOpen } from "lucide-react";
 
@@ -21,12 +19,8 @@ export default async function SchoolDashboardPage() {
   if (!school) return <NoSchool />;
 
   const schoolId = school._id!.toString();
-  const [overview, roleError] = await Promise.all([
-    getSchoolOverview(schoolId).catch(() => null),
-    requireSchoolAccess(user.id, schoolId).then((m) => m.role).catch(() => "teacher"),
-  ]);
+  const overview = await getSchoolOverview(schoolId).catch(() => null);
 
-  const isDirector = roleError === "director" || roleError === "admin";
   const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
   return (
@@ -42,10 +36,9 @@ export default async function SchoolDashboardPage() {
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
             <School className="size-8 text-muted-foreground" />
             <p className="max-w-sm text-sm text-muted-foreground">
-              Школа создана, но данных пока нет. Наполните её демонстрационными данными —
-              все разделы (посещаемость, успеваемость, КТП, ВШК) сразу оживут.
+              Школа создана, но в ней пока нет рабочих данных. Добавьте учащихся, затем отмечайте посещаемость и оценки — показатели обновятся автоматически.
             </p>
-            {isDirector ? <SeedButton schoolId={schoolId} /> : <p className="text-xs text-muted-foreground">Наполнение доступно директору.</p>}
+            <div className="flex flex-wrap justify-center gap-2"><Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/students">Добавить учащихся</Link><Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/attendance">Отметить посещаемость</Link><Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/quality">Добавить оценки</Link></div>
           </CardContent>
         </Card>
       ) : (

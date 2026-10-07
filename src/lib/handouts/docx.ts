@@ -20,6 +20,7 @@ import {
 import type { Crossword, Flashcard, FlashcardSet, Handout, Worksheet, WorksheetTask } from "./types";
 import { optionLetter, worksheetAnswerLines, worksheetTypeLabel } from "./answers";
 import { resolveErrorsCount, resolveTableRows } from "./layout";
+import { buildWordSearchGrid } from "./word-search";
 // Пометка бесплатного тарифа строится здесь же (buildFreeWatermarkParagraphs):
 // раньше она приходила из export/docx отдельным Footer, терялась при
 // `footers: { default: footers[0] }` и вместе с ней исчезала защита биллинга.
@@ -286,7 +287,7 @@ function buildWorksheet(w: Worksheet, includeAnswers = true): (Paragraph | Table
     if (answers.length > 0) {
       out.push(new Paragraph({ pageBreakBefore: true })); // Начинаем с новой страницы
       out.push(p(copy.answers, { bold: true, color: NAVY, size: 24 }));
-      out.push(...teacherAnswersBlock(answers, copy));
+      out.push(...teacherAnswersBlock(answers));
       out.push(spacer());
     }
 
@@ -331,7 +332,10 @@ function taskBlock(t: WorksheetTask, index: number, includeAnswers: boolean, cop
   // If task has image, put it in a two-column table if appropriate, else just stack
   const bodyItems = taskBody(t, index, copy);
   if (t.imageBase64) {
-    const img = imageParagraph(t, 240, 180);
+    // Квадратная рамка 220×220: иллюстрации генерируются квадратными, и
+    // растягивание до 240×180 искажало пропорции — лица и предметы
+    // вытягивались по горизонтали.
+    const img = imageParagraph(t, 220, 220);
     if (img) {
       inner.push(
         new Table({
@@ -369,6 +373,11 @@ function taskBlock(t: WorksheetTask, index: number, includeAnswers: boolean, cop
       width: FULL_WIDTH,
       rows: [
         new TableRow({
+          // Карточка задания не разрывается между страницами. Без этого
+          // условия длинное задание (например, «Разбери кейс» с облаком или
+          // таблицей на 8 строк) разрывалось пополам: условие на одной
+          // странице, место для ответа — на следующей.
+          cantSplit: true,
           children: [
             new TableCell({
               borders: CARD_BORDERS,
@@ -837,9 +846,11 @@ function matchTable(left: string[], right: string[], copy: WorksheetCopy): Table
 }
 
 /** Блок «Ответы для учителя» — ключи к заданиям с баллами. */
-function teacherAnswersBlock(lines: string[], copy: WorksheetCopy): (Paragraph | Table)[] {
+function teacherAnswersBlock(lines: string[]): (Paragraph | Table)[] {
+  // Заголовка «Ответы для учителя» здесь нет: он уже напечатан в
+  // buildWorksheet строкой выше. Раньше он выводился дважды подряд, и
+  // учитель, открывая документ с ключами, видел дублирующий заголовок.
   return [
-    p(copy.answers, { bold: true, color: NAVY }),
     new Table({
       width: FULL_WIDTH,
       rows: [
@@ -901,33 +912,77 @@ function cell(text: string, opts?: { bold?: boolean }): TableCell {
 
 // ---------- Flashcards ----------
 
+/* ---------- Палитра карточек-памяток ---------- */
+// Четыре схемы оформления — те же, что в предпросмотре. Раньше DOCX был
+// полностью серым, хотя на экране карточки выглядели цветными: учитель
+// видел в превью одно, а печатал другое. Теперь цвета перенесены в печать,
+// чтобы комплект памяток был действительно красочным, а не серым.
+const FLASHCARD_SCHEMES: { border: string; banner: string; band: string }[] = [
+  { border: "2B6CB0", banner: "DEEBF7", band: "EBF4FF" }, // синий
+  { border: "2F855A", banner: "E2EFDA", band: "EDFBF1" }, // зелёный
+  { border: "B7791F", banner: "FFF2CC", band: "FFFAEB" }, // янтарный
+  { border: "9B2C2C", banner: "FBE4E4", band: "FEF2F2" }, // терракотовый
+];
+
 function buildFlashcards(f: FlashcardSet): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [];
   const copy = worksheetCopy(f.language);
-  out.push(heading(f.title));
-  if (f.intro) out.push(p(f.intro));
+  out.push(flashcardTitle(f.title, f.language));
+  if (f.intro) out.push(p(f.intro, { color: MUTED }));
   if (f.imagesFailed) out.push(imageFailureNote(copy));
   out.push(spacer());
 
-  // 2 columns × N rows. Каждая ячейка — одна карточка (front, разделитель, back).
+  // 2 колонки × N строк. Каждая ячейка — одна карточка.
   const rows: TableRow[] = [];
   for (let i = 0; i < f.cards.length; i += 2) {
     const left = f.cards[i];
     const right = f.cards[i + 1];
     rows.push(
       new TableRow({
-        children: [flashCell(left, copy, i), flashCell(right, copy, i + 1)],
+        children: [
+          flashCell(left, copy, i, FLASHCARD_SCHEMES[i % FLASHCARD_SCHEMES.length]),
+          flashCell(right, copy, i + 1, FLASHCARD_SCHEMES[(i + 1) % FLASHCARD_SCHEMES.length]),
+        ],
         height: { value: 2400, rule: "atLeast" },
+        // Карточка не должна разрываться между страницами: разрезанная
+        // пополам памятка нечитаема и не вырезается ножницами по линии.
+        cantSplit: true,
       }),
     );
   }
   out.push(new Table({ rows, width: FULL_WIDTH }));
   out.push(spacer());
-  out.push(p(copy.cutNote, { italics: true }));
+  out.push(p(copy.cutNote, { italics: true, color: MUTED }));
   return out;
 }
 
-function flashCell(card: Flashcard | undefined, copy: WorksheetCopy, index: number): TableCell {
+/**
+ * Заголовок комплекта памяток.
+ *
+ * Отдельная функция, потому что у памяток и кроссвордов заголовок был
+ * пустым абзацем без размера и цвета — в отличие от рабочего листа. Два
+ * материала выглядели как черновики рядом с оформленным листом.
+ */
+function flashcardTitle(title: string, language: "ru" | "kz" | undefined): Paragraph {
+  const label = language === "kz" ? "ПАМЯТКАЛАР" : "ПАМЯТКИ";
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 120 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: NAVY, space: 6 } },
+    children: [
+      new TextRun({ text: label, bold: true, size: 16, color: NAVY, characterSpacing: 60 }),
+      new TextRun({ break: 1 }),
+      new TextRun({ text: title, bold: true, size: 30, color: NAVY }),
+    ],
+  });
+}
+
+function flashCell(
+  card: Flashcard | undefined,
+  copy: WorksheetCopy,
+  index: number,
+  scheme: { border: string; banner: string; band: string },
+): TableCell {
   if (!card) return cell("");
   const children: Paragraph[] = [];
   const base64 = card.imageBase64;
@@ -937,10 +992,13 @@ function flashCell(card: Flashcard | undefined, copy: WorksheetCopy, index: numb
       children.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
+          spacing: { after: 80 },
           children: [
             new ImageRun({
               data,
-              transformation: { width: 112, height: 112 },
+              // Квадратная рамка под картинку: картинки генерируются 1:1, и
+              // растягивание до нестандартного размера искажало их.
+              transformation: { width: 128, height: 128 },
               type: card.imageMime === "image/png" ? "png" : "jpg",
               altText: card.imageAlt
                 ? { title: card.imageAlt, description: card.imageAlt, name: card.imageAlt }
@@ -950,22 +1008,33 @@ function flashCell(card: Flashcard | undefined, copy: WorksheetCopy, index: numb
         }),
       );
     } catch {
-      // ignore broken image
+      // Битая картинка не должна ронять весь комплект: карточка печатается
+      // без иллюстрации. Учитель увидит пропуск в предпросмотре заранее.
     }
   }
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 60 },
-      children: [new TextRun({ text: `${copy.memo} ${String(index + 1).padStart(2, "0")}`, bold: true, size: 16, color: NAVY })],
+      shading: { fill: scheme.banner, type: ShadingType.CLEAR, color: "auto" },
+      children: [
+        new TextRun({
+          text: `${copy.memo} ${String(index + 1).padStart(2, "0")}`,
+          bold: true,
+          size: 16,
+          color: scheme.border,
+          characterSpacing: 40,
+        }),
+      ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 80 },
-      children: [new TextRun({ text: card.front, bold: true, size: 28, color: NAVY })],
+      spacing: { before: 80, after: 80 },
+      children: [new TextRun({ text: card.front, bold: true, size: 28, color: scheme.border })],
     }),
     new Paragraph({
       spacing: { after: 100 },
+      shading: { fill: scheme.band, type: ShadingType.CLEAR, color: "auto" },
       children: [new TextRun({ text: card.back, size: 18 })],
     }),
   );
@@ -973,22 +1042,29 @@ function flashCell(card: Flashcard | undefined, copy: WorksheetCopy, index: numb
     children.push(new Paragraph({
       spacing: { before: 40, after: 70 },
       children: [
-        new TextRun({ text: `${copy.example}: `, bold: true, size: 16, color: NAVY }),
+        new TextRun({ text: `${copy.example}: `, bold: true, size: 16, color: scheme.border }),
         new TextRun({ text: card.example, size: 16 }),
       ],
     }));
   }
   if (card.checkQuestion) {
     children.push(new Paragraph({
-      border: { top: { style: BorderStyle.DASHED, size: 4, color: "A6A6A6", space: 3 } },
+      border: { top: { style: BorderStyle.DASHED, size: 4, color: scheme.border, space: 3 } },
       children: [
-        new TextRun({ text: `✦ ${copy.selfCheck}: `, bold: true, size: 16, color: NAVY }),
+        new TextRun({ text: `✦ ${copy.selfCheck}: `, bold: true, size: 16, color: scheme.border }),
         new TextRun({ text: card.checkQuestion, size: 16 }),
       ],
     }));
   }
   return new TableCell({
-    borders: THIN_BORDERS,
+    // Цветная рамка по схеме карточки: набор из 4 схем читается как серия
+    // разных карточек, а не как серый прямоугольник.
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 12, color: scheme.border },
+      bottom: { style: BorderStyle.SINGLE, size: 12, color: scheme.border },
+      left: { style: BorderStyle.SINGLE, size: 12, color: scheme.border },
+      right: { style: BorderStyle.SINGLE, size: 12, color: scheme.border },
+    },
     width: { size: 50, type: WidthType.PERCENTAGE },
     margins: CELL_MARGINS,
     children,
@@ -1009,6 +1085,15 @@ function buildCrossword(c: Crossword, includeAnswers = true): (Paragraph | Table
     const numAt = new Map<string, number>();
     for (const n of c.numbers) numAt.set(`${n.row},${n.col}`, n.number);
 
+    // Ширина сетки считается от полосы набора, а не задаётся константой.
+    // Раньше ячейка была фиксированной 600 DXA: при 29 колонках таблица
+    // разъезжалась за поле набора, и Word либо обрезал её, либо уносил на
+    // следующую страницу пополам. Теперь доля колонки в процентах всегда
+    // даёт ровно 100% ширины полосы.
+    const cols = c.grid[0].length;
+    const cellPct = Math.max(2, Math.floor(100 / Math.max(1, cols)));
+    const cellWidth = { size: cellPct, type: WidthType.PERCENTAGE } as const;
+
     const rows: TableRow[] = [];
     for (let r = 0; r < c.grid.length; r++) {
       const cells: TableCell[] = [];
@@ -1018,9 +1103,9 @@ function buildCrossword(c: Crossword, includeAnswers = true): (Paragraph | Table
         if (ch === null) {
           cells.push(
             new TableCell({
-              width: { size: 600, type: WidthType.DXA }, // ~1.05cm
+              width: cellWidth,
               borders: NO_BORDERS,
-              shading: { fill: "FFFFFF" },
+              shading: { fill: "FFFFFF", type: ShadingType.CLEAR, color: "auto" },
               children: [new Paragraph("")],
             }),
           );
@@ -1028,7 +1113,7 @@ function buildCrossword(c: Crossword, includeAnswers = true): (Paragraph | Table
           cells.push(
             new TableCell({
               borders: THIN_BORDERS,
-              width: { size: 600, type: WidthType.DXA },
+              width: cellWidth,
               children: [
                 new Paragraph({
                   alignment: AlignmentType.LEFT,
@@ -1041,9 +1126,13 @@ function buildCrossword(c: Crossword, includeAnswers = true): (Paragraph | Table
           );
         }
       }
-      rows.push(new TableRow({ children: cells, height: { value: 600, rule: "atLeast" } }));
+      // Строка сетки не должна разрываться: половина кроссворда на одной
+      // странице и половина на другой делают задание нерешаемым.
+      rows.push(
+        new TableRow({ children: cells, height: { value: 600, rule: "atLeast" }, cantSplit: true }),
+      );
     }
-    out.push(new Table({ rows }));
+    out.push(new Table({ rows, width: FULL_WIDTH }));
     out.push(spacer());
   }
 
@@ -1073,40 +1162,26 @@ function buildCrossword(c: Crossword, includeAnswers = true): (Paragraph | Table
 
 // ---------- Новые типы заданий ----------
 
-/** Сетка для поиска слов: буквы в таблице. */
+/**
+ * Сетка для поиска слов: буквы в таблице.
+ *
+ * Сама раскладка вынесена в `word-search.ts` — там она детерминирована и
+ * проверяется тестами. Здесь только отображение: та же функция используется
+ * предпросмотром, поэтому на экране и на печати поле одинаковое.
+ */
 function wordSearchGrid(words: string[]): Table {
-  const size = Math.max(8, Math.ceil(Math.sqrt(words.join("").length)) + 2);
-  const grid: string[][] = Array.from({ length: size }, () => Array(size).fill(""));
-  
-  // Простая раскладка: слова по горизонтали в случайных местах
-  let wordIndex = 0;
-  for (const word of words) {
-    if (wordIndex >= size) break;
-    const row = wordIndex;
-    const startCol = Math.floor((size - word.length) / 2);
-    for (let i = 0; i < word.length && startCol + i < size; i++) {
-      grid[row][startCol + i] = word[i];
-    }
-    wordIndex++;
-  }
-  
-  // Заполняем пустые клетки случайными буквами
-  const letters = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
-  for (let r = 0; r < size; r++) {
-    for (let c = 0; c < size; c++) {
-      if (!grid[r][c]) {
-        grid[r][c] = letters[Math.floor(Math.random() * letters.length)];
-      }
-    }
-  }
-  
-  const rows: TableRow[] = grid.map((row) =>
+  const grid = buildWordSearchGrid(words);
+  const cellPct = Math.max(3, Math.floor(100 / grid.size));
+  const rows: TableRow[] = grid.cells.map((row) =>
     new TableRow({
+      // Строка сетки не разрывается: половина поля на одной странице и
+      // половина на другой делают задание нерешаемым.
+      cantSplit: true,
       children: row.map(
         (letter) =>
           new TableCell({
             borders: THIN_BORDERS,
-            width: { size: Math.floor(100 / size), type: WidthType.PERCENTAGE },
+            width: { size: cellPct, type: WidthType.PERCENTAGE },
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,

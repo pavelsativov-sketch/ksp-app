@@ -20,7 +20,6 @@ export default async function HomePage() {
   ];
   const benefitIcons = [BookOpen, Languages, FileText, PencilLine];
   const featureIcons = [BookOpen, Languages, Layers, Presentation, PencilLine, FileText];
-  const testimonialAvatarClasses = [s.testimonialAvatarBlue, s.testimonialAvatarCyan, s.testimonialAvatarOrange];
   return <div className={s.landing}>
     <section className={s.hero} aria-labelledby="hero-title">
       <div className={`${s.shell} ${s.heroGrid}`}>
@@ -40,17 +39,6 @@ export default async function HomePage() {
       return <span key={b}><Icon />{b}</span>;
     })}</div></div>
 
-    <section className={s.statsSection} aria-label="Статистика">
-      <div className={s.shell}>
-        <div className={s.statsGrid}>
-          <div className={s.statItem}><span className={s.statValue}>{l.statsTeachers}</span><span className={s.statLabel}>{l.statsTeachersLabel}</span></div>
-          <div className={s.statItem}><span className={s.statValue}>{l.statsPlans}</span><span className={s.statLabel}>{l.statsPlansLabel}</span></div>
-          <div className={s.statItem}><span className={s.statValue}>{l.statsSubjects}</span><span className={s.statLabel}>{l.statsSubjectsLabel}</span></div>
-          <div className={s.statItem}><span className={s.statValue}>{l.statsTime}</span><span className={s.statLabel}>{l.statsTimeLabel}</span></div>
-        </div>
-      </div>
-    </section>
-
     <section id="kit" className={`${s.shell} ${s.section}`} aria-labelledby="kit-title">
       <div className={s.sectionHeading}><div><p className={s.kicker}>{l.kitKicker}</p><h2 id="kit-title">{l.kitTitleA}<br /><span>{l.kitTitleB}</span></h2></div><p>{l.kitLead}</p></div>
       <div className={s.kitGrid}>
@@ -68,8 +56,6 @@ export default async function HomePage() {
     <section className={`${s.shell} ${s.section}`} aria-labelledby="teacher-title"><div className={s.teacherPanel}><div className={s.teacherArt} aria-hidden="true"><span className={s.artKicker}>{l.teacherArt}</span><div className={s.bookOne}>{l.teacherBook}<span>Mekty</span></div><div className={s.artScribble}>{l.teacherScribbleA}<br />{l.teacherScribbleB}</div><div className={s.sunDisc}><b>{l.teacherIdeas}</b></div></div><div className={s.teacherCopy}><p className={s.kicker}>{l.teacherKicker}</p><h2 id="teacher-title">{l.teacherTitleA}<br />{l.teacherTitleB}<br /><span>{l.teacherTitleC}</span></h2><p>{l.teacherText}</p><ul>{l.teacherBullets.map((b) => <li key={b}><Check />{b}</li>)}</ul><Link href={createHref} className={s.textAction}>{l.tryTopic}<ArrowRight size={18} /></Link></div></div></section>
 
     <section className={`${s.shell} ${s.pricingSection}`} aria-labelledby="plans-title"><div className={s.sectionHeading}><div><p className={s.kicker}>{l.plansKicker}</p><h2 id="plans-title">{l.plansTitle}</h2></div><Link href="/pricing" className={s.textAction}>{l.allTariffs}<ArrowUpRight size={18} /></Link></div><div className={s.pricingGrid}><article className={s.freePlan}><div><span className={s.planEyebrow}>ПОЗНАКОМИТЬСЯ</span><h3>Старт</h3><p>Попробуйте на ближайшем уроке.</p></div><div className={s.price}>0 ₸<span>без карты</span></div><ul><li><Check />3 КСП в месяц</li><li><Check />Рабочие листы с водяным знаком</li><li><Check />Базовый квиз</li></ul><Link href={createHref} className={s.secondary}>Начать бесплатно<ArrowRight size={17} /></Link></article><article className={s.proPlan}><div><span className={s.planEyebrow}>ДЛЯ РЕГУЛЯРНОЙ ПОДГОТОВКИ</span><h3>Учитель <span>Pro</span></h3><p>Больше свободы для ваших идей.</p></div><div className={s.price}>2 490 ₸<span>в месяц</span></div><ul><li><Check />КСП без жёсткой квоты · ориентир 60/мес.</li><li><Check />Материалы без водяного знака</li><li><Check />50 ИИ-иллюстраций в месяц</li></ul><Link href="/pricing" className={s.primary}>Подробнее о Pro<ArrowUpRight size={18} /></Link></article></div></section>
-
-    <section className={s.testimonialsSection} aria-labelledby="testimonials-title"><div className={`${s.shell} ${s.section}`}><div className={s.sectionHeading}><div><p className={s.kicker}>{l.testimonialsKicker}</p><h2 id="testimonials-title">{l.testimonialsTitleA}<br /><span>{l.testimonialsTitleB}</span></h2></div><p>{l.testimonialsLead}</p></div><div className={s.testimonialsGrid}>{l.testimonials.map(({ text, name, role }, i) => <article key={name} className={s.testimonialCard}><p className={s.testimonialText}>{text}</p><div className={s.testimonialAuthor}><span className={`${s.testimonialAvatar} ${testimonialAvatarClasses[i] ?? testimonialAvatarClasses[0]}`}>{name.charAt(0)}</span><div><div className={s.testimonialName}>{name}</div><div className={s.testimonialRole}>{role}</div></div></div></article>)}</div></div></section>
 
     <section className={`${s.shell} ${s.section} ${s.faqSection}`} aria-labelledby="faq-title"><div><p className={s.kicker}>{l.faqKicker}</p><h2 id="faq-title">{l.faqTitle}</h2></div><div className={s.faqList}>{faqs.map(({ question, answer }, index) => <details key={question}><summary><span className={s.faqNumber}>0{index + 1}</span>{question}<span className={s.faqPlus} aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div></section>
 

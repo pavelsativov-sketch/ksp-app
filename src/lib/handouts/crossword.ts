@@ -30,7 +30,12 @@ export function layoutCrossword(
   // Sort: longest first.
   cleaned.sort((a, b) => b.word.length - a.word.length);
 
-  const SIZE = gridSize ?? Math.max(15, Math.min(30, cleaned.length * 3 + 5));
+  // Размер сетки ограничен сверху: кроссворд должен помещаться на листе
+  // А4 и оставаться читаемым. При 30 колонках ячейка выходила уже 1 см, а
+  // сетка — шире полосы набора, и Word переносил её на следующую страницу или
+  // обрезал. 18 колонок дают ячейку ~1.6 см: цифра номера и буква помещаются,
+  // а учитель может от руки обвести найденное слово.
+  const SIZE = gridSize ?? Math.max(12, Math.min(18, cleaned.length * 2 + 4));
   const grid: (string | null)[][] = Array.from({ length: SIZE }, () =>
     Array<string | null>(SIZE).fill(null),
   );
@@ -147,7 +152,14 @@ interface Placement {
   direction: "across" | "down";
 }
 
-function findPlacement(
+/**
+ * Первое подходящее размещение через пересечение с уже стоящим словом.
+ *
+ * Оставлено как эталон для `findBestPlacement`: он перебирает варианты и
+ * выбирает лучший по числу пересечений, а этот возвращает первый попавшийся.
+ * Используется в тестах, чтобы проверить границы `fits()`.
+ */
+export function findPlacement(
   grid: (string | null)[][],
   word: string,
   size: number,

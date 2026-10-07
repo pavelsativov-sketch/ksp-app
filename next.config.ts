@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -40,7 +41,31 @@ const securityHeaders = [
   },
 ];
 
+type WorkersEnvRequest = { request?: string };
+type WorkersEnvFactory = {
+  hooks: { beforeResolve: { tap: (name: string, callback: (request: WorkersEnvRequest) => void) => void } };
+};
+type WorkersEnvCompiler = {
+  hooks: { normalModuleFactory: { tap: (name: string, callback: (factory: WorkersEnvFactory) => void) => void } };
+};
+
 const nextConfig: NextConfig = {
+  webpack(config) {
+    // Browser Run launch receives the binding object explicitly. This shim
+    // replaces the Workers-only ambient import used by optional convenience
+    // helpers inside @cloudflare/playwright in the shared Next server bundle.
+    const workersEnvShim = path.resolve(process.cwd(), "src/lib/cloudflare-workers-env-shim.ts");
+    config.plugins.push({
+      apply(compiler: unknown) {
+        (compiler as WorkersEnvCompiler).hooks.normalModuleFactory.tap("MektyWorkersEnvShim", (factory) => {
+          factory.hooks.beforeResolve.tap("MektyWorkersEnvShim", (request) => {
+            if (request?.request === "cloudflare:workers") request.request = workersEnvShim;
+          });
+        });
+      },
+    });
+    return config;
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

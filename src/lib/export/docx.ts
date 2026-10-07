@@ -345,7 +345,7 @@ function renderTask(task: InteractiveTask, n: number): Paragraph[] {
   return body;
 }
 
-/** Колонтитул с пометкой бесплатного тарифа; null — не нужен (Pro/демо-режим решает вызывающий). */
+/** Колонтитул с пометкой бесплатного тарифа; null — не нужен (решает вызывающий). */
 export function buildFreeWatermarkFooter(): Footer {
   return new Footer({
     children: [

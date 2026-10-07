@@ -46,3 +46,12 @@ yarn-error.log*
 next-env.d.ts
 # песочницы агента
 /workspace-data
+/.work/
+/outputs/
+
+# Автотесты: учётные данные тестовых аккаунтов и артефакты прогонов.
+# Файл создаёт scripts/seed-test-accounts.mjs; в нём пароли тестовых учителей.
+tests/e2e/.accounts.json
+test-results/
+playwright-report/
+tests/e2e/.auth.json

@@ -76,7 +76,7 @@ export function AgentLogApp() {
       const res = await fetch('/api/agents/task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schoolId: 'demo', prompt: userMsg }),
+        body: JSON.stringify({ prompt: userMsg }),
       });
       const data = await res.json();
       if (data.taskId) {

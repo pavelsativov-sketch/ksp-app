@@ -4,6 +4,7 @@ import { illustrateFlashcards, illustrateWorksheetTasks } from "./images";
 import { executeWithFallback, getResponseFormat, isAnyProviderConfigured } from "@/lib/ai/providers";
 import { extractJson } from "@/lib/ai/extract-json";
 import { HandoutQuotaError } from "@/lib/billing/quota-error";
+import { buildLocalCrossword, buildLocalFlashcards } from "./local-flashcards";
 import { buildLocalWorksheet } from "./local-worksheet";
 import { log } from "@/lib/logger";
 import type {
@@ -21,13 +22,36 @@ import type {
 /**
  * Генерация раздаточного материала по теме урока.
  *
- * Использует общий набор текстовых AI-провайдеров. Если ключей нет,
- * возвращает детерминированный вариант для демо.
+ * Использует общий набор текстовых AI-провайдеров. Если они недоступны,
+ * применяет локальный конструктор с явной отметкой о необходимости проверки.
  */
 export async function generateHandout(input: HandoutInput): Promise<Handout> {
-  // Стаб работает без провайдеров — квоту под него не резервируем.
+  // Локальная версия остаётся полезной и честно помеченной как degraded.
+  // Она не выдаёт шаблон за результат AI и не списывает AI-квоту.
   if (!isAnyProviderConfigured() && !process.env.OPENAI_API_KEY) {
-    return { ...stubHandout(input), stub: true } as Handout;
+    if (input.kind === "worksheet") {
+      const sheet: Worksheet = { kind: "worksheet", language: input.language, ...buildLocalWorksheet(input), degraded: true, learningObjectives: input.kspContext?.learningObjectives };
+      if (input.withImages || input.generateImages) {
+        const { items, created } = await illustrateWorksheetTasks(sheet.tasks, { topic: input.topic, subject: input.subject, grade: input.grade }, imageSlotReserver(input));
+        sheet.tasks = items;
+        sheet.imagesFailed = items.some((task) => task.imagePromptEn?.trim()) && created === 0;
+      }
+      return sheet;
+    }
+    if (input.kind === "flashcards") {
+      const set = buildLocalFlashcards(input);
+      if (input.withImages) {
+        const { items, created } = await illustrateFlashcards(set.cards, { topic: input.topic, subject: input.subject, grade: input.grade, language: input.language }, imageSlotReserver(input));
+        set.cards = items;
+        set.imagesFailed = set.cards.length > 0 && created === 0;
+      }
+      return set;
+    }
+    const puzzle = buildLocalCrossword(input);
+    if (puzzle.grid.length === 0) {
+      throw new Error("Не удалось составить кроссворд: добавьте не менее трёх терминов из темы или целей урока.");
+    }
+    return puzzle;
   }
   // Слот за текстовую генерацию — до обращения к провайдерам.
   const genSlot = input.quota ? await input.quota.reserve("generation") : { ok: true as const };
@@ -37,6 +61,7 @@ export async function generateHandout(input: HandoutInput): Promise<Handout> {
   let keepGenerationSlot = true;
   try {
     const handout = await runGeneration(input);
+    await genSlot.finalize?.(true);
     return handout;
   } catch (e) {
     // Не списать слот за неудачную генерацию.
@@ -67,8 +92,14 @@ async function runGeneration(input: HandoutInput): Promise<Handout> {
         grade: input.grade,
       }, imageSlotReserver(input));
       sheet.tasks = items;
-      // Просили картинки, но провайдер не дал ни одной — печатаем пометку в .docx.
-      sheet.imagesFailed = created < items.length;
+      // Пометка ставится только когда провайдер не дал ни одной картинки.
+      // Раньше сравнивалось `created < items.length`, где items — ВСЕ задания,
+      // а иллюстрируются лишь те, у которых модель выдала imagePromptEn.
+      // Если промпты были у 2 заданий из 6 и обе картинки пришли, учитель
+      // получал в документе «сервис изображений временно недоступен» при
+      // полном успехе — и не доверял материалу зря.
+      const illustratable = items.filter((task) => task.imagePromptEn && task.imagePromptEn.trim()).length;
+      sheet.imagesFailed = illustratable > 0 && created === 0;
     }
     if (input.cardLayout) {
       sheet.cardLayout = true;
@@ -79,7 +110,7 @@ async function runGeneration(input: HandoutInput): Promise<Handout> {
     return sheet;
   }
   if (input.kind === "flashcards") {
-    const set = await aiFlashcards(input);
+    const set = await flashcardsWithFallback(input);
     if (input.withImages) {
       const { items, created } = await illustrateFlashcards(set.cards, {
         topic: input.topic,
@@ -88,11 +119,15 @@ async function runGeneration(input: HandoutInput): Promise<Handout> {
         language: input.language,
       }, imageSlotReserver(input));
       set.cards = items;
-      set.imagesFailed = created < items.length;
+      // Для памяток промпт строится из самой карточки, поэтому иллюстрируются
+      // все. Пометка ставится, когда провайдер не вернул ни одной картинки —
+      // раньше она сравнивала created с числом карточек и срабатывала бы
+      // при частичном успехе, а это норма, а не сбой.
+      set.imagesFailed = items.length > 0 && created === 0;
     }
     return set;
   }
-  return await aiCrossword(input);
+  return await crosswordWithFallback(input);
 }
 
 /** Резерватор слотов квоты изображений для генератора иллюстраций. */
@@ -191,10 +226,45 @@ async function aiWorksheet(input: HandoutInput): Promise<Worksheet> {
   // обрывается, часть заданий не проходит валидацию). Без этого учитель
   // выбирал «5 заданий» и получал 2. Просим по одному недостающему, пока
   // не наберётся нужное количество.
-  const filled = await topUpWorksheetTasks(input, parsed.tasks);
   const target = Math.max(3, Math.min(input.count, 10));
-  if (filled.length !== target) {
-    throw new Error(`AI: удалось подготовить ${filled.length} из ${target} заданий. Попробуйте ещё раз или уменьшите количество.`);
+  let filled: WorksheetTask[] = [];
+  try {
+    filled = await topUpWorksheetTasks(input, parsed.tasks);
+  } catch (err) {
+    // Добивка тоже может упасть: провайдер ушёл в 429 посреди задачи.
+    // Раньше эта ошибка вылетала наружу и учитель получал 500 вместо листа,
+    // хотя первую часть AI уже вернул и она годна к печати.
+    log.warn("Добивка заданий не удалась, отдаём то, что есть", {
+      topic: input.topic,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  if (filled.length < target) {
+    if (filled.length >= 3) {
+      // Трёх заданий достаточно для рабочего листа: предупреждаем и
+      // печатаем, вместо того чтобы отнимать материал целиком.
+      log.warn("Лист неполон", { topic: input.topic, have: filled.length, target });
+      return {
+        kind: "worksheet",
+        language: input.language,
+        ...parsed,
+        tasks: enforceTenPoints(normalizeWorksheetTasks(filled)),
+        degraded: true,
+      };
+    }
+    // Меньше трёх — это не лист. Отдаём локальный шаблон: он гарантированно
+    // собирается и печатается.
+    log.warn("AI вернул слишком мало заданий, собираем локальный шаблон", {
+      topic: input.topic,
+      have: filled.length,
+    });
+    return {
+      kind: "worksheet",
+      language: input.language,
+      ...buildLocalWorksheet(input),
+      degraded: true,
+    };
   }
   return { kind: "worksheet", language: input.language, ...parsed, tasks: enforceTenPoints(normalizeWorksheetTasks(filled)) };
 }
@@ -324,6 +394,25 @@ async function aiFlashcards(input: HandoutInput): Promise<FlashcardSet> {
   return { kind: "flashcards", language: input.language, ...parsed };
 }
 
+/**
+ * Карточки с запасным путём.
+ *
+ * Отказ AI раньше заканчивался 500: учитель остался без памяток, хотя тема
+ * и цели урока были известны. Теперь комплект собирается из слов темы, а
+ * `degraded` честно сообщает интерфейсу, что формулировки нужно уточнить.
+ */
+async function flashcardsWithFallback(input: HandoutInput): Promise<FlashcardSet> {
+  try {
+    return await aiFlashcards(input);
+  } catch (err) {
+    log.warn("AI-памятки недоступны, собираем по словам темы", {
+      topic: input.topic,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    return buildLocalFlashcards(input);
+  }
+}
+
 async function aiCrossword(input: HandoutInput): Promise<Crossword> {
   const objectives = (input.kspContext?.learningObjectives ?? []).filter((o) => o.trim());
   // Свои слова учителя: без AI, только нормализация и раскладка.
@@ -341,6 +430,34 @@ async function aiCrossword(input: HandoutInput): Promise<Crossword> {
 Для каждого — короткое определение-подсказка (clue) на ${input.language === "kz" ? "казахском" : "русском"}.${objectives.length ? `\nСлова должны отражать цели урока:\n${objectives.map((o) => `• ${o}`).join("\n")}` : ""}`;
   const parsed = await chatJson("tasks", "crossword_words", crosswordSchema(), user, 0.5, (content) => validateCrossword(content, input.language));
   return { ...layoutCrossword(parsed.words, parsed.title, parsed.intro), language: input.language };
+}
+
+/**
+ * Кроссворд с запасным путём.
+ *
+ * Пустой кроссворд учителю бесполезен, поэтому если из темы не набирается
+ * трёх слов, возвращается понятная ошибка с подсказкой, а не документ с
+ * одним заголовком. Всё остальное собирается и печатается.
+ */
+async function crosswordWithFallback(input: HandoutInput): Promise<Crossword> {
+  try {
+    return await aiCrossword(input);
+  } catch (err) {
+    const fallback = buildLocalCrossword(input);
+    if (fallback.grid.length === 0) {
+      throw new Error(
+        input.language === "kz"
+          ? `Кроссворд собрать не удалось: в теме «${input.topic}» меньше трёх слов длиной от 3 букв. Укажите слова самостоятельно.`
+          : `Не удалось собрать кроссворд: в теме «${input.topic}» меньше трёх слов длиной от 3 букв. Укажите слова самостоятельно.`,
+      );
+    }
+    log.warn("AI-кроссворд недоступен, собираем по словам темы", {
+      topic: input.topic,
+      reason: err instanceof Error ? err.message : String(err),
+      words: fallback.placed.length,
+    });
+    return { ...fallback, degraded: true };
+  }
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -946,215 +1063,3 @@ export function enforceTenPoints(tasks: WorksheetTask[]): WorksheetTask[] {
   scored.forEach((task, i) => { task.points = min + floors[i]; });
   return tasks;
 }
-
-/**
- * Демо-вариант без настроенных AI-ключей: детерминированный, но структурно
- * полный (критерии, дескрипторы, сумма баллов 10, ответы для учителя).
- * Картинки в заглушке не запрашиваются.
- */
-function stubHandout(input: HandoutInput): Handout {
-  if (input.language === "kz") return stubHandoutKz(input);
-  const topic = input.topic.trim() || input.subject;
-  if (input.kind === "flashcards") {
-    const cards: Flashcard[] = Array.from({ length: Math.max(3, input.count) }, (_, i) => ({
-      front: ["Ключевая идея", "Правило", "Пример", "Проверь себя", "Частая ошибка", "Применение"][i % 6],
-      back: `Карточка для изучения темы «${topic}». Нужное объяснение создаётся по материалу урока.`,
-      example: `Запиши один конкретный пример по теме «${topic}» из учебника или своей жизни.`,
-      checkQuestion: `Как ты объяснишь эту идею на примере по теме «${topic}»?`,
-    }));
-    return {
-      kind: "flashcards",
-      language: input.language,
-      title: `Памятки: ${topic}`,
-      intro: "Набор памяток «термин ↔ определение» (демо).",
-      cards,
-    };
-  }
-  if (input.kind === "crossword") {
-    // Свои слова работают и без AI-ключей.
-    if (input.customWords && input.customWords.length > 0) {
-      try {
-        const parsed = validateCrossword(JSON.stringify({
-          title: `Кроссворд: ${topic}`,
-          intro: "",
-          words: input.customWords,
-        }));
-        return { ...layoutCrossword(parsed.words, parsed.title, parsed.intro), language: input.language };
-      } catch {
-        // Невалидные слова — падаем в демо-сетку ниже.
-      }
-    }
-    const pool = ["УРОК", "ТЕМА", "КЛАСС", "ЗНАНИЕ", "НАВЫК", "ОЦЕНКА", "ШКОЛА", "ЗАДАЧА", "ПОРЯДОК", "РЕЗУЛЬТАТ", "СОВЕТ", "ОПЫТ"];
-    const words: CrosswordWord[] = pool
-      .slice(0, Math.max(3, Math.min(input.count, pool.length)))
-      .map((word, i) => ({ word, clue: `Слово ${i + 1}, связанное с темой «${topic}».` }));
-    return { ...layoutCrossword(words, `Кроссворд: ${topic}`, "Демо-сетка (пример)."), language: input.language };
-  }
-
-  // Рабочий лист: эталонный каркас (sort → checklist → open/case → match → interactive → creative → reflection).
-  // Без AI-ключей факты темы неизвестны — структурный каркас для примера.
-  const n = Math.max(3, Math.min(10, input.count));
-  const withReflection = n >= 5;
-  const scoredCount = withReflection ? n - 1 : n;
-  const basePoints = Math.floor(10 / scoredCount);
-  const extra = 10 - basePoints * scoredCount;
-  const tasks: WorksheetTask[] = [];
-  const skeleton = stubEtalonSkeleton(topic, input);
-  for (let i = 0; i < scoredCount; i++) {
-    const task = skeleton[i % skeleton.length];
-    task.points = basePoints + (i < extra ? 1 : 0);
-    // Этапы урока: начало — 2 задания, середина — основная часть, конец — последнее.
-    task.stage = i < 2 ? "start" : i === scoredCount - 1 ? "end" : "middle";
-    tasks.push(task);
-  }
-  if (withReflection) {
-    tasks.push({
-      type: "reflection",
-      stage: "end",
-      prompt: "Оцени свою работу.",
-      criterion: "Оценивает свою работу",
-      descriptor: "Выбран один смайлик рефлексии",
-      points: 0,
-      reflectionOptions: ["Всё понял(а)", "Есть сомнения", "Нужна помощь"],
-    });
-  }
-  return {
-    kind: "worksheet",
-    language: input.language,
-    title: `Рабочий лист: ${topic}`,
-    intro: `Рабочий лист по теме «${topic}» (${input.subject}, ${input.grade} класс).`,
-    metaLine: `ФИО ученика: ____ Класс: ${input.grade} Дата: ____`,
-    tasks: normalizeWorksheetTasks(tasks),
-    cardLayout: Boolean(input.cardLayout || input.withImages || input.generateImages),
-  };
-}
-
-/** Kazakh demo data used only when no text model is configured. */
-function stubHandoutKz(input: HandoutInput): Handout {
-  if (input.kind === "flashcards") {
-    const terms = ["Негізгі ой", "Ереже", "Мысал", "Өзіңді тексер", "Жиі қате", "Қолдану"];
-    return {
-      kind: "flashcards", language: "kz", stub: true,
-      title: "Оқу карточкалары",
-      intro: "Көрсетілім нұсқасы. Нақты карточкалар сабақ тақырыбына сай AI қызметі қосылғанда жасалады.",
-      cards: Array.from({ length: Math.max(3, Math.min(input.count, 30)) }, (_, i) => ({
-        front: terms[i % terms.length],
-        back: "Бұл карточканың нақты пәндік мазмұны AI қызметі қосылғанда жасалады.",
-        example: "Оқулықтан сабақ тақырыбына сай нақты мысал таңдаңыз.",
-        checkQuestion: "Осы ойды өз мысалыңмен қалай түсіндіресің?",
-      })),
-    };
-  }
-  if (input.kind === "crossword") {
-    if (input.customWords?.length) {
-      try {
-        const parsed = validateCrossword(JSON.stringify({ title: "Сөзжұмбақ", intro: "", words: input.customWords }), "kz");
-        return { ...layoutCrossword(parsed.words, parsed.title, parsed.intro), language: "kz", stub: true };
-      } catch { /* use the local demo below */ }
-    }
-    const words: CrosswordWord[] = ["САБАҚ", "ТАҚЫРЫП", "БІЛІМ", "ДӘЛЕЛ", "ӘДІС", "МЫСАЛ", "ЕРЕЖЕ", "ТАЛДАУ", "НӘТИЖЕ", "СЫНЫП", "ОҚУШЫ", "ҚОРЫТЫНДЫ"]
-      .slice(0, Math.max(3, Math.min(input.count, 12)))
-      .map((word, i) => ({ word, clue: `${i + 1}-сөз: оқу мен білімге қатысты ұғым.` }));
-    return { ...layoutCrossword(words, "Сөзжұмбақ", "Көрсетілім нұсқасы. Нақты сөздер сабақ тақырыбына сай AI қызметі қосылғанда жасалады."), language: "kz", stub: true };
-  }
-  const common = { criterion: "Тақырыпқа қатысты жауабын жазады", descriptor: "Жауап тапсырма талабына сай берілген", points: 0, stage: "middle" as const };
-  const skeleton: WorksheetTask[] = [
-    { ...common, type: "open", prompt: "Оқулықтан бір негізгі терминді жазып, мағынасын түсіндір.", expectedAnswer: "Оқушының пәнге сәйкес жауабы қабылданады." },
-    { ...common, type: "checklist", prompt: `Жұмысыңды тексер. Орындаған тұжырымдарыңа белгі қой.`, options: ["Жауапты тақырыппен байланыстырдым", "Нақты мысал келтірдім", "Нәтижемді тексердім"], correctFlags: [true, true, true], expectedAnswer: "Үш тұжырымның бәрі белгіленеді." },
-    { ...common, type: "case_study", prompt: "Жағдаятты талдап, өз шешіміңді дәлелде.", situation: "Оқушы сабақ тақырыбы бойынша жауап дайындады. Ол бір мысал келтіріп, нәтижесін оқулықтағы ережемен салыстырды.", expectedAnswer: "Жауап оқулықтағы нақты ережеге және мысалға сүйенуі керек." },
-    { ...common, type: "match", prompt: "Сөзді оған сәйкес келетін әрекетпен сәйкестендір.", options: ["Термин", "Мысал", "Қорытынды"], pairs: ["Негізгі ұғымның атауы", "Ереженің қолданылуын көрсетеді", "Талдаудан шыққан нәтиже"], expectedAnswer: "Термин — ұғым атауы; мысал — ереженің қолданылуы; қорытынды — талдау нәтижесі." },
-    { ...common, type: "creative", prompt: "Сабақ тақырыбына қатысты бір нақты мысал жаз:", expectedAnswer: "Мысал тақырыпқа қатысты және түсіндірмемен берілген." },
-  ];
-  const n = Math.max(3, Math.min(input.count, 10));
-  const tasks = skeleton.slice(0, n);
-  const base = Math.floor(10 / tasks.length), remainder = 10 - base * tasks.length;
-  tasks.forEach((task, i) => { task.points = base + (i < remainder ? 1 : 0); });
-  return {
-    kind: "worksheet", language: "kz", stub: true,
-    title: "Жұмыс парағы",
-    intro: "Көрсетілім нұсқасы. Нақты пәндік тапсырмалар сабақ тақырыбына сай AI қызметі қосылғанда жасалады.",
-    metaLine: `Оқушының аты-жөні: ____ Сынып: ${input.grade} Күні: ____`,
-    tasks,
-    cardLayout: Boolean(input.cardLayout || input.withImages || input.generateImages),
-  };
-}
-
-/** Эталонный каркас демо-листа: порядок как в качественных листах учителей. */
-function stubEtalonSkeleton(topic: string, input: HandoutInput): WorksheetTask[] {
-  return [
-    {
-      type: "sort",
-      prompt: `Распредели элементы по двум направлениям, связанным с темой «${topic}». Впиши номер каждого элемента в верную колонку.`,
-      criterion: "Распределяет элементы по двум направлениям темы",
-      descriptor: "Все элементы отнесены к верной группе",
-      points: 0,
-      groups: [`Относится к «${topic}»`, "Не относится / другое"],
-      items: [
-        `Главный термин темы «${topic}»`, `Пример из темы «${topic}»`, `Признак «${topic}»`,
-        `Применение «${topic}» в жизни`, `Правило темы «${topic}»`, `Схема по теме «${topic}»`,
-        `Факт о теме «${topic}»`, `Вопрос по теме «${topic}»`,
-        "Случайное слово", "Другая тема", "Лишний факт", "Посторонний пример",
-      ],
-      expectedAnswer: `Относится к «${topic}»: первые 8 элементов; не относится: последние 4.`,
-    },
-    {
-      type: "checklist",
-      prompt: `Отметь ✓, каким требованиям соответствует хороший результат по теме «${topic}». Придумай свой пример: ____.`,
-      criterion: "Отмечает верные признаки качественной работы",
-      descriptor: "Отмечены все верные пункты, неверные не отмечены",
-      points: 0,
-      options: [
-        `Связан с темой «${topic}» напрямую`,
-        "Содержит конкретный пример из жизни",
-        `Объясняет, почему «${topic}» важно`,
-        "Списан без понимания",
-        "Содержит ошибку в главном факте",
-      ],
-      correctFlags: [true, true, true, false, false],
-      expectedAnswer: "Верные: 1, 2, 3.",
-    },
-    {
-      type: "case_study",
-      prompt: "Прочитай кейс и ответь: 1) В чём главная проблема? 2) Какое решение предложишь? 3) Почему оно сработает?",
-      criterion: "Анализирует кейс и предлагает решение",
-      descriptor: "Проблема названа, решение конкретное и обоснованное",
-      points: 0,
-      situation: `Ученик готовит мини-проект по теме «${topic}» (${input.subject}, ${input.grade} класс): собрал 5 фактов, но 2 из них противоречат друг другу, один — без источника, а вывод повторяет заголовок. До защиты остался один вечер.`,
-      expectedAnswer: "Проблема — непроверенные факты и слабый вывод; решение — оставить 3 факта с источниками, перепроверить спорные, переписать вывод как ответ на вопрос темы.",
-    },
-    {
-      type: "match",
-      prompt: "Соедини элемент темы (слева) с его назначением (справа).",
-      criterion: "Соотносит элементы темы с назначением",
-      descriptor: "Все пары соединены верно",
-      points: 0,
-      options: [`Термин темы «${topic}» №1`, `Пример по теме «${topic}»`, `Правило темы «${topic}»`],
-      pairs: ["Объясняет главное понятие", "Показывает применение в жизни", "Помогает не ошибиться"],
-      expectedAnswer: "1–А, 2–Б, 3–В",
-    },
-    {
-      type: "interactive",
-      prompt: "Отсканируй QR-код или перейди по ссылке (учитель вставит ссылку на Wordwall/LearningApps). Выполни интерактив по теме и запиши свой результат.",
-      criterion: "Выполняет интерактив и фиксирует результат",
-      descriptor: "Результат записан",
-      points: 0,
-      link: null,
-      expectedAnswer: "Мой результат: ____ (заполняет ученик).",
-    },
-    {
-      type: "creative",
-      prompt: `Используя любой доступный ИИ-инструмент, создай памятку/инфографику «${topic}: главное за 1 минуту». Требования: 1) 🔑 3 ключевых факта темы; 2) 📌 1 пример из жизни; 3) ⚠️ 1 частая ошибка и как её избежать; 4) 🎨 аккуратное оформление.`,
-      criterion: "Создаёт памятку по теме с требованиями",
-      descriptor: "Есть 3 факта, пример, ошибка + оформление",
-      points: 0,
-      expectedAnswer: "Критерии: 3 факта верны; есть пример; указана ошибка и исправление; читаемое оформление.",
-    },
-  ];
-}
-
-/** Старый generic-каркас удалён: заменён на stubEtalonSkeleton (уровень эталона). */
-
-
-
-
-

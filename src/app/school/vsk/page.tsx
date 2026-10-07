@@ -1,7 +1,9 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { getVskSummary } from "@/lib/school-analytics";
+import { getSchoolMembers } from "@/lib/school";
 import { NoSchool } from "@/components/school/no-school";
+import { VskRecorder } from "@/components/school/vsk-recorder";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +14,11 @@ export default async function VskPage() {
   const school = user ? await getActiveSchool(user.id) : null;
   if (!school) return <NoSchool />;
 
-  const inspections = await getVskSummary(school._id!.toString()).catch(() => []);
+  const [inspections, members] = await Promise.all([
+    getVskSummary(school._id!.toString()).catch(() => []),
+    getSchoolMembers(school._id!.toString()).catch(() => []),
+  ]);
+  const teachers = members.filter((member) => member.role === "teacher").map((member) => ({ id: member.user_id, name: member.full_name, subject: member.subject }));
   const completed = inspections.filter((i) => i.status === "completed");
   const avg = completed.length ? Math.round(completed.reduce((s, i) => s + i.overall_score, 0) / completed.length) : null;
 
@@ -24,8 +30,10 @@ export default async function VskPage() {
         <p className="mt-1 text-sm text-muted-foreground">{formatSchoolSubtitle(school)}</p>
       </header>
 
+      <VskRecorder schoolId={school._id!.toString()} teachers={teachers} />
+
       {inspections.length === 0 ? (
-        <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Проверок пока нет. Они появляются после посещения уроков (демо-данные наполняют раздел примерами).</CardContent></Card>
+        <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Проверок пока нет. Добавьте проверку, чтобы сформировать историю ВШК.</CardContent></Card>
       ) : (
         <div className="space-y-4">
           {avg !== null && (

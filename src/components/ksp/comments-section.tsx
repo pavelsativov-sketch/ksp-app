@@ -73,9 +73,11 @@ function Avatar({ name, userId, size = "md" }: { name: string; userId: string; s
   );
 }
 
-export function CommentsSection({ planId, initialComments, isOwner }: Props) {
+// `isOwner` остаётся в Props: его передают вызывающие, и он нужен им для
+// своих проверок. Внутри компонента он не используется — права на удаление
+// проверяются на сервере.
+export function CommentsSection({ planId, initialComments }: Props) {
   const { locale } = useUiLocale();
-  const t = (key: string) => key; // fallback — используем встроенные строки
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -146,11 +148,12 @@ export function CommentsSection({ planId, initialComments, isOwner }: Props) {
     });
   }
 
-  function canDelete(_comment: Comment): boolean {
-    // Владелец плана может удалять любые комментарии; автор — только свои.
-    // Упрощаем: любой залогиненный пользователь может удалять свои (проверка на сервере).
-    return true;
-  }
+  // Кнопка удаления показывается всегда: проверка прав — на сервере, и клиент
+// без этого не знает, чей комментарий. Раньше аргумент принимался, но не
+// использовался, что сбивало с толку при чтении.
+function canDelete(): boolean {
+  return true;
+}
 
   return (
     <section className="no-print space-y-4">
@@ -202,26 +205,24 @@ export function CommentsSection({ planId, initialComments, isOwner }: Props) {
                 <div key={comment.id} className="space-y-2">
                   <CommentItem
                     comment={comment}
-                    isOwner={isOwner}
                     locale={locale}
                     timeAgo={timeAgo}
                     displayName={displayName}
                     onReply={() => setReplyTo(comment.id)}
                     onDelete={() => handleDelete(comment.id)}
-                    canDelete={canDelete(comment)}
+                    canDelete={canDelete()}
                   />
                   {/* Ответы */}
                   {replies(comment.id).map((reply) => (
                     <div key={reply.id} className="ml-10 space-y-2">
                       <CommentItem
                         comment={reply}
-                        isOwner={isOwner}
                         locale={locale}
                         timeAgo={timeAgo}
                         displayName={displayName}
                         onReply={() => setReplyTo(reply.id)}
                         onDelete={() => handleDelete(reply.id)}
-                        canDelete={canDelete(reply)}
+                        canDelete={canDelete()}
                         isReply
                       />
                     </div>
@@ -260,7 +261,6 @@ export function CommentsSection({ planId, initialComments, isOwner }: Props) {
 
 function CommentItem({
   comment,
-  isOwner,
   locale,
   timeAgo,
   displayName,
@@ -270,7 +270,6 @@ function CommentItem({
   isReply = false,
 }: {
   comment: Comment;
-  isOwner: boolean;
   locale: string;
   timeAgo: (iso: string, locale: string) => string;
   displayName: (c: Comment) => string;

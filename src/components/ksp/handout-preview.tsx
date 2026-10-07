@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Download, X } from "lucide-react";
+import { Download, Printer, Settings, X } from "lucide-react";
 import type { Crossword, FlashcardSet, Handout, Worksheet, WorksheetTask } from "@/lib/handouts/types";
 import { optionLetter, worksheetAnswerLines, worksheetTypeLabel } from "@/lib/handouts/answers";
 import { resolveErrorsCount, resolveTableRows } from "@/lib/handouts/layout";
+// Сетка поиска слов берётся из того же модуля, что и печать: иначе на
+// экране и на листе были бы разные головоломки.
+import { buildWordSearchGrid } from "@/lib/handouts/word-search";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { docTitle, docTopic, SaveKitButton } from "@/components/kits/save-kit-button";
@@ -22,7 +25,162 @@ function imageUrl(base64: string, mime?: string): string {
   return `data:${mime || "image/jpeg"};base64,${base64}`;
 }
 
-function TaskBody({ task, language, onLinkChange }: { task: WorksheetTask; language: "ru" | "kz"; onLinkChange?: (link: string) => void }) {
+/**
+ * Настройки предпросмотра.
+ *
+ * Перенесены из удалённого дубля `components/handouts/preview.tsx`: там была
+ * панель, которой не было в работающем компоненте, и файл числился
+ * мёртвым. Учителю нужен размер шрифта — лист с плотной вёрсткой плохо
+ * читается первокласснику, а растянуть его в Word после скачивания нельзя.
+ *
+ * Настройки влияют только на предпросмотр и печать с экрана. Скачанный
+ * .docx не меняется: его размеры задаёт Word. Это указано в подписи, иначе
+ * учитель решит, что ползунок «сломал» скачанный файл.
+ */
+export interface PreviewSettings {
+  fontSize: number;
+  spacing: number;
+  showAnswers: boolean;
+  showDescriptors: boolean;
+  showImages: boolean;
+}
+
+export const DEFAULT_SETTINGS: PreviewSettings = {
+  fontSize: 14,
+  spacing: 1,
+  showAnswers: true,
+  showDescriptors: true,
+  showImages: true,
+};
+
+const SETTINGS_COPY = {
+  ru: {
+    title: "Настройки",
+    fontSize: "Размер шрифта",
+    spacing: "Отступы между заданиями",
+    answers: "Ответы",
+    descriptors: "Дескрипторы",
+    images: "Картинки",
+    show: "Показать",
+    hide: "Скрыть",
+    hint: "Влияет на предпросмотр и печать с экрана. Скачанный Word-файл не меняется.",
+  },
+  kz: {
+    title: "Параметрлер",
+    fontSize: "Қаріп өлшемі",
+    spacing: "Тапсырмалар аралығы",
+    answers: "Жауаптар",
+    descriptors: "Дескрипторлар",
+    images: "Суреттер",
+    show: "Көрсету",
+    hide: "Жасыру",
+    hint: "Тек алдын ала қарау мен экраннан басып шығаруға әсер етеді. Жүктелген Word файлы өзгермейді.",
+  },
+} as const;
+
+function SettingsPanel({
+  settings,
+  onChange,
+  language,
+}: {
+  settings: PreviewSettings;
+  onChange: (next: PreviewSettings) => void;
+  language: "ru" | "kz";
+}) {
+  const copy = SETTINGS_COPY[language];
+  // Отдельная функция вместо возврата JSX из стрелки: без имени у элемента
+  // теряется имя компонента в стеке и в отладке React DevTools.
+  function ToggleButton({ settingKey, label }: { settingKey: keyof PreviewSettings; label: string }) {
+    return (
+    <button
+      type="button"
+      onClick={() => onChange({ ...settings, [settingKey]: !settings[settingKey] } as PreviewSettings)}
+      className={`print:hidden rounded px-2 py-1 text-xs ${
+        settings[settingKey] ? "bg-[#2B2D83] text-white" : "bg-slate-200 text-slate-700"
+      }`}
+    >
+      {settings[settingKey] ? copy.show : copy.hide}
+      <span className="sr-only"> — {label}</span>
+    </button>
+    );
+  }
+  const toggle = (key: keyof PreviewSettings, label: string) => (
+    <ToggleButton settingKey={key} label={label} />
+  );
+  return (
+    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 print:hidden">
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+        <div>
+          <label className="mb-1 block text-xs text-slate-600" htmlFor="preview-font-size">{copy.fontSize}</label>
+          <input
+            id="preview-font-size"
+            type="range"
+            min="11"
+            max="20"
+            value={settings.fontSize}
+            onChange={(e) => onChange({ ...settings, fontSize: Number(e.target.value) })}
+            className="w-full"
+          />
+          <span className="text-xs text-slate-500">{settings.fontSize}px</span>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-600" htmlFor="preview-spacing">{copy.spacing}</label>
+          <input
+            id="preview-spacing"
+            type="range"
+            min="0.5"
+            max="3"
+            step="0.5"
+            value={settings.spacing}
+            onChange={(e) => onChange({ ...settings, spacing: Number(e.target.value) })}
+            className="w-full"
+          />
+          <span className="text-xs text-slate-500">{settings.spacing}×</span>
+        </div>
+        <div>
+          <span className="mb-1 block text-xs text-slate-600">{copy.answers}</span>
+          {toggle("showAnswers", copy.answers)}
+        </div>
+        <div>
+          <span className="mb-1 block text-xs text-slate-600">{copy.descriptors}</span>
+          {toggle("showDescriptors", copy.descriptors)}
+        </div>
+        <div>
+          <span className="mb-1 block text-xs text-slate-600">{copy.images}</span>
+          {toggle("showImages", copy.images)}
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">{copy.hint}</p>
+    </div>
+  );
+}
+
+/**
+ * Тело задания с выбранным учителем размером шрифта.
+ *
+ * Размер применяется обёрткой, а не в каждом из 19 типов заданий: иначе
+ * ползунок настроек не влиял бы на текст внутри заданий, потому что там
+ * жёстко заданы классы `text-sm`. Учитель двигал ползунок и ничего не
+ * происходило.
+ */
+function TaskBody({ task, language, onLinkChange, fontSize }: {
+  task: WorksheetTask;
+  language: "ru" | "kz";
+  onLinkChange?: (link: string) => void;
+  fontSize?: number;
+}) {
+  return (
+    <div style={fontSize ? { fontSize: `${fontSize}px` } : undefined}>
+      <TaskBodyContent task={task} language={language} onLinkChange={onLinkChange} />
+    </div>
+  );
+}
+
+function TaskBodyContent({ task, language, onLinkChange }: {
+  task: WorksheetTask;
+  language: "ru" | "kz";
+  onLinkChange?: (link: string) => void;
+}) {
   const { t } = useUiLocale();
   const h = t.handouts;
   const label = language === "kz"
@@ -239,6 +397,119 @@ function TaskBody({ task, language, onLinkChange }: { task: WorksheetTask; langu
           {label.workField}
         </div>
       );
+    // Дальше типы, которые печатаются в .docx, но в предпросмотре раньше
+    // ничего не показывались: учитель видел заголовок задания с пустым
+    // телом и решал, что материал не сгенерировался.
+    case "word_search": {
+      // Та же сетка, что и на печати: предпросмотр обязан совпадать с листом.
+      const grid = buildWordSearchGrid(task.searchWords ?? []);
+      return (
+        <>
+          <div className="mt-2 inline-block border border-[#2B2D83]">
+            <table className="border-collapse">
+              <tbody>
+                {grid.cells.map((row, r) => (
+                  <tr key={r}>
+                    {row.map((letter, c) => (
+                      <td
+                        key={c}
+                        className="w-7 h-7 border border-slate-400 text-center align-middle text-sm font-medium"
+                      >
+                        {letter}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-slate-600">
+            {language === "kz" ? "Табылатын сөздер:" : "Найдите слова:"}{" "}
+            {(task.searchWords ?? []).join(" · ")}
+          </p>
+        </>
+      );
+    }
+    case "ordering": {
+      const items = task.orderItems ?? [];
+      return (
+        <>
+          <div className="mt-2 rounded border border-[#C77F42] bg-[#FFF2CC] px-3 py-2 text-sm">
+            {items.map((item, i) => (
+              <div key={i} className="flex gap-2 py-0.5">
+                <span className="w-6 shrink-0 rounded border border-slate-400 bg-white text-center text-xs leading-5">
+                  {i + 1}
+                </span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(0,1fr))] gap-1">
+            {Array.from({ length: Math.max(4, items.length) }).map((_, i) => (
+              <div key={i} className="border-b-2 border-dashed border-slate-400 h-6 text-xs text-slate-500">
+                {i + 1}.
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+    case "odd_one_out": {
+      const items = task.oddItems ?? [];
+      return (
+        <>
+          <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-sm">
+            {items.map((item, i) => (
+              <div key={i} className="flex items-center gap-2 border border-slate-300 rounded px-2 py-1 bg-white">
+                <span className={`font-bold ${NAVY}`}>☐</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-slate-600">
+            {language === "kz" ? "Қай элемент артық? Неліктен?" : "Какой элемент лишний? Почему?"}
+          </p>
+          <div className="border-b-2 border-dashed border-slate-400 h-6" />
+        </>
+      );
+    }
+    case "categorize": {
+      const categories = task.categories ?? [];
+      const items = task.categoryItems ?? [];
+      return (
+        <>
+          <div className="mt-2 rounded border border-[#C77F42] bg-[#FFF2CC] px-3 py-2 text-sm">
+            <b className={NAVY}>{language === "kz" ? "Сипаттамалар:" : "Элементы:"}</b>{" "}
+            {items.join("  ·  ")}
+          </div>
+          <table className="mt-2 w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                {categories.map((category) => (
+                  <th key={category} className="border-2 border-[#2B2D83] bg-[#3D6DB5] text-white px-2 py-1 text-left">
+                    {category}
+                  </th>
+                ))}
+                {categories.length === 0 && (
+                  <th className="border-2 border-[#2B2D83] bg-[#3D6DB5] text-white px-2 py-1 text-left">
+                    {language === "kz" ? "Категория" : "Категория"}
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: Math.max(3, Math.ceil(items.length / Math.max(1, categories.length))) }).map((_, i) => (
+                <tr key={i}>
+                  {(categories.length > 0 ? categories : [""]).map((category, c) => (
+                    <td key={`${category}-${c}`} className="border-2 border-[#2B2D83] px-2 py-1 h-7">&nbsp;</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      );
+    }
     default:
       return null;
   }
@@ -249,32 +520,29 @@ function WorksheetView({
   onRegenerate,
   regenBusyIndex,
   onLinkChange,
+  settings = DEFAULT_SETTINGS,
 }: {
   sheet: Worksheet;
   /** Точечная замена задания (тот же тип/этап/баллы). */
   onRegenerate?: (index: number) => void;
   regenBusyIndex?: number | null;
   onLinkChange?: (index: number, link: string) => void;
+  settings?: PreviewSettings;
 }) {
   const { locale, t } = useUiLocale();
   const h = t.handouts;
   const contentLanguage = sheet.language ?? (locale === "kk" ? "kz" : "ru");
   const kazakh = contentLanguage === "kz";
   const copy = kazakh
-    ? { task: "Тапсырма", criterion: "Бағалау критерийі", descriptor: "Дескриптор", student: "Оқушының аты-жөні: ____", classDate: `Сынып: ____ Күні: ____`, answers: "Мұғалімге жауаптар", groups: ["1-топ", "2-топ"] as [string, string], taskN: "Тапсырма №", descriptors: "Бағалау дескрипторлары", demo: "Көрсетілім нұсқасы. Нақты тапсырмалар AI қызметі қосылғанда жасалады.", answerDetails: "Жауаптар мен бағалау дескрипторларын көрсету" }
-    : { task: "Задание", criterion: "Критерий оценивания", descriptor: "Дескриптор", student: "ФИО ученика: ____", classDate: "Класс: ____ Дата: ____", answers: "Ответы", groups: ["Группа 1", "Группа 2"] as [string, string], taskN: "Задание №", descriptors: h.descriptorsH, demo: h.demoWorksheet, answerDetails: h.answersDetails };
+    ? { task: "Тапсырма", criterion: "Бағалау критерийі", descriptor: "Дескриптор", student: "Оқушының аты-жөні: ____", classDate: `Сынып: ____ Күні: ____`, answers: "Мұғалімге жауаптар", groups: ["1-топ", "2-топ"] as [string, string], taskN: "Тапсырма №", descriptors: "Бағалау дескрипторлары", answerDetails: "Жауаптар мен бағалау дескрипторларын көрсету" }
+    : { task: "Задание", criterion: "Критерий оценивания", descriptor: "Дескриптор", student: "ФИО ученика: ____", classDate: "Класс: ____ Дата: ____", answers: "Ответы", groups: ["Группа 1", "Группа 2"] as [string, string], taskN: "Задание №", descriptors: h.descriptorsH, answerDetails: h.answersDetails };
   return (
     <div>
       {sheet.degraded && (
         <p className="mb-3 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-          AI сейчас недоступен, поэтому лист собран по методическому шаблону.
-          Проверьте формулировки и дополните их перед печатью — или попробуйте
-          «Создать заново» через минуту.
-        </p>
-      )}
-      {sheet.stub && (
-        <p className="mb-3 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2">
-          {copy.demo}
+          {kazakh
+            ? "AI қолжетімсіз болғандықтан, парақ жергілікті әдістемелік құрылыммен жасалды. Басып шығармас бұрын тапсырмаларды оқулық пен сабақ мақсаттарына сәйкестендіріңіз."
+            : "ИИ сейчас недоступен, поэтому лист собран по локальной методической структуре. Перед печатью сверьте задания с учебником и целями урока."}
         </p>
       )}
       <div className="flex justify-between text-sm font-bold border-b border-black pb-1 mb-4">
@@ -294,10 +562,10 @@ function WorksheetView({
         </div>
       )}
 
-      <div className="space-y-5">
+      <div className="space-y-5" style={{ fontSize: `${settings.fontSize}px` }}>
         {sheet.tasks.map((task, i) => {
           return (
-          <div key={i} className="overflow-hidden rounded-xl border border-[#B9C6E4] bg-white shadow-sm print:shadow-none print:mb-6">
+          <div key={i} className="overflow-hidden rounded-xl border border-[#B9C6E4] bg-white shadow-sm print:shadow-none print:mb-6" style={{ marginBottom: `${(settings.spacing - 1) * 20}px` }}>
             <div className="flex items-center justify-between gap-2 border-b border-[#B9C6E4] bg-gradient-to-r from-sky-100 to-indigo-100 px-4 py-2 font-bold text-sm text-[#2B2D83]">
               <span>
                 {copy.task} {i + 1}. {worksheetTypeLabel(task.type, contentLanguage)} <span className="font-normal text-slate-600">({task.points} б.)</span>
@@ -319,10 +587,10 @@ function WorksheetView({
 
             <div className={`flex flex-col sm:flex-row gap-4 ${task.imageBase64 ? 'items-start' : ''}`}>
               <div className="flex-1">
-                <TaskBody task={task} language={contentLanguage} onLinkChange={onLinkChange ? (link) => onLinkChange(i, link) : undefined} />
+                <TaskBody task={task} language={contentLanguage} onLinkChange={onLinkChange ? (link) => onLinkChange(i, link) : undefined} fontSize={settings.fontSize} />
               </div>
-              
-              {task.imageBase64 && (
+
+              {settings.showImages && task.imageBase64 && (
                 <div className="sm:w-1/3 shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -333,19 +601,25 @@ function WorksheetView({
                 </div>
               )}
             </div>
-            <p className="mt-2 text-[11px] italic text-slate-500">{copy.criterion}: {task.criterion}</p>
-            <p className="text-[11px] italic text-slate-500">{copy.descriptor}: {task.descriptor}</p>
+            {settings.showDescriptors && (
+              <>
+                <p className="mt-2 text-[11px] italic text-slate-500">{copy.criterion}: {task.criterion}</p>
+                <p className="text-[11px] italic text-slate-500">{copy.descriptor}: {task.descriptor}</p>
+              </>
+            )}
             </div>
           </div>
           );
         })}
       </div>
 
+      {(settings.showAnswers || settings.showDescriptors) && (
       <details className="mt-8 border border-slate-300 rounded-lg overflow-hidden group print:hidden">
         <summary className="bg-slate-50 text-slate-800 px-4 py-2 font-bold text-sm cursor-pointer hover:bg-slate-100">
           {copy.answerDetails}
         </summary>
         <div className="p-4 bg-white space-y-4">
+          {settings.showAnswers && (
           <div>
           <h4 className="font-bold text-sm mb-2 text-[#2B2D83]">{copy.answers}</h4>
             <div className="text-sm space-y-1">
@@ -354,6 +628,8 @@ function WorksheetView({
               ))}
             </div>
           </div>
+          )}
+          {settings.showDescriptors && (
           <div>
             <h4 className="font-bold text-sm mb-2 text-[#2B2D83]">{copy.descriptors}</h4>
             <table className="w-full text-xs text-left border-collapse">
@@ -375,13 +651,21 @@ function WorksheetView({
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </details>
+      )}
     </div>
   );
 }
 
-function FlashcardTile({ card, index, language }: { card: FlashcardSet["cards"][number]; index: number; language: "ru" | "kz" }) {
+function FlashcardTile({ card, index, language, showImage = true, fontSize }: {
+  card: FlashcardSet["cards"][number];
+  index: number;
+  language: "ru" | "kz";
+  showImage?: boolean;
+  fontSize?: number;
+}) {
   const accent = FLASHCARD_ACCENTS[index % FLASHCARD_ACCENTS.length];
   const copy = language === "kz"
     ? { title: "ЖАДНАМА", example: "Мысал", check: "Өзіңді тексер" }
@@ -392,7 +676,7 @@ function FlashcardTile({ card, index, language }: { card: FlashcardSet["cards"][
         <span className="text-[10px] font-bold tracking-[0.18em]">{copy.title}</span>
         <span className={`${accent.badge} inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1.5 text-sm font-black text-slate-900`}>{index + 1}</span>
       </div>
-      {card.imageBase64 && (
+      {showImage && card.imageBase64 && (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={imageUrl(card.imageBase64, card.imageMime)}
@@ -400,7 +684,7 @@ function FlashcardTile({ card, index, language }: { card: FlashcardSet["cards"][
           className="h-32 w-full object-cover"
         />
       )}
-      <div className="p-3">
+      <div className="p-3" style={fontSize ? { fontSize: `${fontSize}px` } : undefined}>
         <h4 className="text-base font-extrabold leading-tight text-[#20216B]">{card.front}</h4>
         <p className="mt-2 text-sm leading-relaxed text-slate-700">{card.back}</p>
         {card.example && (
@@ -418,22 +702,43 @@ function FlashcardTile({ card, index, language }: { card: FlashcardSet["cards"][
   );
 }
 
-function FlashcardsView({ set }: { set: FlashcardSet }) {
+/**
+ * Пометка о материале, собранном без AI.
+ *
+ * Формулировки таких карточек и кроссворда — заготовки по словам темы, а не
+ * готовый ответ. Учитель должен видеть это до печати, иначе он раздаёт
+ * ученикам непроверенный текст.
+ */
+function DegradedNote({ text }: { text: string }) {
+  return (
+    <p className="mb-3 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+      {text}
+    </p>
+  );
+}
+
+function FlashcardsView({ set, settings = DEFAULT_SETTINGS }: { set: FlashcardSet; settings?: PreviewSettings }) {
   const { t } = useUiLocale();
   const h = t.handouts;
-  const demoText = set.language === "kz" ? "Көрсетілім нұсқасы." : h.demoFlashcards;
   return (
     <div>
-      {set.stub && (
-        <p className="mb-3 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2">
-          {demoText}
-        </p>
+      {set.degraded && (
+        <DegradedNote text={set.language === "kz"
+          ? "ЖИ қолжетімсіз болғандықтық, карточкалар тақырыптағы сөздерден құрастырылды. Мәтіндерді оқулық бойынша тексеріп, нақтылаңыз."
+          : "ИИ сейчас недоступен, поэтому карточки собраны из слов темы. Проверьте формулировки по учебнику и дополните их перед печатью."} />
       )}
       <h3 className="text-lg font-bold text-center">{set.title}</h3>
       {set.intro && <p className="mt-1 text-sm text-center text-slate-600">{set.intro}</p>}
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
         {set.cards.map((card, i) => (
-          <FlashcardTile key={i} card={card} index={i} language={set.language ?? "ru"} />
+          <FlashcardTile
+            key={i}
+            card={card}
+            index={i}
+            language={set.language ?? "ru"}
+            showImage={settings.showImages}
+            fontSize={settings.fontSize}
+          />
         ))}
       </div>
     </div>
@@ -450,6 +755,11 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
   const filled = new Set(puzzle.numbers.map((n) => `${n.row},${n.col}`));
   return (
     <div>
+      {puzzle.degraded && (
+        <DegradedNote text={puzzle.language === "kz"
+          ? "ЖИ қолжетімсіз болғандықтық, сөздер тақырыптан алынды. Оқулықтағы терминдермен алмастырыңыз."
+          : "ИИ сейчас недоступен, поэтому слова взяты из темы урока. Замените их на термины из учебника, если это нужно."} />
+      )}
       <h3 className="text-lg font-bold text-center">{puzzle.title}</h3>
       {puzzle.intro && <p className="mt-1 text-sm text-center text-slate-600">{puzzle.intro}</p>}
       <div className="mt-4 overflow-x-auto">
@@ -544,6 +854,8 @@ export function HandoutPreview({
   const [regenError, setRegenError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<PreviewSettings>(DEFAULT_SETTINGS);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Новый сгенерированный материал — сбрасываем правки (корректировка
   // состояния при рендере: новый объект handout означает новую генерацию).
@@ -669,6 +981,17 @@ export function HandoutPreview({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setShowSettings((open) => !open)}
+              aria-expanded={showSettings}
+              aria-controls="preview-settings"
+              title={(doc.language ?? "ru") === "kz" ? "Параметрлер" : "Настройки"}
+              className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2.5 py-1.5 text-sm hover:bg-white/25 print:hidden"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="sr-only">{(doc.language ?? "ru") === "kz" ? "Параметрлер" : "Настройки"}</span>
+            </button>
+            <button
+              type="button"
               onClick={() => downloadDoc(true)}
               disabled={printing}
               className="inline-flex items-center gap-1.5 rounded-md bg-white text-[#2B2D83] px-3 py-1.5 text-sm font-medium hover:bg-sky-100 disabled:opacity-50"
@@ -681,13 +1004,25 @@ export function HandoutPreview({
                 type="button"
                 onClick={() => downloadDoc(false)}
                 disabled={printing}
-                title="Тот же материал без ответов и дескрипторов — для раздачи классу"
+                title={h.studentBtnHint}
                 className="inline-flex items-center gap-1.5 rounded-md bg-white/15 text-white px-3 py-1.5 text-sm font-medium hover:bg-white/25 disabled:opacity-50"
               >
                 <Download className="w-4 h-4" />
                 {printing ? h.building : h.studentBtn}
               </button>
             )}
+            {/* Печать с экрана. Раньше кнопки не было: учитель открывал
+                предпросмотр в браузере, печатал его и получал страницу
+                с рамками диалога и обрезанными карточками. */}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              title={h.printBtn}
+              className="inline-flex items-center gap-1.5 rounded-md bg-white/15 text-white px-3 py-1.5 text-sm font-medium hover:bg-white/25 print:hidden"
+            >
+              <Printer className="w-4 h-4" />
+              {h.printBtn}
+            </button>
             <SaveKitButton
               handout={doc}
               extra={extraDoc}
@@ -711,6 +1046,15 @@ export function HandoutPreview({
         {regenError && (
           <p role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{regenError}</p>
         )}
+        {showSettings && (
+          <div id="preview-settings">
+            <SettingsPanel
+              settings={settings}
+              onChange={setSettings}
+              language={doc.language ?? "ru"}
+            />
+          </div>
+        )}
         <div className="p-4 sm:p-6">
           {doc.kind === "worksheet" && (
             <WorksheetView
@@ -718,9 +1062,10 @@ export function HandoutPreview({
               onRegenerate={(index) => regenerateTask("main", index)}
               regenBusyIndex={regenBusy?.part === "main" ? regenBusy.index : null}
               onLinkChange={(index, link) => patchTask("main", index, { link })}
+              settings={settings}
             />
           )}
-          {doc.kind === "flashcards" && <FlashcardsView set={doc} />}
+          {doc.kind === "flashcards" && <FlashcardsView set={doc} settings={settings} />}
           {doc.kind === "crossword" && <CrosswordView puzzle={doc} />}
           {extraDoc && (
             <div className="mt-8 border-t-2 border-dashed border-slate-300 pt-6">
@@ -730,9 +1075,10 @@ export function HandoutPreview({
                   onRegenerate={(index) => regenerateTask("extra", index)}
                   regenBusyIndex={regenBusy?.part === "extra" ? regenBusy.index : null}
                   onLinkChange={(index, link) => patchTask("extra", index, { link })}
+                  settings={settings}
                 />
               )}
-              {extraDoc.kind === "flashcards" && <FlashcardsView set={extraDoc} />}
+              {extraDoc.kind === "flashcards" && <FlashcardsView set={extraDoc} settings={settings} />}
               {extraDoc.kind === "crossword" && <CrosswordView puzzle={extraDoc} />}
             </div>
           )}

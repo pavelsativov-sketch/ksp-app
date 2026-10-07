@@ -24,9 +24,11 @@ const SPECS: EnvSpec[] = [
   { key: "APP_URL", severity: "required-prod", description: "Публичный URL — ссылки в письмах (https в проде)" },
   { key: "GROQ_API_KEY", severity: "optional", description: "AI-провайдер (см. src/lib/ai/providers.ts)" },
   { key: "GEMINI_API_KEY", severity: "optional", description: "AI-провайдер" },
+  { key: "XAI_API_KEY", severity: "optional", description: "xAI Grok (допустимый алиас: GROK_API_KEY)" },
+  { key: "GROK_API_KEY", severity: "optional", description: "xAI Grok (допустимый алиас: XAI_API_KEY)" },
   { key: "CEREBRAS_API_KEY", severity: "optional", description: "AI-провайдер" },
   { key: "OPENROUTER_API_KEY", severity: "optional", description: "AI-провайдер" },
-  { key: "OPENAI_API_KEY", severity: "optional", description: "Embeddings для RAG" },
+  { key: "OPENAI_API_KEY", severity: "optional", description: "AI-провайдер и embeddings для RAG" },
   { key: "CLOUDFLARE_ACCOUNT_ID", severity: "optional", description: "Картинки (Workers AI)" },
   { key: "CLOUDFLARE_API_TOKEN", severity: "optional", description: "Картинки (Workers AI)" },
 ];
@@ -58,9 +60,15 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): EnvReport {
     }
   }
 
-  const aiConfigured = Boolean(
-    env.GROQ_API_KEY || env.GEMINI_API_KEY || env.CEREBRAS_API_KEY || env.OPENROUTER_API_KEY,
-  );
+  const aiConfigured = [
+    env.GROQ_API_KEY,
+    env.GEMINI_API_KEY,
+    env.XAI_API_KEY,
+    env.GROK_API_KEY,
+    env.CEREBRAS_API_KEY,
+    env.OPENROUTER_API_KEY,
+    env.OPENAI_API_KEY,
+  ].some((value) => typeof value === "string" && value.split(",").some((key) => key.trim().length > 0));
 
   return { ok: problems.length === 0, aiConfigured, problems };
 }

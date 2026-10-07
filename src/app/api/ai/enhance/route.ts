@@ -56,11 +56,15 @@ export async function POST(request: Request) {
 
     try {
       const result = await enhanceSection(parsed.data);
+      await quota.reservation.finalize(true);
       return NextResponse.json({ ...result, quota: { remaining: quota.reservation.remaining } });
     } catch (error) {
       await quota.reservation.finalize(false);
       if (error instanceof Error && error.message.includes("stage is required")) {
         return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      if (error instanceof Error && error.message.includes("Не настроен AI-провайдер")) {
+        return NextResponse.json({ error: error.message }, { status: 503 });
       }
       console.error("Enhance error:", error);
       return NextResponse.json({ error: "Internal server error" }, { status: 500 });

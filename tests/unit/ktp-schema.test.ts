@@ -99,13 +99,22 @@ describe("buildKtp: граничные случаи", () => {
     expect(ktp.rows[0].objectives).toBe("Без кода\n5.2");
   });
 
-  it("trims the source topic and matches it case-sensitively after trim", () => {
+  it("trims the source topic and matches it ignoring case and trailing dot", () => {
     const p = plan();
     p.content.topic = "  Дроби  ";
-    const ktp = buildKtp(p, "Математика", { topics: ["  Дроби  ", "ДРОБИ"] });
+    const ktp = buildKtp(p, "Математика", { topics: ["  Дроби  ", "ДРОБИ", "дроби."] });
     expect(ktp.rows[0].topic).toBe("Дроби");
     expect(ktp.rows[0].objectives).toBe("5.1 — Сравнивать дроби");
+    // Регистр и завершающая точка не влияют на перенос целей: раньше
+    // одинаковая тема, вписанная чуть иначе, теряла цели урока.
     expect(ktp.rows[1].topic).toBe("ДРОБИ");
+    expect(ktp.rows[1].objectives).toBe("5.1 — Сравнивать дроби");
+    expect(ktp.rows[2].topic).toBe("дроби.");
+    expect(ktp.rows[2].objectives).toBe("5.1 — Сравнивать дроби");
+  });
+
+  it("не считает совпадением тему, отличающуюся только окончанием", () => {
+    const ktp = buildKtp(plan(), "Математика", { topics: ["Дроби", "Дробительные"] });
     expect(ktp.rows[1].objectives).toBe("");
   });
 

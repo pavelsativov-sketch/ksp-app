@@ -11,6 +11,8 @@ import {
   isAnyProviderConfigured,
 } from "./providers";
 import { kspContentSchema } from "@/lib/validation/ksp";
+import { extractJson } from "./extract-json";
+import { log } from "@/lib/logger";
 
 export function isOpenAIConfigured(): boolean {
   return isAnyProviderConfigured();
@@ -19,19 +21,39 @@ export function isOpenAIConfigured(): boolean {
 export interface GenerateKspOptions extends GenerateKspInput {
   /** Второй проход супервизора. По умолчанию выключен: удваивает цену/время. */
   refine?: boolean;
+  /**
+   * Отчёт о ходе генерации.
+   *
+   * Раньше экран ожидания рисовал проценты по таймеру: они не были связаны с
+   * реальной работой и оставались на 10% всё время, пока модель думала. Теперь
+   * каждая отметка приходит из настоящей точки пайплайна, поэтому учитель
+   * видит, что именно идёт, и понимает, что процесс не завис.
+   */
+  onStage?: (stage: KspStage) => void;
+}
+
+/** Этап генерации с честным процентом. */
+export interface KspStage {
+  /** Готовность в процентах: 100 — работа завершена. */
+  percent: number;
+  /** Что происходит, по-русски, для учителя. */
+  label: string;
 }
 
 /**
  * Generate a KSP body (everything except header and learningObjectives).
- * Без AI-ключей возвращает эвристический стаб для демо.
+ * План не подменяется демонстрационным текстом: без активного провайдера
+ * вызывающий слой получает понятную ошибку и может показать ручной редактор.
  * По умолчанию — один проход; refine=true включает второй проход супервизора.
  */
 export async function generateKsp(
   input: GenerateKspOptions,
 ): Promise<AiKspPayload> {
+  const stage = input.onStage;
   if (!isOpenAIConfigured()) {
-    return stubKsp(input);
+    throw new Error("Не настроен ни один AI-провайдер. Добавьте рабочий ключ провайдера в окружение приложения.");
   }
+  stage?.({ percent: 20, label: "Составляем ход урока" });
   const draft = await executeWithFallback("generation", async (client, model, config) => {
     const response = await client.chat.completions.create({
       model,
@@ -47,61 +69,269 @@ export async function generateKsp(
       response_format: getResponseFormat(config, OPENAI_JSON_SCHEMA),
     });
 
-    const raw = response.choices[0]?.message.content;
+    const choice = response.choices[0];
+    const raw = choice?.message.content;
     if (!raw || !raw.trim()) throw new Error("AI вернул пустой ответ");
+    // Обрыв на лимите токенов ловится явно: `extractJson` попытается закрыть
+    // JSON, но у обрезанного плана теряется конец урока (домашнее задание и
+    // рефлексия). Такой ответ нельзя молча чинить — на нём каскад провайдеров
+    // должен переключиться на того, у кого лимит больше.
+    if (choice?.finish_reason === "length") {
+      throw new Error(
+        `AI оборвал ответ на лимите ${config.maxTokens ?? 8192} токенов — план не дописан`,
+      );
+    }
     return parseAndValidate(raw, input.topic, input.language);
   });
 
-  if (!input.refine) return draft;
+  if (!input.refine) {
+    stage?.({ percent: 100, label: "План готов" });
+    return draft;
+  }
+
+  stage?.({ percent: 55, label: "Черновик готов, проверяем методистом" });
 
   // Step 2: AI Supervisor Pass (Methodologist Review) — только по явному запросу.
-  const refined = await executeWithFallback("generation", async (client, model, config) => {
-    const response = await client.chat.completions.create({
-      model,
-      temperature: 0.5, // lower temperature for more analytical review
-      max_tokens: 8192,
-      max_completion_tokens: 8192,
+  //
+  // Второй проход не обязан удаться: черновик уже готов и пригоден к работе.
+  // Раньше любой сбой здесь отменял всю генерацию, и учитель, запросивший
+  // улучшение, оставался вовсе без плана.
+  try {
+    const refined = await executeWithFallback("generation", async (client, model, config) => {
+      const response = await client.chat.completions.create({
+        model,
+        temperature: 0.5, // lower temperature for more analytical review
+        // Лимит берётся у провайдера: хардкод 8192 уходил в 429 на Groq,
+        // где потолок 1536, и второй проход всегда падал.
+        max_completion_tokens: config.maxTokens ?? 8192,
       messages: [
-        {
-          role: "system",
-          content: "Ты Главный Методист-Супервизор Министерства Образования РК. Твоя задача — проверить черновик плана урока (КСП) и исправить все логические, методические и стилистические ошибки. Убедись, что цели SMART, критерии оценивания проверяемые, а действия учителя и учеников максимально подробные и дифференцированные. Верни улучшенный JSON-объект."
-        },
-        {
-          role: "user",
-          content: `Исходные требования: Тема «${input.topic}», Класс: ${input.grade}, Предмет: ${input.subject}\n\nЧерновик КСП (JSON):\n${JSON.stringify(draft, null, 2)}\n\nПроанализируй и улучши этот план. Верни полностью готовый исправленный JSON по схеме.`
-        },
-      ],
-      response_format: getResponseFormat(config, OPENAI_JSON_SCHEMA),
+          {
+            role: "system",
+            content: "Ты Главный Методист-Супервизор Министерства Образования РК. Твоя задача — проверить черновик плана урока (КСП) и исправить все логические, методические и стилистические ошибки. Убедись, что цели SMART, критерии оценивания проверяемые, а действия учителя и учеников максимально подробные и дифференцированные. Верни улучшенный JSON-объект."
+          },
+          {
+            role: "user",
+            content: `Исходные требования: Тема «${input.topic}», Класс: ${input.grade}, Предмет: ${input.subject}\n\nЧерновик КСП (JSON):\n${JSON.stringify(draft, null, 2)}\n\nПроанализируй и улучши этот план. Верни полностью готовый исправленный JSON по схеме.`
+          },
+        ],
+        response_format: getResponseFormat(config, OPENAI_JSON_SCHEMA),
+      });
+
+      const choice = response.choices[0];
+      const raw = choice?.message.content;
+      if (!raw) throw new Error("Supervisor AI не вернул ответ");
+      if (choice?.finish_reason === "length") {
+        throw new Error("Supervisor AI оборвал ответ на лимите токенов");
+      }
+      return parseAndValidate(raw, input.topic, input.language);
     });
 
-    const raw = response.choices[0]?.message.content;
-    if (!raw) throw new Error("Supervisor AI не вернул ответ");
-    return parseAndValidate(raw, input.topic, input.language);
-  });
-
-  return refined;
+    stage?.({ percent: 100, label: "План готов и проверен методистом" });
+    return refined;
+  } catch (err) {
+    log.warn("Второй проход супервизора не удался, отдаём черновик", {
+      topic: input.topic,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    // Учитель должен понимать, что он получит: черновик, а не улучшенный план.
+    stage?.({ percent: 100, label: "Черновик готов (проверка методистом не завершилась)" });
+    return draft;
+  }
 }
 
-/** Извлекает JSON из ответа (включая markdown-обёртки) и валидирует по схеме КСП. */
+/**
+ * Извлекает JSON из ответа и валидирует по схеме КСП.
+ *
+ * Разбор отдан общему `extractJson`: здесь раньше жил собственный урезанный
+ * вариант, который не умел закрывать обрезанный ответ. Модель безлимитовых
+ * провайдеров обрывает JSON на середине (`finish_reason=length`), и такой
+ * ответ уходил в 500 вместо того, чтобы разобраться и показать план.
+ */
+/**
+ * Приводит текстовые поля КСП к строке там, где модель написала список
+ * или объект.
+ *
+ * Зачем: схема ждёт в `teacherActions` строку, а модели (особенно gpt-oss)
+ * часто пишут туда список пунктов или объект с подпунктами. Раньше такой
+ * ответ отбрасывался целиком с «Invalid input: expected string, received
+ * object» — то есть из-за формы терялся готовый, содержательно верный урок.
+ * Содержание не выдумывается: список склеивается в строку, объект
+ * разворачивается в «ключ: значение», ничего не выбрасывается.
+ */
+export function normalizeTextFields<T>(value: T): T {
+  // Поля, где схема ждёт строку. Найдено по живым отказам: gpt-oss пишет
+  // сюда списки и объекты («expected string, received object»), и раньше
+  // из-за формы отбрасывался весь готовый урок.
+  const STRING_KEYS = new Set([
+    "time",
+    "teacherActions",
+    "studentActions",
+    "resources",
+    "assessmentMethod",
+    "homework",
+    "summary",
+    "name",
+    "topic",
+    "instruction",
+    "criteria",
+    "expectedResult",
+    "differentiation",
+    "reflection",
+    "formativeAssessment",
+  ]);
+
+  // Поля, где схема ждёт МАССИВ строк. Их нельзя склеивать: документ
+  // показывает пункты по отдельности.
+  const LIST_KEYS = new Set(["lessonObjectives", "reflectionQuestions"]);
+
+  // Поля, где схема ждёт число, а модель пишет строку («7» вместо 7).
+  const NUMBER_KEYS = new Set(["answer", "tolerance"]);
+
+  /** Ключи-обёртки: модель пишет {text: "…"} — берём содержимое, а не «text: …». */
+  const WRAPPER_KEYS = ["text", "description", "value", "content", "title"];
+
+  /**
+   * Переименования полей.
+   *
+   * Найдено по живому отказу: числовое задание (NUMERIC) требует `answer`, а
+   * модель писала `answers` — поле для FILL_BLANK, то есть перепутала
+   * названия разных типов заданий. Из-за одного имени отбрасывался весь урок.
+   * Переименование выполняется только если нужного поля ещё нет: так
+   * «правильное» поле ответа никогда не затирается.
+   */
+  const RENAMES: Record<string, string> = {
+    acceptedAnswer: "answer",
+    solutions: "answer",
+  };
+
+  /**
+   * `answers` живёт сразу в двух ролях: у FILL_BLANK это массив подходящих
+   * ответов, у NUMERIC — ошибочно написанное числовое `answer`. Переименовывать
+   * можно только одиночное значение: иначе у задания на пропуск пропадал бы
+   * список ответов и оставалось одно число.
+   */
+  const isScalar = (input: unknown): boolean => !Array.isArray(input);
+
+  const toText = (input: unknown): string => {
+    if (input === null || input === undefined) return "";
+    if (typeof input === "string") return input.trim();
+    if (typeof input === "number" || typeof input === "boolean") return String(input);
+    if (Array.isArray(input)) {
+      return input
+        .map((item) => toText(item))
+        .filter((text) => text.length > 0)
+        .join("; ");
+    }
+    if (typeof input === "object") {
+      const entries = Object.entries(input as Record<string, unknown>);
+      // Обёртка с одним текстовым полем — это просто текст.
+      if (entries.length === 1 && WRAPPER_KEYS.includes(entries[0]![0])) {
+        return toText(entries[0]![1]);
+      }
+      return entries
+        .map(([key, item]) => {
+          const text = toText(item);
+          return text ? `${key}: ${text}` : "";
+        })
+        .filter(Boolean)
+        .join("; ");
+    }
+    return String(input);
+  };
+
+  /** Массив строк из значения любой формы. */
+  const toStringList = (input: unknown): string[] => {
+    const parts = Array.isArray(input) ? input : [input];
+    return parts.map((item) => toText(item)).filter((text) => text.length > 0);
+  };
+
+  /** Число из строки: «7» → 7, «7,5» → 7.5. Мусор остаётся как был. */
+  const toNumber = (input: unknown): unknown => {
+    if (typeof input === "number") return input;
+    if (typeof input !== "string") return input;
+    const cleaned = input.trim().replace(",", ".").replace(/[^\d.eE+-]/g, "");
+    // Number("") === 0: без этой проверки «нет ответа» превратился бы в ноль,
+    // то есть в выдуманное значение ответа.
+    if (cleaned.length === 0) return input;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : input;
+  };
+
+  const walk = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map((item) => walk(item));
+    if (input && typeof input === "object") {
+      const out: Record<string, unknown> = {};
+      const source = input as Record<string, unknown>;
+      for (const [key, item] of Object.entries(source)) {
+        // Переименование не должно затирать уже существующее правильное поле.
+        const renamed = RENAMES[key];
+        if (renamed && !(renamed in source)) {
+          out[renamed] = toNumber(item);
+          continue;
+        }
+        if (key === "answers" && isScalar(item) && !("answer" in source)) {
+          out.answer = toNumber(item);
+          continue;
+        }
+        if (LIST_KEYS.has(key)) out[key] = toStringList(item);
+        else if (STRING_KEYS.has(key)) out[key] = toText(item);
+        else if (NUMBER_KEYS.has(key)) out[key] = toNumber(item);
+        else out[key] = walk(item);
+      }
+      return out;
+    }
+    return input;
+  };
+
+  return walk(value) as T;
+}
+
 function parseAndValidate(raw: string, fallbackTopic: string, language: "ru" | "kz"): AiKspPayload {
-  const json = extractJson(raw);
-  const parsed = JSON.parse(json) as AiKspPayload;
+  const parsed = extractJson<AiKspPayload>(raw);
   if (!parsed.topic) parsed.topic = fallbackTopic;
   // Мягкая валидация: AI возвращает тело без header/learningObjectives.
-  const withDefaults = {
+  //
+  // Блок `evaluation` тоже заполняем заранее. Модели регулярно его не
+  // присылают, и раньше из-за одного отсутствующего раздела отбрасывался
+  // весь готовый урок. Пустые строки честны: учитель увидит незаполненные
+  // поля и допишет их сам — это лучше, чем 503 и никакого плана.
+  const withDefaults = normalizeTextFields({
     header: {
       longTermPlanSection: "", school: "", date: "", teacherName: "",
       grade: "", studentsPresent: null, studentsAbsent: null,
     },
     learningObjectives: [],
     ...parsed,
-  };
+    // Ставится ПОСЛЕ разбора: значение от модели важнее заглушки, но если
+    // блока нет вовсе — учитель получает пустые поля вместо отказа всей
+    // генерации. Порядок важен: заглушка до разбора затирала бы ответ модели.
+    evaluation: parsed.evaluation ?? {
+      formativeAssessment: "",
+      differentiation: "",
+      healthAndSafety: "",
+      reflection: "",
+    },
+  });
   const checked = kspContentSchema.safeParse(withDefaults);
   if (!checked.success) {
-    throw new Error(`AI вернул некорректный КСП: ${checked.error.issues.map((i) => i.message).join(", ").slice(0, 300)}`);
+    // Путь поля обязателен: сообщение вида «expected string, received
+    // object» не говорит, ЧТО чинить. С путём видно конкретное поле, и по
+    // нему можно либо починить нормализацию, либо показать учителю, какой
+    // раздел не заполнился.
+    const detail = checked.error.issues
+      .map((i) => `${i.path.join(".") || "корень"}: ${i.message}`)
+      .slice(0, 6)
+      .join("; ");
+    throw new Error(`AI вернул некорректный КСП: ${detail.slice(0, 400)}`);
   }
-  if (language === "kz") assertKazakhKsp(parsed);
-  return parsed;
+  // Проверка языка идёт по нормализованным данным, а не по сырому ответу:
+  // сырой мог содержать ключи, отброшенные схемой.
+  if (language === "kz") assertKazakhKsp(checked.data);
+  // Возвращаются данные после схемы, а не исходный объект. Раньше возвращался
+  // `parsed`, где оставались поля, отброшенные схемой, и `null` вместо
+  // значений по умолчанию: дальше по коду это приводило к «undefined» в
+  // документе и к падениям на `.map()`.
+  return checked.data as AiKspPayload;
 }
 
 function assertKazakhKsp(payload: AiKspPayload): void {
@@ -118,205 +348,8 @@ function assertKazakhKsp(payload: AiKspPayload): void {
   }
 }
 
-function extractJson(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("{")) return trimmed;
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenced) return fenced[1].trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
-  return trimmed;
-}
+
 
 // mergeAiIntoKsp живёт в ./merge: функция чистая и нужна клиентскому
 // plan-form, который не должен тянуть серверные AI-провайдеры.
 export { mergeAiIntoKsp, type AiKspPayload } from "./merge";
-
-/** Deterministic high-quality stub used when OPENAI_API_KEY is missing. */
-function stubKsp(input: GenerateKspInput): AiKspPayload {
-  if (input.language === "kz") return stubKspKz(input);
-  const { grade, subject, topic } = input;
-  return {
-    topic,
-    lessonObjectives: [
-      `Учащиеся смогут объяснить основные понятия темы «${topic}» своими словами.`,
-      `Учащиеся смогут применять изученный материал для решения практических задач.`,
-      `Учащиеся смогут оценивать правильность собственных рассуждений и исправлять ошибки.`,
-    ],
-    assessmentCriteria: [
-      "Называет ключевые термины темы и даёт им определения.",
-      "Приводит не менее двух примеров применения изученного материала.",
-      "Решает задачу по теме с опорой на алгоритм.",
-      "Формулирует вывод по итогам работы.",
-    ],
-    languageObjectives: {
-      terms: [
-        `${topic} (ключевое понятие урока)`,
-        "определение",
-        "свойство",
-        "пример",
-        "вывод",
-      ],
-      phrases: [
-        `Тема «${topic}» связана с …`,
-        "Я считаю, что …, потому что …",
-        "Из этого следует, что …",
-      ],
-    },
-    values:
-      "Академическая честность и уважение к чужому мнению: ученики учатся аргументировать свою позицию и принимать критику.",
-    crossCurricularLinks: `Связь с другими предметами (напр. для ${subject} в ${grade} классе): математика/язык/естествознание — через анализ данных и оформление выводов.`,
-    priorKnowledge:
-      "Базовые понятия предыдущих разделов курса, умение работать с учебником и выполнять парные задания.",
-    stages: {
-      beginning: {
-        time: "1–10 мин",
-        teacherActions:
-          `Слова педагога: «Здравствуйте, ребята. Проверьте, пожалуйста, всё ли готово к уроку: тетрадь, ручка и учебник.»
-Слова педагога: «Сегодня мы начнём с небольшой ситуации. Внимательно рассмотрите материал на экране и скажите: что вам уже знакомо?»
-Предполагаемые ответы учащихся: «Мы уже встречались с этим на прошлом уроке», «Это связано с темой ${topic}».
-Слова педагога: «Спасибо за ваши наблюдения. На какие признаки вы опирались, когда сделали такой вывод?»
-Предполагаемые ответы учащихся: «Мы увидели знакомые понятия», «Это похоже на пример из жизни».
-Слова педагога: «Вы верно заметили направление. Как вы думаете, какую тему мы сегодня будем изучать?»
-Предполагаемые ответы учащихся: «Тема связана с ${topic}».
-Слова педагога: «Верно. Тема нашего урока - «${topic}». А теперь сформулируйте: чему нам важно научиться к концу урока?»
-Предполагаемые ответы учащихся: «Объяснять понятия», «Применять знания в задании».
-Слова педагога: «Я обобщу ваши ответы: сегодня мы научимся объяснять тему и применять знания на практике. Чтобы достичь этой цели, сначала вспомним опорные знания.»`,
-        studentActions:
-          "Настраиваются на работу, отвечают на вопросы, формулируют свои ожидания от урока. Записывают тему в тетрадь.",
-        resources: "Доска, презентация, вопросы для актуализации.",
-        keyQuestions: [
-          `Что вы помните из предыдущего урока, что связано с темой «${topic}»?`,
-          "Где в реальной жизни нам может пригодиться этот материал?",
-          "Какие вопросы у вас остались с прошлого урока?",
-        ],
-        descriptors: [
-          "Отвечает на наводящие вопросы по предыдущей теме",
-          "Формулирует тему и цели урока своими словами",
-        ],
-        assessmentMethod: "Похвала",
-      },
-      middle: {
-        time: "11–35 мин",
-        teacherActions: `Слова педагога: «Мы определили тему и цель. Теперь разберёмся, какие понятия и действия помогут нам её достичь.»
-Слова педагога: «Обратите внимание на пример. Что в нём происходит? Назовите один признак, который помогает объяснить тему ${topic}.»
-Предполагаемые ответы учащихся: «Можно увидеть правило», «Нужно выполнить действия по порядку».
-Слова педагога: «Верно. Запишите ключевое определение. В обычной жизни это может пригодиться, когда нужно внимательно анализировать информацию и выбирать решение.»
-Слова педагога: «Сейчас выполним задание по образцу. Сначала прочитайте условие, затем выделите известные данные, после этого выполните нужное действие и проверьте ответ.»
-Слова педагога: «Работайте самостоятельно и честно. Если возникнет затруднение, поднимите руку - я помогу вопросом, но итог вы сформулируете сами.»
-Слова педагога: «Сравните свой результат с образцом. Что получилось, а что нужно исправить?»
-Предполагаемые ответы учащихся: «Я нашёл ошибку», «Мой ответ совпал с образцом».
-Слова педагога: «Ответственное отношение к своей работе и проверка результата - это проявление качеств Адал азамат. Мы разобрались с основным правилом, поэтому переходим к самостоятельному применению.»`,
-        studentActions:
-          "Слушают объяснение, делают записи. Работают в парах над заданием. Сильные ученики помогают слабым. Выполняют индивидуальные карточки, при затруднении обращаются к учителю.",
-        resources:
-          "Презентация, раздаточные карточки (3 уровня сложности), учебник, тетрадь.",
-        keyQuestions: [
-          `Какое ключевое свойство темы «${topic}» вы заметили?`,
-          "Как изменится результат, если поменять одно из условий?",
-        ],
-        descriptors: [
-          "Записывает определение/формулу/алгоритм",
-          "Приводит не менее двух примеров применения изученного",
-          "Решает задачу по образцу с опорой на алгоритм",
-          "Сравнивает свои выводы с эталоном и исправляет ошибки",
-        ],
-        assessmentMethod: "ФО + Взаимооценивание",
-      },
-      end: {
-        time: "36–45 мин",
-        teacherActions:
-          `Слова педагога: «Вернёмся к цели, которую вы сформулировали в начале урока. Удалось ли нам объяснить тему ${topic} и применить знания в задании?»
-Предполагаемые ответы учащихся: «Да, мы научились…», «Мне нужно ещё потренироваться…».
-Слова педагога: «Назовите одно правило или вывод, который вы точно запомните после урока.»
-Предполагаемые ответы учащихся: «Я запомнил(а), что…».
-Слова педагога: «Оцените свою работу: зелёный - всё понял и могу объяснить; синий - в целом понял, но нужно повторить; красный - пока испытываю трудности.»
-Слова педагога: «Подумайте и ответьте: что было самым полезным, что оказалось сложным и где эти знания пригодятся вам в жизни?»
-Слова педагога: «Домашнее задание: ${`прочитать соответствующий параграф учебника и выполнить задания по теме «${topic}»`}. Выполняйте его аккуратно и самостоятельно.»
-Слова педагога: «Спасибо за работу. Сегодня вы не только получили знания, но и проявили ответственность за свой результат.»`,
-        studentActions:
-          "Называют ключевые выводы урока. Отвечают на рефлексивные вопросы. Записывают домашнее задание. Отмечают свою позицию на «Лестнице успеха».",
-        resources: "Карточки «Светофор», плакат «Лестница успеха», дневник.",
-        keyQuestions: [
-          "Что нового вы узнали на этом уроке?",
-        ],
-        descriptors: [
-          "Называет 2–3 ключевых вывода урока",
-          "Оценивает свою работу по «Лестнице успеха»",
-        ],
-        assessmentMethod: "Самооценивание",
-        summary: `На уроке мы изучили тему «${topic}»: ключевые понятия, основные свойства и способы применения. Закрепили материал на практических примерах.`,
-        reflectionQuestions: [
-          "Что было легко?",
-          "Что было сложно?",
-          "Что вам особенно понравилось?",
-        ],
-        homework: `Прочитать соответствующий параграф учебника и выполнить задания по теме «${topic}».`,
-      },
-    },
-    evaluation: {
-      formativeAssessment:
-        "Приёмы «Светофор» (красный/жёлтый/зелёный), «Две звезды и пожелание» при взаимопроверке, устная обратная связь по критериям оценивания.",
-      differentiation:
-        "Более способным: задание повышенной сложности (исследовательский вопрос). Менее способным: карточка-подсказка с алгоритмом, работа в паре с сильным учеником.",
-      healthAndSafety:
-        "Физкультминутка в середине урока (1 мин). Соблюдение дистанции при работе за партой, правил ТБ при работе с раздаточными материалами.",
-      reflection:
-        "1) Достигнуты ли цели урока всеми учениками? 2) Какие приёмы сработали лучше всего? 3) Что я бы изменил(а) в следующий раз?",
-    },
-  };
-}
-
-/** Kazakh-language demo fallback, used when no text-generation provider is configured. */
-function stubKspKz(input: GenerateKspInput): AiKspPayload {
-  const { topic, grade, subject } = input;
-  const opening = {
-    time: "1–10 минут",
-    teacherActions: `Мұғалім: «Сәлеметсіңдер ме! Оқу құралдарын дайындап, бүгінгі сабаққа назар аударайық.»\nМұғалім: «${topic} тақырыбына қатысты суретке не жағдаятқа қараңдар. Нені байқадыңдар?»\nОқушылардың ықтимал жауаптары: «…».\nМұғалім: «Бақылауларыңа сүйеніп, бүгінгі тақырып пен мақсатты өздерің тұжырымдап көріңдер.»\nМұғалім: «Жақсы. Сабақ соңында осы мақсатқа қаншалықты жеткенімізді бірге тексереміз.»`,
-    studentActions: "Оқушылар оқу құралдарын дайындайды, алдыңғы білімін еске түсіреді, тақырыпты болжап, сабақ мақсатын ұсынады.",
-    resources: "Тақырыпқа қатысты көрнекілік, тақта, дәптер.",
-    keyQuestions: [`«${topic}» тақырыбы туралы не білесіңдер?`, "Бұл білімді күнделікті өмірде қайда қолдануға болады?"],
-    descriptors: ["Тақырыпқа қатысты бір бастапқы білімін атайды.", "Сабақ мақсатын өз сөзімен тұжырымдайды."],
-    assessmentMethod: "Ауызша мадақтау",
-    tasks: [],
-  };
-  const middle = {
-    time: "11–35 минут",
-    teacherActions: `Мұғалім: «Енді ${topic} тақырыбын нақты мысал арқылы қарастырайық.»\nМұғалім: «Тапсырманың шартын оқып, белгілі деректерді белгілеңдер. Қандай ережені қолдануға болады?»\nОқушылардың ықтимал жауаптары: «…».\nМұғалім: «Шешімдеріңді жұппен салыстырып, әр қадамды түсіндіріңдер. Қиналсаңдар, тірек сөздер мен алгоритмді пайдаланыңдар.»\nМұғалім: «Нәтижені тексеріп, қорытындыңды оқу мақсатымен салыстыр.»`,
-    studentActions: "Оқушылар мысалды талдайды, тапсырманы орындайды, шешімін дәлелдейді және жауаптарын критерий бойынша тексереді.",
-    resources: `${subject} оқулығы, тақта, жұмыс парағы (${grade}-сынып деңгейі).`,
-    keyQuestions: [`${topic} тақырыбының негізгі белгісі қандай?`, "Жауабыңды қандай дәлелмен негіздейсің?"],
-    descriptors: ["Тақырыпқа қатысты терминді дұрыс қолданады.", "Шешімін қадамдармен көрсетіп, нәтижесін тексереді."],
-    assessmentMethod: "Қалыптастырушы бағалау",
-    tasks: [],
-  };
-  const ending = {
-    time: "36–45 минут",
-    teacherActions: `Мұғалім: «Сабақ басында қойған мақсатымызға қайта оралайық. Бүгін қандай білім мен дағдыны қолдандыңдар?»\nМұғалім: «Өз жұмыстарыңды бағалаңдар: нені сенімді орындадыңдар, нені әлі қайталау керек?»\nМұғалім: «Үйде ${topic} тақырыбын оқулық бойынша қайталап, өз мысалыңды дайында.»\nМұғалім: «Еңбектеріңе рақмет. Келесі сабақта бүгінгі білімді жалғастырамыз.»`,
-    studentActions: "Оқушылар қорытынды жасайды, өзін-өзі бағалайды және үй тапсырмасын жазып алады.",
-    resources: "Өзін-өзі бағалау парағы, күнделік.",
-    keyQuestions: ["Бүгін қандай маңызды қорытынды жасадың?"],
-    descriptors: ["Тақырып бойынша бір қорытындыны тұжырымдайды.", "Өз жұмысын бағалау критерийімен салыстырады."],
-    assessmentMethod: "Өзін-өзі бағалау",
-    summary: `Сабақта «${topic}» тақырыбы қарастырылып, білімді мысалда қолдану жолы пысықталды. Оқушылар жұмыс нәтижесін бағалау критерийлерімен салыстырды.`,
-    reflectionQuestions: ["Қай тапсырма жеңіл болды?", "Қай тұста көмек қажет болды?", "Бүгінгі білімді қайда қолданасың?"],
-    homework: `Оқулықтағы «${topic}» тақырыбын қайталап, тақырыпқа қатысты бір нақты мысал дайында.`,
-  };
-  return {
-    topic,
-    lessonObjectives: [`Оқушылар «${topic}» тақырыбына қатысты негізгі ұғымдарды түсіндіреді.`, `Оқушылар тақырып бойынша тапсырманы үлгіге сүйеніп орындайды.`, "Оқушылар шешімін тексеріп, қорытындысын дәлелдейді."],
-    assessmentCriteria: ["Тақырып терминін дұрыс қолданады.", "Тапсырманы берілген қадамдармен орындайды.", "Жауабын дәлелмен түсіндіреді."],
-    languageObjectives: { terms: [topic, "ұғым", "ереже", "мысал", "қорытынды"], phrases: ["Менің ойымша…", "Мысалы…", "Себебі…"] },
-    values: "Академиялық адалдықты сақтап, өз пікірін дәлелмен жеткізеді және сыныптастарының ойын құрметтейді.",
-    crossCurricularLinks: `${subject} пәніндегі деректерді талдау және ой қорытындысын жазу арқылы қазақ тілімен байланысады.`,
-    priorKnowledge: "Оқушылар алдыңғы бөлімнің негізгі ұғымдарын біледі және оқулықпен өздігінен жұмыс істей алады.",
-    stages: { beginning: opening, middle, end: ending },
-    evaluation: {
-      formativeAssessment: "Ауызша кері байланыс, өзін-өзі бағалау және тапсырма критерийі қолданылады.",
-      differentiation: "Қолдауды қажет ететін оқушыға қадамдық нұсқаулық беріледі; дайын оқушыға қосымша дәлелдеу сұрағы ұсынылады.",
-      healthAndSafety: "Оқу орнын дұрыс ұйымдастыру, көзге арналған қысқа жаттығу және қауіпсіз жұмыс ережелері еске салынады.",
-      reflection: "Оқу мақсаттарына қол жеткізілді ме? Қай тапсырма тиімді болды? Келесі сабақта нені өзгерту керек?",
-    },
-  };
-}

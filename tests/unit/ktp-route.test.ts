@@ -89,8 +89,9 @@ describe("POST /api/ktp", () => {
     expect(body.ktp).toEqual({
       title: "Дроби", subject: "Математика", grade: 5, language: "ru", draft: true,
       rows: [
+        // Даты заполняются по неделям: 2024-02-29 (чт) → 07.03.
         { number: 1, topic: "Новая тема", hours: 1, date: "2024-02-29", objectives: "" },
-        { number: 2, topic: "Дроби", hours: 1, date: "", objectives: "5.1 — Сравнивать дроби" },
+        { number: 2, topic: "Дроби", hours: 1, date: "2024-03-07", objectives: "5.1 — Сравнивать дроби" },
       ],
     });
     const zip = await JSZip.loadAsync(Buffer.from(body.docxBase64, "base64"));

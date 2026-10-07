@@ -34,8 +34,13 @@ it("renders a request pane and an OS workspace pane together", () => {
   expect(screen.getByRole("button", { name: /Запустить агента/i })).toBeTruthy();
 
   // Справа — ОС: вкладки приложений открывают их на всю панель.
+  //
+  // Ищем именно во вкладках: те же приложения есть и в доке панели задач, и
+  // после перевода дока на русский имена («Браузер», «Терминал») совпали с
+  // названиями вкладок — поиск по имени находил сразу два элемента.
+  const osTabs = within(osPane).getByRole("tablist");
   for (const label of ["ОС", "Браузер", "Файлы", "Терминал"]) {
-    expect(within(osPane).getByRole("button", { name: label })).toBeTruthy();
+    expect(within(osTabs).getByRole("tab", { name: label })).toBeTruthy();
   }
 
   // Статус-бар с системной строкой и индикатором работы.

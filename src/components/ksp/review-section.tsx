@@ -102,7 +102,10 @@ function StarRating({ value, onChange, readonly = false }: { value: number; onCh
   );
 }
 
-export function ReviewSection({ planId, initialReviews, initialAverage, initialCount, isOwner, canReview }: Props) {
+// `isOwner` остаётся в Props (его передают вызывающие), но внутри не нужен:
+// право оставить отзыв определяется через `canReview`, а проверка прав —
+// на сервере.
+export function ReviewSection({ planId, initialReviews, initialAverage, initialCount, canReview }: Props) {
   const { locale } = useUiLocale();
   const [reviews, setReviews] = useState<Review[]>(initialReviews);
   const [average, setAverage] = useState(initialAverage);

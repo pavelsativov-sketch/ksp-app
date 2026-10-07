@@ -13,6 +13,7 @@ import { AgentSession, StatusDot, type AgentStatus } from "@/components/agents/a
 import { CodeEditorApp } from "@/components/workspace/apps/code-editor";
 import { PermissionCard } from "@/components/agents/permission-card";
 import { useOsShellStore, type OsTab } from "@/lib/store/os-shell";
+import { useWorkspaceStore } from "@/lib/store/workspace";
 import { WorkspaceSurface } from "@/components/workspace/workspace";
 import { BrowserApp } from "@/components/workspace/apps/browser";
 import { FileManagerApp } from "@/components/workspace/apps/file-manager";
@@ -59,17 +60,19 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
   const [editorFile, setEditorFile] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // «В редактор» из файл-менеджера: переключаем вкладку и открываем файл.
+  // «В редактор» из файл-менеджера: в двухпанельной раскладке редактор — это
+  // вкладка, а не окно, поэтому переключаем вкладку. Реагируем на хранилище
+  // рабочей области, а не на событие window: событие слушал только этот
+  // компонент, и на полноэкранной странице кнопка «В редактор» не работала.
   useEffect(() => {
-    const onOpen = (e: Event) => {
-      const name = (e as CustomEvent<string>).detail;
-      if (typeof name === "string") {
-        setEditorFile(name);
+    return useWorkspaceStore.subscribe((state, prev) => {
+      const now = state.windows.find((w) => w.type === "code-editor")?.file;
+      const before = prev.windows.find((w) => w.type === "code-editor")?.file;
+      if (now && now !== before) {
+        setEditorFile(now);
         setTab("editor");
       }
-    };
-    window.addEventListener("mekty:editor-open", onOpen);
-    return () => window.removeEventListener("mekty:editor-open", onOpen);
+    });
   }, [setTab]);
 
   // Владелец управления: опрос + локальное применение кнопок.
@@ -254,18 +257,24 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
             : "hidden min-w-0 flex-1 flex-col lg:flex"
         }
       >
-        <header className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#0b0d13] px-2">
+        {/* Переключатель панелей. Раньше это были просто кнопки без ролей:
+            для скринридера они не читались как вкладки, и найти их можно было
+            только по подписи. */}
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#0b0d13] px-2">
+        <div role="tablist" aria-label="Приложения рабочей области" className="flex items-center gap-1">
           {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
+              role="tab"
+              aria-selected={tab === id}
               onClick={() => setTab(id)}
-              aria-pressed={tab === id}
               className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors ${tab === id ? "bg-white/10 font-semibold text-white" : "text-slate-400 hover:bg-white/5"}`}
             >
               <Icon className="size-3.5" /> {label}
             </button>
           ))}
+        </div>
 
           <div className="relative">
             <button
@@ -294,11 +303,20 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    void fetch("/api/agents/snapshots", { method: "POST" }).then(() => setNotice("Снапшот машины создан"));
+                    void (async () => {
+                      try {
+                        const res = await fetch("/api/agents/snapshots", { method: "POST" });
+                        const data = await res.json() as { error?: string };
+                        if (!res.ok) throw new Error(data.error ?? "Не удалось создать снимок");
+                        setNotice("Снимок рабочей области создан");
+                      } catch (error) {
+                        setNotice(error instanceof Error ? error.message : "Не удалось создать снимок");
+                      }
+                    })();
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 hover:bg-white/5"
                 >
-                  <Archive className="size-3.5" /> Снапшот машины
+                  <Archive className="size-3.5" /> Снимок рабочей области
                 </button>
                 <button
                   type="button"
@@ -310,12 +328,12 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
                       const last = data.snapshots?.[0];
                       if (!last) { setNotice("Снапшотов пока нет"); return; }
                       await fetch("/api/agents/snapshots", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: last.id }) });
-                      setNotice(`Машина восстановлена из снапшота ${last.id.slice(0, 16)}`);
+                      setNotice(`Рабочая область восстановлена из снимка ${last.id.slice(0, 16)}`);
                     })();
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 hover:bg-white/5"
                 >
-                  <Undo2 className="size-3.5" /> Восстановить последний
+                  <Undo2 className="size-3.5" /> Восстановить последний снимок
                 </button>
                 <Link
                   href="/school/workspace"
@@ -366,7 +384,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
               </button>
             )}
           </div>
-        </header>
+        </div>
 
         <div className="relative min-h-0 flex-1">
           {tab === "os" && <WorkspaceSurface />}

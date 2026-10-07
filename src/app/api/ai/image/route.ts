@@ -48,6 +48,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await generateImage(parsed.data);
+    await reservation.finalize(true);
     return NextResponse.json({
       image: `data:${result.mimeType};base64,${result.base64}`,
       provider: result.provider,

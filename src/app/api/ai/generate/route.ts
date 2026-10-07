@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { booleanFlag, optionalBooleanFlag } from "@/lib/validation/boolean-flag";
+import { optionalBooleanFlag } from "@/lib/validation/boolean-flag";
 import { generateKsp } from "@/lib/ai/generate";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
@@ -82,11 +82,19 @@ export async function POST(request: Request) {
 
   try {
     const content = await generateKsp({ ...parsed.data, textbookContext });
-    // Слот уже зарезервирован до генерации; фиксируем успех и возвращаем остаток.
+    // Фиксация успеха обязательна: у тарифа с лимитом она ничего не делает,
+    // но у Pro именно finalize(true) пишет событие в аналитику. Без этого
+    // успешные генерации Pro были не видны в отчётах вообще.
+    await reservation.finalize(true);
     return NextResponse.json({ content, rag: ragInfo, quota: { remaining: reservation.remaining } });
   } catch (error) {
     await reservation.finalize(false);
     console.error("KSP generation failed", error);
-    return NextResponse.json({ error: "Не удалось сгенерировать КСП. Повторите попытку позже." }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Не удалось сгенерировать КСП. Провайдер ИИ сейчас недоступен — попробуйте через минуту или напишите план вручную: поля формы остаются доступными.",
+      },
+      { status: 503 },
+    );
   }
 }

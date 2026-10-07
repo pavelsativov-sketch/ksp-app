@@ -1,0 +1,42 @@
+spec:
+  inputs:
+    runner_execution_id:
+      type: string
+      regex: '^[0-9a-f-]{36}$'
+    runner_user_id:
+      type: string
+      regex: '^[a-fA-F0-9]{24}$'
+    runner_expires_at:
+      type: string
+      regex: '^[0-9]{13}$'
+    runner_signature:
+      type: string
+      regex: '^[a-f0-9]{64}$'
+    runner_app_url:
+      type: string
+      regex: '^https://[A-Za-z0-9.-]+(:[0-9]+)?$'
+---
+
+stages:
+  - agent
+
+agent-linux-command:
+  stage: agent
+  image: node:22-bookworm-slim
+  timeout: 3 minutes
+  interruptible: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+      when: on_success
+    - when: never
+  variables:
+    RUNNER_EXECUTION_ID: $[[ inputs.runner_execution_id ]]
+    RUNNER_USER_ID: $[[ inputs.runner_user_id ]]
+    RUNNER_EXPIRES_AT: $[[ inputs.runner_expires_at ]]
+    RUNNER_SIGNATURE: $[[ inputs.runner_signature ]]
+    RUNNER_APP_URL: $[[ inputs.runner_app_url ]]
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq bash util-linux
+    - command -v setpriv
+  script:
+    - node scripts/gitlab-runner-job.mjs

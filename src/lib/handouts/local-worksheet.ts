@@ -233,17 +233,36 @@ export function buildLocalWorksheet(input: HandoutInput): Omit<Worksheet, "kind"
   // Ключи должны быть детерминированными: Math.random() ломал любое
   // сравнение и кэширование листа по заданию, а поле `id` у WorksheetTask
   // вообще отсутствует в типе.
-  const tasks = trimmed.map((task, index) => ({
-    ...task,
-  })) as unknown as WorksheetTask[];
+  const tasks = trimmed.map((task) => ({ ...task })) as unknown as WorksheetTask[];
 
   // Сумма баллов ровно 10 — как у AI-ветки. Пересчитываем сами, потому что
   // enforceTenPoints живёт в generate.ts и зависит от схемы AI.
-  const used = tasks.filter((task) => task.type !== "reflection" && task.points > 0);
-  const total = used.reduce((sum, task) => sum + task.points, 0);
-  if (used.length > 0 && total !== 10) {
-    const last = used[used.length - 1]!;
-    last.points = Math.max(1, last.points + (10 - total));
+  //
+  // Раньше учитывались только задания с points > 0, и правка меняла баллы
+  // у последнего из них. Из-за этого у части заданий (например, у «creative»
+  // с начальным нулём) оставалось 0 баллов при общей сумме 10: лист выглядел
+  // посчитанным, но отдельные задания ничего не стоили, и учитель не мог
+  // выставить отметку. Теперь ноль поднимается до 1 у всех, а доборка
+  // разносится по всем заданиям, а не только по последнему.
+  const scored = tasks.filter((task) => task.type !== "reflection");
+  for (const task of scored) {
+    if (task.points <= 0) task.points = 1;
+  }
+  const total = scored.reduce((sum, task) => sum + task.points, 0);
+  if (scored.length > 0 && total !== 10) {
+    const delta = 10 - total;
+    // Разносим доборку по кругу, чтобы не уводить одно задание в 0.
+    let rest = delta;
+    for (const task of scored) {
+      if (rest === 0) break;
+      const step = rest > 0 ? Math.min(rest, 1) : Math.max(rest, -(task.points - 1));
+      task.points += step;
+      rest -= step;
+    }
+    // Округление могло оставить копейку: добираем последним заданием.
+    const finalTotal = scored.reduce((sum, task) => sum + task.points, 0);
+    const last = scored[scored.length - 1]!;
+    last.points = Math.max(1, last.points + (10 - finalTotal));
   }
 
   return {

@@ -407,13 +407,13 @@ describe("illustrateFlashcards через общий Cloudflare-провайде
   });
 });
 
-describe("generateHandout stub branch (без ключей)", () => {
-  it("stub worksheet с cardLayout/withImages не делает внешних вызовов", async () => {
+describe("generateHandout local fallback (без ключей)", () => {
+  it("собирает локальный worksheet с cardLayout и не делает внешних вызовов", async () => {
     isAnyProviderConfigured.mockReturnValue(false);
     const h = await generateHandout({ ...baseInput, count: 4, cardLayout: true, withImages: true });
     expect(h.kind).toBe("worksheet");
     if (h.kind !== "worksheet") return;
-    expect(h.stub).toBe(true);
+    expect(h.degraded).toBe(true);
     expect(h.cardLayout).toBe(true);
     expect(generateImageMock).not.toHaveBeenCalled();
     expect(executeWithFallbackMock).not.toHaveBeenCalled();

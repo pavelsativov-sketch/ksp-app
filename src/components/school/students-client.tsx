@@ -105,7 +105,7 @@ export function StudentsClient({ schoolId }: { schoolId: string }) {
       {students === null ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Загрузка…</p>
       ) : students.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"><Plus className="mx-auto mb-2 size-6" /> Учеников пока нет — добавьте первого или наполните школу демо-данными на дашборде.</p>
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"><Plus className="mx-auto mb-2 size-6" /> Учеников пока нет — добавьте первого с помощью формы выше.</p>
       ) : (
         <ul className="grid gap-2 sm:grid-cols-2">
           {students.map((s) => (

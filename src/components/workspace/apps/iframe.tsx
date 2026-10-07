@@ -21,8 +21,9 @@ export function IframeApp({ url }: { url: string }) {
         `;
         doc.head.appendChild(style);
       }
-    } catch (e) {
-      // Cross-origin or other error, ignore
+    } catch {
+      // Чужой origin или иная ошибка доступа к документу — стиль не применить,
+      // но содержимое iframe при этом работает.
     }
   };
 

@@ -3,6 +3,7 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { log } from "@/lib/logger";
+import { browserFailure, launchAgentBrowser } from "@/lib/agents/browser-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,13 +38,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: checked.error }, { status: checked.status });
   }
 
-  const { chromium } = await import("playwright");
-  let browser: import("playwright").Browser | null = null;
+  let browser: Awaited<ReturnType<typeof launchAgentBrowser>> | null = null;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await launchAgentBrowser();
     const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block" });
     const page = await context.newPage();
-    await installRequestGuard(page, checked.url.origin);
+    await installRequestGuard(page);
 
     const resp = await page.goto(checked.url.toString(), { waitUntil: "domcontentloaded", timeout: 15_000 });
     const title = await page.title();
@@ -58,7 +58,8 @@ export async function GET(req: Request) {
       url: checked.url.origin,
       reason: error instanceof Error ? error.message : String(error),
     });
-    return NextResponse.json({ title: checked.url.toString(), content: "Не удалось открыть страницу." });
+    const failure = browserFailure(error);
+    return NextResponse.json({ error: failure.message, title: checked.url.toString(), content: "" }, { status: failure.status });
   } finally {
     if (browser) await browser.close().catch(() => {});
   }

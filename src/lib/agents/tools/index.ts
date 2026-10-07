@@ -1,5 +1,4 @@
 import { browserTools } from './browser';
-import { terminalTools } from './terminal';
 import { fileSystemTools } from './file-system';
 
 export interface ToolCtx {
@@ -8,7 +7,6 @@ export interface ToolCtx {
 
 export const tools = {
   ...browserTools,
-  ...terminalTools,
   ...fileSystemTools,
 };
 

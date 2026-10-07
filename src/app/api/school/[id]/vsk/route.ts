@@ -40,7 +40,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ vsk });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
-    return NextResponse.json({ error: message }, { status: 401 });
+    const status = message.includes('Access denied') ? 403 : message.includes('not found') ? 404 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -75,6 +76,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ id: result.insertedId.toString() });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
-    return NextResponse.json({ error: message }, { status: 401 });
+    const status = message.includes('Access denied') ? 403 : message.includes('not found') ? 404 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

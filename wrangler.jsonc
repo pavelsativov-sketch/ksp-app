@@ -1,9 +1,23 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ksp-app",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2025-03-01",
+  "account_id": "1add41512183057df9acc8ad27d5f127",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-07",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "vars": {
+    "APP_URL": "https://ksp-app.pavelsativov.workers.dev",
+    "GITLAB_PROJECT_ID": "87334759",
+    "GITLAB_REF": "main"
+  },
+  "browser": { "binding": "BROWSER" },
+  "workflows": [
+    {
+      "name": "mekty-agent-tasks",
+      "binding": "AGENT_TASK_WORKFLOW",
+      "class_name": "AgentTaskWorkflow"
+    }
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"

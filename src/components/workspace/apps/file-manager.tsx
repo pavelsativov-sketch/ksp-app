@@ -2,10 +2,10 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FolderOpen, FileText, Image, Music, Film, Archive, Code,
+  FileText, Image as ImageIcon, Music, Film, Archive, Code,
   LayoutGrid, List, RefreshCw, File, Loader2, Terminal,
 } from 'lucide-react';
-import { useActiveAgentTask } from '@/components/agents/agent-dock';
+import { useWorkspaceStore } from '@/lib/store/workspace';
 
 interface FsItem {
   name: string;
@@ -15,12 +15,15 @@ interface FsItem {
 }
 
 /**
- * Реальный файловый менеджер: показывает файлы песочницы активной задачи
- * (workspace-data/agent-sessions/<taskId>), а не выдуманное дерево.
- * Клик по файлу — просмотр содержимого, скачивание — по кнопке.
+ * Файловый менеджер показывает содержимое личного изолированного workspace.
  */
 export function FileManagerApp() {
-  const task = useActiveAgentTask();
+  // Открытие файла в редакторе идёт через хранилище рабочей области.
+  // Раньше кнопка «В редактор» отправляла событие window, на которое
+  // подписывалась только двухпанельная раскладка /school. На
+  // полноэкранной /school/workspace подписчика не было — кнопка выглядела
+  // рабочей и молча ничего не делала.
+  const openInEditor = useWorkspaceStore((s) => s.openInEditor);
   const [files, setFiles] = useState<FsItem[] | null>(null);
   const [view, setView] = useState<'grid' | 'list'>('list');
   const [selected, setSelected] = useState<{ name: string; content: string; truncated: boolean } | null>(null);
@@ -28,11 +31,10 @@ export function FileManagerApp() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!task) return;
     setFiles(null);
     setError(null);
     try {
-      const res = await fetch(`/api/agents/sandbox?taskId=${task.id}`, { cache: 'no-store' });
+      const res = await fetch('/api/agents/sandbox', { cache: 'no-store' });
       if (!res.ok) throw new Error('load failed');
       const data = (await res.json()) as { files: FsItem[] };
       setFiles(data.files ?? []);
@@ -40,7 +42,7 @@ export function FileManagerApp() {
       setError('Не удалось прочитать песочницу');
       setFiles([]);
     }
-  }, [task]);
+  }, []);
 
   useEffect(() => {
     // Загрузка — асинхронная операция, поэтому первый setState происходит
@@ -52,11 +54,10 @@ export function FileManagerApp() {
   }, [load]);
 
   async function openFile(name: string) {
-    if (!task) return;
     setLoadingFile(true);
     setSelected(null);
     try {
-      const res = await fetch(`/api/agents/sandbox?taskId=${task.id}&file=${encodeURIComponent(name)}`, { cache: 'no-store' });
+      const res = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(name)}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('open failed');
       const data = (await res.json()) as { content: string; truncated: boolean };
       setSelected({ name, content: data.content, truncated: data.truncated });
@@ -66,23 +67,12 @@ export function FileManagerApp() {
     setLoadingFile(false);
   }
 
-  if (!task) {
-    return (
-      <div className="flex h-full items-center justify-center p-6 text-center">
-        <div className="max-w-xs space-y-2 text-sm text-white/45">
-          <FolderOpen className="mx-auto size-8 text-white/25" />
-          <p>Песочница привязана к задаче. Запустите задачу агенту — её файлы появятся здесь.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col bg-[#141225] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
         <Terminal className="size-3.5 text-emerald-400" />
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/50">
-          workspace-data/agent-sessions/{task.id.slice(-6)}
+          /workspace
         </span>
         <button type="button" onClick={() => setView(view === 'list' ? 'grid' : 'list')} className="rounded p-1 hover:bg-white/10" aria-label="Вид">
           {view === 'list' ? <LayoutGrid className="size-3.5" /> : <List className="size-3.5" />}
@@ -146,7 +136,7 @@ export function FileManagerApp() {
             <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{selected.name}</span>
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("mekty:editor-open", { detail: selected.name }))}
+              onClick={() => openInEditor(selected.name)}
               className="rounded px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-white/10"
             >
               В редактор
@@ -159,7 +149,7 @@ export function FileManagerApp() {
               Удалить
             </button>
             <a
-              href={`/api/agents/sandbox?taskId=${task.id}&file=${encodeURIComponent(selected.name)}`}
+              href={`/api/agents/sandbox?file=${encodeURIComponent(selected.name)}&download=1`}
               download={selected.name}
               className="rounded px-1.5 py-0.5 text-[10px] text-white/60 hover:bg-white/10"
             >
@@ -183,7 +173,7 @@ export function FileManagerApp() {
 
 function FileIcon({ name }: { name: string }) {
   const ext = name.split('.').pop()?.toLowerCase();
-  if (['png', 'jpg', 'jpeg', 'gif'].includes(ext ?? '')) return <Image className="size-4 text-cyan-400" />;
+  if (['png', 'jpg', 'jpeg', 'gif'].includes(ext ?? '')) return <ImageIcon className="size-4 text-cyan-400" />;
   if (['mp3', 'wav'].includes(ext ?? '')) return <Music className="size-4 text-purple-400" />;
   if (['mp4', 'webm'].includes(ext ?? '')) return <Film className="size-4 text-pink-400" />;
   if (['zip', 'rar', '7z'].includes(ext ?? '')) return <Archive className="size-4 text-yellow-500" />;

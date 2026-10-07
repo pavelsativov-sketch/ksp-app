@@ -1,8 +1,10 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { getQualityMetrics } from "@/lib/school-analytics";
+import { getSchoolStudents } from "@/lib/school";
 import { NoSchool } from "@/components/school/no-school";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { GradeRecorder } from "@/components/school/grade-recorder";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,10 @@ export default async function QualityPage() {
   const school = user ? await getActiveSchool(user.id) : null;
   if (!school) return <NoSchool />;
 
-  const subjects = await getQualityMetrics(school._id!.toString()).catch(() => []);
+  const [subjects, roster] = await Promise.all([
+    getQualityMetrics(school._id!.toString()).catch(() => []),
+    getSchoolStudents(school._id!.toString()).catch(() => []),
+  ]);
   const overall = subjects.length
     ? Math.round((subjects.reduce((s, r) => s + r.average_score, 0) / subjects.length) * 100)
     : null;
@@ -25,8 +30,10 @@ export default async function QualityPage() {
         <p className="mt-1 text-sm text-muted-foreground">{formatSchoolSubtitle(school)}</p>
       </header>
 
+      <GradeRecorder schoolId={school._id!.toString()} students={roster.flatMap((student) => student._id ? [{ id: student._id.toString(), name: student.full_name, className: student.class_name }] : [])} />
+
       {subjects.length === 0 ? (
-        <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Оценок пока нет. Наполните школу демо-данными на дашборде.</CardContent></Card>
+        <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Оценок пока нет. Добавьте первую оценку выше.</CardContent></Card>
       ) : (
         <div className="space-y-4">
           <Card>

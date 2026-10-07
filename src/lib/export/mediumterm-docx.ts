@@ -1,5 +1,5 @@
 import {
-  AlignmentType, Document, HeadingLevel, Packer, Paragraph,
+  Document, HeadingLevel, Packer, Paragraph,
   ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from "docx";
 import type { LongTermPlan, MediumTermPlan } from "@/lib/longterm";

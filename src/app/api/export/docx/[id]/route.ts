@@ -14,19 +14,24 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // ������� �������� � �������� (��������� �����), � zip ��� � ��� CPU ��
-  // ������ � ��� ������ �� IP ��� ������� ������ ��������� �������.
+  // Лимит по IP на все экспорты сразу: сборка zip жжёт CPU на сервере,
+  // поэтому один добрый учитель не должен выбирать формат для истощения.
   const rl = await checkRateLimitAsync(`export:${clientIp(request)}`, 30, 60_000);
-  if (!rl.ok) return NextResponse.json({ error: "������� ����� �������� ��������." }, { status: 429 });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Слишком много скачиваний. Повторите через минуту." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
+  }
 
   if (!isMongoConfigured()) {
-    return NextResponse.json({ error: "Not configured" }, { status: 500 });
+    return NextResponse.json({ error: "Сервер не настроен" }, { status: 500 });
   }
 
   const user = await getCurrentUser();
   const plan = await getAccessiblePlan(id, user?.id ?? null);
   if (!plan) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ error: "План не найден" }, { status: 404 });
   }
 
   // Бесплатный тариф (и анонимный просмотр публичного плана) — с пометкой.

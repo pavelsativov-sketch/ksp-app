@@ -97,8 +97,6 @@ export interface EnhanceSectionInput {
 export interface EnhanceSectionResult {
   improved: string | string[];
   isList: boolean;
-  stub: boolean;
-  note?: string;
 }
 
 export async function enhanceSection(input: EnhanceSectionInput): Promise<EnhanceSectionResult> {
@@ -110,16 +108,11 @@ export async function enhanceSection(input: EnhanceSectionInput): Promise<Enhanc
   const isList = Array.isArray(current);
 
   if (!isAnyProviderConfigured()) {
-    return {
-      improved: fallbackImprove(section as Section, stage, current, context),
-      isList,
-      stub: true,
-      note: "Демо-режим: добавьте ключ для реальной AI-обработки.",
-    };
+    throw new Error("Не настроен AI-провайдер для улучшения текста. Настройте рабочий ключ или отредактируйте раздел вручную.");
   }
 
   const improved = await callAi(section as Section, stage, current, context);
-  return { improved, isList, stub: false };
+  return { improved, isList };
 }
 
 function buildPrompt(
@@ -271,139 +264,4 @@ async function callAi(
     .split("\n")
     .map((l) => l.replace(/^[\s•\-\d.)]+/, "").trim())
     .filter(Boolean);
-}
-
-function fallbackImprove(
-  section: Section,
-  stage: Stage | undefined,
-  current: string | string[],
-  ctx: { topic?: string; subject?: string; grade?: number; language?: "ru" | "kz" },
-): string | string[] {
-  const topic = ctx.topic || "темы урока";
-  switch (section) {
-    case "lessonObjectives":
-      return mergeList(current, [
-        `Учащиеся смогут объяснить основные понятия по теме «${topic}»`,
-        "Учащиеся применят изученный материал при решении практических задач",
-        "Учащиеся проведут самооценку по предложенным критериям",
-      ]);
-    case "assessmentCriteria":
-      return mergeList(current, [
-        "Использует корректную терминологию",
-        "Аргументирует свой выбор / решение",
-        "Выполняет задание согласно инструкции",
-      ]);
-    case "languageObjectivesTerms":
-      return mergeList(current, ["Ключевые термины темы", "Академическая лексика урока"]);
-    case "languageObjectivesPhrases":
-      return mergeList(current, [
-        "Я считаю, что …, потому что …",
-        "Сравнивая …, можно сделать вывод, что …",
-        "Моё решение основано на …",
-      ]);
-    case "glossary":
-      // Переводы нельзя выдумать детерминированно — без AI возвращаем как есть.
-      return Array.isArray(current) ? current : [];
-    case "values":
-      return appendText(
-        current,
-        "Уважение к мнению одноклассников, ответственность за учебный результат, академическая честность.",
-      );
-    case "priorKnowledge":
-      return appendText(
-        current,
-        `Учащиеся знакомы с базовыми понятиями, предшествующими теме «${topic}».`,
-      );
-    case "crossCurricularLinks":
-      return appendText(
-        current,
-        "Связь с математикой/языком/естествознанием — через анализ данных и оформление выводов.",
-      );
-    case "formativeAssessment":
-      return appendText(
-        current,
-        "Приёмы «Светофор», «Две звезды и пожелание», устная обратная связь по критериям.",
-      );
-    case "differentiation":
-      return appendText(
-        current,
-        "Поддержка: карточки-опоры с алгоритмом для менее способных, работа в паре. Вызов: задание повышенной сложности / исследовательский вопрос для более способных.",
-      );
-    case "healthAndSafety":
-      return appendText(
-        current,
-        "Физкультминутка в середине урока, контроль осанки, соблюдение норм работы с ИКТ.",
-      );
-    case "reflection":
-      return appendText(
-        current,
-        "1) Достигнуты ли цели урока? 2) Какие приёмы сработали лучше? 3) Что изменить в следующий раз?",
-      );
-    case "teacherActions":
-      return appendText(current, stageGuidance(stage, "учителя"));
-    case "studentActions":
-      return appendText(current, stageGuidance(stage, "учеников"));
-    case "resources":
-      return appendText(
-        current,
-        "Учебник, презентация, раздаточные карточки (3 уровня), интерактивная доска.",
-      );
-    case "keyQuestions":
-      return mergeList(
-        current,
-        stage === "beginning"
-          ? [
-              `Что вы помните по теме, связанной с «${topic}»?`,
-              "Где это может пригодиться в жизни?",
-              "Какие у вас остались вопросы с прошлого урока?",
-            ]
-          : stage === "end"
-            ? [
-                `Что нового вы узнали о «${topic}»?`,
-                "Какой вывод вы сделали для себя?",
-              ]
-            : [
-                `Какое ключевое свойство «${topic}» вы заметили?`,
-                "Как изменится результат, если поменять одно из условий?",
-              ],
-      );
-    case "descriptors":
-      return mergeList(current, [
-        "Записывает определение / алгоритм",
-        "Приводит не менее двух примеров",
-        "Решает задачу по образцу",
-        "Сравнивает свои выводы с эталоном",
-      ]);
-    case "reflectionQuestions":
-      return mergeList(current, [
-        "Что было легко?",
-        "Что было сложно?",
-        "Что вам особенно понравилось?",
-      ]);
-    case "homework":
-      return appendText(
-        current,
-        `Прочитать соответствующий параграф учебника и выполнить 2–3 задания по теме «${topic}».`,
-      );
-    case "summary":
-      return appendText(
-        current,
-        `На уроке мы изучили тему «${topic}»: ключевые понятия, основные свойства и примеры применения.`,
-      );
-  }
-}
-
-function mergeList(current: string | string[], extras: string[]): string[] {
-  const items = Array.isArray(current) ? current : current.split("\n").filter((x) => x.trim());
-  const set = new Set(items.map((x) => x.trim().toLowerCase()));
-  for (const x of extras) if (!set.has(x.trim().toLowerCase())) items.push(x);
-  return items;
-}
-
-function appendText(current: string | string[], extra: string): string {
-  const cur = Array.isArray(current) ? current.join("\n") : current;
-  const trimmed = (cur || "").trim();
-  if (!trimmed) return extra;
-  if (trimmed.toLowerCase().includes(extra.slice(0, 24).toLowerCase())) return trimmed;
-  return `${trimmed}\n\n${extra}`;
 }

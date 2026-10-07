@@ -54,9 +54,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const { locale, t } = await getDict();
   const authed = user ? <><Link className={navClass} href="/profile">{t.nav.profile}</Link><Link className={navClass} href="/school">{t.school.nav.school}</Link><Link className={navClass} href="/dashboard">{t.nav.plans}</Link><Link className={navClass} href="/kits">{t.nav.kits}</Link><Link className={navClass} href="/templates">{t.nav.templates}</Link><Link className={navClass} href="/textbooks">{t.nav.materials}</Link><form action={logoutAction}><button className={logoutClass} type="submit">{t.nav.logout}</button></form></> : <><Link className={navClass} href="/login">{t.nav.login}</Link><Link className={accountClass} href="/register">{t.nav.register}</Link></>;
 
-  const demoBanner = !configured && (
+  const setupNotice = !configured && (
     <div className="border-b border-[#dbc7a7] bg-[#f8eedc] px-4 py-2 text-center text-sm text-[#745329] no-print">
-      {t.demoBanner} <code className="font-mono">MONGODB_URI</code> {t.demoBannerIn} <code className="font-mono">.env.local</code>.
+      {t.setupNoticeStart} <code className="font-mono">MONGODB_URI</code> {t.setupNoticeIn} <code className="font-mono">.env.local</code>.
     </div>
   );
 
@@ -128,7 +128,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           {/* Внутри /school маркетинговый хедер и футер не рендерятся: там
               своя оболочка на весь экран (см. app/school/layout.tsx). */}
           <MarketingChrome
-            chrome={<>{demoBanner}{header}</>}
+            chrome={<>{setupNotice}{header}</>}
             content={<main id="main-content" tabIndex={-1} className="w-full flex-1">{children}</main>}
             footer={footer}
           />

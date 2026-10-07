@@ -3,7 +3,7 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { log } from "@/lib/logger";
-import type { Browser, BrowserContext, Page } from "playwright";
+import { browserFailure, clearAgentBrowserSession, getAgentBrowserSession, persistAgentBrowserSession } from "@/lib/agents/browser-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,57 +27,6 @@ export const maxDuration = 60;
  * пользователя и запрет всех подзапросов, кроме проверенного origin.
  */
 
-interface Session {
-  browser: Browser;
-  context: BrowserContext;
-  page: Page;
-  userId: string;
-  lastSeen: number;
-}
-
-const SESSION_TTL_MS = 5 * 60_000;
-const sessions = new Map<string, Session>();
-
-/** Разрывает сессии, к которым давно не обращались. */
-function reapSessions(now = Date.now()): void {
-  for (const [userId, session] of sessions) {
-    if (now - session.lastSeen < SESSION_TTL_MS) continue;
-    sessions.delete(userId);
-    void session.context.close().catch(() => {});
-    void session.browser.close().catch(() => {});
-  }
-}
-
-async function getSession(userId: string): Promise<Session> {
-  const now = Date.now();
-  reapSessions(now);
-
-  const existing = sessions.get(userId);
-  if (existing && !existing.browser.isConnected() && !existing.page.isClosed()) {
-    existing.lastSeen = now;
-    return existing;
-  }
-  if (existing) {
-    sessions.delete(userId);
-    await existing.context.close().catch(() => {});
-    await existing.browser.close().catch(() => {});
-  }
-
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ headless: true });
-  // Свой контекст на пользователя: отдельные cookie, localStorage и история.
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    javaScriptEnabled: false,
-    serviceWorkers: "block",
-  });
-  const page = await context.newPage();
-
-  const session: Session = { browser, context, page, userId, lastSeen: now };
-  sessions.set(userId, session);
-  return session;
-}
-
 function searchUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
@@ -86,53 +35,50 @@ function searchUrl(raw: string): string {
   return `https://duckduckgo.com/?q=${encodeURIComponent(trimmed)}`;
 }
 
-// GET /api/agents/browser-stream?action=screenshot
-// GET /api/agents/browser-stream?action=navigate&url=…
-// GET /api/agents/browser-stream?action=click&x=100&y=200
-// GET /api/agents/browser-stream?action=type&text=…
-// GET /api/agents/browser-stream?action=key&key=Enter
-// GET /api/agents/browser-stream?action=back|forward|reload|scroll&dy=300
-export async function GET(req: Request) {
+type BrowserAction = { action?: string; url?: unknown; x?: unknown; y?: unknown; text?: unknown; key?: unknown; dy?: unknown };
+
+async function authorize() {
   const auth = await requireApiAuth();
-  if (auth.response) return auth.response;
+  if (auth.response) return { response: auth.response } as const;
 
   const rl = await checkRateLimitAsync(`agent:browser-stream:${auth.user.id}`, 40, 60_000);
   if (!rl.ok) {
-    return NextResponse.json(
+    return { response: NextResponse.json(
       { error: "Слишком много обращений к браузеру. Подождите минуту." },
       { status: 429 },
-    );
+    ) } as const;
   }
+  return { userId: auth.user.id } as const;
+}
 
-  const { searchParams } = new URL(req.url);
-  const action = searchParams.get("action") ?? "screenshot";
-
+async function runAction(userId: string, args: BrowserAction) {
+  const action = args.action ?? "screenshot";
   try {
-    const session = await getSession(auth.user.id);
+    const session = await getAgentBrowserSession(userId);
     const { page } = session;
 
     let guardOrigin: string | null = null;
 
     if (action === "navigate") {
-      const nav = searchUrl(searchParams.get("url") ?? "");
+      const nav = searchUrl(typeof args.url === "string" ? args.url : "");
       const checked = await checkPublicUrl(nav);
       if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
       guardOrigin = checked.url.origin;
 
       // Подзапросы самой страницы пропускаем только для проверенного origin.
-      await installRequestGuard(page, guardOrigin);
+      await installRequestGuard(page);
       await page.goto(checked.url.toString(), { waitUntil: "domcontentloaded", timeout: 20_000 });
     } else if (action === "click") {
-      const x = Number.parseInt(searchParams.get("x") ?? "0", 10);
-      const y = Number.parseInt(searchParams.get("y") ?? "0", 10);
+      const x = Number(args.x ?? 0);
+      const y = Number(args.y ?? 0);
       if (Number.isFinite(x) && Number.isFinite(y)) await page.mouse.click(x, y);
       await page.waitForTimeout(300);
     } else if (action === "type") {
-      const text = (searchParams.get("text") ?? "").slice(0, 500);
+      const text = (typeof args.text === "string" ? args.text : "").slice(0, 500);
       if (text) await page.keyboard.type(text, { delay: 10 });
     } else if (action === "key") {
-      const key = (searchParams.get("key") ?? "Enter").slice(0, 30);
-      if (/^[\w]+$/.test(key)) await page.keyboard.press(key);
+      const key = (typeof args.key === "string" ? args.key : "Enter").slice(0, 30);
+      if (/^(?:[\w]+|Control\+[\w]+|Shift\+[\w]+|Alt\+[\w]+)$/.test(key)) await page.keyboard.press(key);
       await page.waitForTimeout(400);
     } else if (action === "back") {
       await page.goBack({ waitUntil: "domcontentloaded", timeout: 10_000 }).catch(() => {});
@@ -141,7 +87,7 @@ export async function GET(req: Request) {
     } else if (action === "reload") {
       await page.reload({ waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => {});
     } else if (action === "scroll") {
-      const dy = Number.parseInt(searchParams.get("dy") ?? "0", 10);
+      const dy = Number(args.dy ?? 0);
       if (Number.isFinite(dy)) await page.mouse.wheel(0, Math.max(-2000, Math.min(2000, dy)));
       await page.waitForTimeout(200);
     } else if (action !== "screenshot") {
@@ -149,7 +95,8 @@ export async function GET(req: Request) {
     }
 
     if (guardOrigin === null) guardOrigin = new URL(page.url()).origin;
-    await installRequestGuard(page, guardOrigin);
+    await installRequestGuard(page);
+    if (action !== "screenshot") await persistAgentBrowserSession(userId);
 
     const screenshot = await page.screenshot({ type: "jpeg", quality: 80 });
     const title = await page.title().catch(() => "");
@@ -167,10 +114,53 @@ export async function GET(req: Request) {
     // Наружу — нейтральный текст: сообщения Playwright содержат внутренние
     // пути и версии, детали уходят в лог.
     log.error("browser-stream failed", {
-      userId: auth.user.id,
+      userId,
       action,
       reason: error instanceof Error ? error.message : String(error),
     });
-    return NextResponse.json({ error: "Не удалось выполнить действие в браузере" }, { status: 502 });
+    const failure = browserFailure(error);
+    return NextResponse.json({ error: failure.message }, { status: failure.status });
   }
+}
+
+/** GET is kept for screenshots and non-sensitive browser controls. */
+export async function GET(req: Request) {
+  const auth = await authorize();
+  if ("response" in auth) return auth.response;
+  const { searchParams } = new URL(req.url);
+  const action = searchParams.get("action") ?? "screenshot";
+  // Never allow credentials to be sent in a URL, where proxies may log them.
+  if (action === "type") return NextResponse.json({ error: "Ввод текста передавайте методом POST" }, { status: 405 });
+  return runAction(auth.userId, {
+    action,
+    url: searchParams.get("url"),
+    x: searchParams.get("x"),
+    y: searchParams.get("y"),
+    key: searchParams.get("key"),
+    dy: searchParams.get("dy"),
+  });
+}
+
+/** POST keeps typed login data out of query strings and access logs. */
+export async function POST(req: Request) {
+  const auth = await authorize();
+  if ("response" in auth) return auth.response;
+  let body: BrowserAction;
+  try {
+    body = await req.json() as BrowserAction;
+  } catch {
+    return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
+  }
+  if (body.action === "type" && (typeof body.text !== "string" || body.text.length > 500)) {
+    return NextResponse.json({ error: "Допустимо ввести до 500 символов" }, { status: 400 });
+  }
+  return runAction(auth.userId, body);
+}
+
+/** Завершить внешний сеанс и удалить зашифрованные cookies пользователя. */
+export async function DELETE() {
+  const auth = await authorize();
+  if ("response" in auth) return auth.response;
+  await clearAgentBrowserSession(auth.userId);
+  return NextResponse.json({ ok: true });
 }

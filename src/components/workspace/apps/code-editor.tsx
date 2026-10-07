@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Editor, { type OnMount, type Monaco } from "@monaco-editor/react";
 import { FileCode, Loader2, Save, FilePlus } from "lucide-react";
-import { useActiveAgentTask } from "@/components/agents/agent-dock";
+import { useWorkspaceStore } from "@/lib/store/workspace";
 
 interface OpenFile {
   name: string;
@@ -18,11 +18,16 @@ const LANG: Record<string, string> = {
 };
 
 /**
- * Настоящий редактор кода (Monaco) над файлами рабочей машины:
+ * Редактор Monaco над персональными файлами рабочей области:
  * открытие из файл-менеджера, правка, сохранение на диск через API.
  */
 export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null }) {
-  const task = useActiveAgentTask();
+  // Без явного аргумента редактор берёт файл из окна рабочей области. Так его
+  // можно открыть иконкой на рабочем столе, и кнопкой «В редактор» из
+  // файлового менеджера — раньше он открывался только вторым способом и только
+  // в двухпанельной раскладке.
+  const windowFile = useWorkspaceStore((s) => s.windows.find((w) => w.type === "code-editor")?.file);
+  const effectiveFile = requestedFile ?? windowFile ?? null;
   const [open, setOpen] = useState<OpenFile | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,11 +35,10 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   const [editorRef, setEditorRef] = useState<{ getValue: () => string; setValue: (v: string) => void } | null>(null);
 
   const openFile = useCallback(async (name: string) => {
-    if (!task) return;
     setLoading(true);
     setNotice(null);
     try {
-      const res = await fetch(`/api/agents/sandbox?taskId=${task.id}&file=${encodeURIComponent(name)}`, { cache: "no-store" });
+      const res = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(name)}`, { cache: "no-store" });
       const data = (await res.json()) as { content?: string; error?: string };
       if (!res.ok || data.content === undefined) throw new Error(data.error ?? "Не удалось открыть");
       setOpen({ name, content: data.content, dirty: false });
@@ -43,15 +47,27 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
       setOpen(null);
     }
     setLoading(false);
-  }, [task]);
+  }, []);
 
   // Файл, запрошенный из файл-менеджера («Открыть в редакторе»).
+  //
+  // Загрузка начинается с отдельной задачи, а не прямо в эффекте: openFile
+  // сразу ставит setLoading(true), и синхронный setState внутри эффекта
+  // запускает каскадный рендер — редактор мигал и мог открыть файл дважды
+  // при быстрых кликах.
   useEffect(() => {
-    if (requestedFile && task) void openFile(requestedFile);
-  }, [requestedFile, task, openFile]);
+    if (!effectiveFile) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) void openFile(effectiveFile);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveFile, openFile]);
 
   const save = useCallback(async () => {
-    if (!task || !open || !editorRef || saving) return;
+    if (!open || !editorRef || saving) return;
     setSaving(true);
     setNotice(null);
     try {
@@ -67,24 +83,13 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
       setNotice(e instanceof Error ? e.message : "Ошибка сохранения");
     }
     setSaving(false);
-  }, [task, open, editorRef, saving]);
+  }, [open, editorRef, saving]);
 
   const onMount: OnMount = (editor, monaco: Monaco) => {
     setEditorRef({ getValue: () => editor.getValue(), setValue: (v: string) => editor.setValue(v) });
     // Ctrl+S — сохранить файл в машину.
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { void save(); });
   };
-
-  if (!task) {
-    return (
-      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-white/45">
-        <div className="max-w-xs space-y-2">
-          <FileCode className="mx-auto size-8 text-white/25" />
-          <p>Редактор работает с файлами машины. Запустите задачу или создайте файл в терминале.</p>
-        </div>
-      </div>
-    );
-  }
 
   const ext = open?.name.split(".").pop()?.toLowerCase() ?? "txt";
 

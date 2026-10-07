@@ -49,7 +49,6 @@ export function AiEnhanceButton<T extends string | string[]>({
 }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
   const [rated, setRated] = useState<"up" | "down" | null>(null);
 
@@ -68,7 +67,6 @@ export function AiEnhanceButton<T extends string | string[]>({
 
   async function run() {
     setErr(null);
-    setNote(null);
     setApplied(false);
     setRated(null);
     setLoading(true);
@@ -85,12 +83,10 @@ export function AiEnhanceButton<T extends string | string[]>({
       const data = (await res.json()) as {
         improved: string | string[];
         isList: boolean;
-        stub?: boolean;
         note?: string;
       };
       onApply(data.improved as T, data.note);
-      if (data.stub && data.note) setNote(data.note);
-      if (!data.stub) setApplied(true);
+      setApplied(true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Ошибка AI");
     } finally {
@@ -123,7 +119,6 @@ export function AiEnhanceButton<T extends string | string[]>({
       )}
       {rated !== null && <span className="text-xs text-[#6b7480]">Спасибо за оценку!</span>}
       {err && <span className="text-xs text-red-600">{err}</span>}
-      {note && !err && <span className="text-xs text-amber-700">{note}</span>}
     </div>
   );
 }

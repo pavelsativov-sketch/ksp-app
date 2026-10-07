@@ -1,5 +1,5 @@
 import net from "net";
-import { lookup } from "dns/promises";
+import { resolve4, resolve6 } from "node:dns/promises";
 
 /**
  * Защита браузерного агента от SSRF.
@@ -127,15 +127,22 @@ export async function checkPublicUrl(raw: string): Promise<UrlCheck> {
     return { ok: false, error: "Запрос во внутреннюю сеть запрещён", status: 403 };
   }
 
-  let records: Array<{ address: string }>;
-  try {
-    records = await lookup(host, { all: true });
-  } catch {
+  const resolved = await Promise.allSettled([resolve4(host), resolve6(host)]);
+  const records = resolved.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+  const unresolved = resolved.filter((result) => result.status === "rejected");
+  const onlyMissingAddressFamily = unresolved.every(
+    (result) => getDnsErrorCode(result.reason) === "ENODATA",
+  );
+
+  // One address family may legitimately have no records. Any other resolver
+  // failure is treated as an error, even if the other family resolved.
+  if (records.length === 0 || (unresolved.length > 0 && !onlyMissingAddressFamily)) {
     return { ok: false, error: "Не удалось разрешить хост", status: 400 };
   }
 
-  if (records.length === 0) return { ok: false, error: "Не удалось разрешить хост", status: 400 };
-  if (records.some((r) => isBlockedAddress(r.address))) {
+  if (records.some((address) => isBlockedAddress(address))) {
     return { ok: false, error: "Запрос во внутреннюю сеть запрещён", status: 403 };
   }
 
@@ -168,6 +175,7 @@ export function isAllowedOrigin(raw: string): boolean {
 
 /** Структурный тип поверхности Playwright — без импорта пакета в общий модуль. */
 interface Routeable {
+  unroute?(url: string | RegExp | ((url: URL) => boolean)): Promise<void>;
   route(
     url: string | RegExp | ((url: URL) => boolean),
     handler: (route: RouteLike) => unknown,
@@ -185,20 +193,21 @@ interface RouteLike {
  * проверенного origin. Это закрывает и DNS-rebinding, и уход страницы
  * во внутреннюю сеть через <img>/fetch/XHR.
  */
-export async function installRequestGuard(page: Routeable, allowedOrigin: string): Promise<void> {
-  await page.route("**/*", (route) => {
+export async function installRequestGuard(page: Routeable): Promise<void> {
+  // One active policy per page; old handlers must not block a later navigation.
+  await page.unroute?.("**/*").catch(() => {});
+  await page.route("**/*", async (route) => {
     const target = route.request().url();
-    if (isAllowedOrigin(target) && sameOrigin(target, allowedOrigin)) return route.continue();
+    // Allow public SSO/CDN origins after resolving and checking every address.
+    // This keeps authentication flows working without granting private-network access.
+    // Re-resolve every request, including the original origin, to block DNS rebinding.
+    const checked = await checkPublicUrl(target);
+    if (checked.ok) return route.continue();
     return route.abort();
   });
 }
 
-function sameOrigin(a: string, b: string): boolean {
-  try {
-    const ua = new URL(a);
-    const ub = new URL(b);
-    return ua.protocol === ub.protocol && ua.host === ub.host;
-  } catch {
-    return false;
-  }
+function getDnsErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined;
+  return typeof error.code === "string" ? error.code : undefined;
 }

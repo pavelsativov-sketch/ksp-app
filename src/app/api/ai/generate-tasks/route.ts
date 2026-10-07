@@ -57,10 +57,14 @@ export async function POST(request: Request) {
       console.error("AI generated invalid tasks", tasks.error.flatten());
       return NextResponse.json({ error: "AI вернул некорректные задания. Повторите попытку." }, { status: 502 });
     }
+    await quota.reservation.finalize(true);
     return NextResponse.json({ tasks: tasks.data, quota: { remaining: quota.reservation.remaining } });
   } catch (error) {
     await quota.reservation.finalize(false);
     console.error("Task generation failed", error);
-    return NextResponse.json({ error: "Не удалось сгенерировать задания. Повторите попытку позже." }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "AI-провайдер сейчас недоступен. Создайте задания вручную или повторите попытку позже." },
+      { status: 503 },
+    );
   }
 }

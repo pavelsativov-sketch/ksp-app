@@ -156,7 +156,6 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
   const [refundMessage, setRefundMessage] = useState("");
   // AI-результат, ожидающий подтверждения: показываем дифф до применения.
   const [pendingAi, setPendingAi] = useState<{ merged: KspContent; diff: ContentDiff } | null>(null);
-  const [aiStep, setAiStep] = useState(0);
   const { state, setState, draftSaved, clearDraft } = usePlanDraft(initialPlan?.id ?? (exampleKey ? `example:${exampleKey}` : undefined), {
     id: initialPlan?.id,
     title: initialPlan?.title ?? "",
@@ -222,7 +221,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
     }));
   };
 
-  const { generateWithAi, aiLoading, aiError, ragNote, quotaRemaining, cancelAi } = usePlanAi();
+  const { generateWithAi, aiLoading, aiError, ragNote, quotaRemaining, progress: aiProgress, cancelAi } = usePlanAi();
 
   // Профиль школы берём из localStorage только пока он не выбран пользователем
   // (и не восстановлен из серверного черновика). Единый источник истины —
@@ -256,15 +255,10 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
     }
   }
 
-  // Живой прогресс долгой генерации: подписи этапов вместо висящего спиннера.
-  const steps = aiSteps(t);
-  useEffect(() => {
-    if (!aiLoading) return;
-    const timer = window.setInterval(() => {
-      setAiStep((s) => Math.min(s + 1, steps.length - 1));
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [aiLoading, steps]);
+  // Раньше здесь стоял таймер: каждые 5 секунд подпись этапа менялась сама,
+  // независимо от того, что делает модель. Учитель видел «идёт проверка
+  // методистом» на пустом месте. Теперь этап приходит с сервера — в aiProgress.
+  const currentStageLabel = aiProgress?.label ?? aiSteps(t)[0];
 
   const subjectName = subjects.find((s) => s.id === subjectId)?.name_ru ?? pe.subjectFallback;
 
@@ -356,7 +350,6 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
       return;
     }
     setSaveError(null);
-    setAiStep(0);
     const aiContent = await generateWithAi({
       grade,
       subjectName,
@@ -726,7 +719,10 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
             )}
             {aiLoading && (
               <div className="text-xs text-slate-600" role="status" aria-live="polite">
-                {aiSteps(t)[aiStep]} {pe.aiTiming}
+                {/* Подпись и процент берутся с сервера: экранный диктор
+                    читает реальный этап, а не текст из таймера. */}
+                {currentStageLabel}
+                {aiProgress ? ` — ${aiProgress.percent}%` : ` ${pe.aiTiming}`}
               </div>
             )}
             {quotaRemaining !== undefined && quotaRemaining !== null && (
@@ -1263,14 +1259,8 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
         )}
       </div>
 
-      {/* AI Loading Overlay */}
-      {aiLoading && (
-        <AiLoadingOverlay
-          steps={aiSteps(t)}
-          currentStep={aiStep}
-          onCancel={cancelAi}
-        />
-      )}
+      {/* Окно ожидания с настоящим прогрессом от сервера. */}
+      {aiLoading && <AiLoadingOverlay progress={aiProgress} onCancel={cancelAi} />}
     </div>
   );
 }

@@ -5,10 +5,15 @@
  * - Gemini 2.5 Flash (основная — лучшее качество, яркие цвета, понимает контекст)
  * - FLUX.2 [dev] через Cloudflare (вторая — фотореалистичное качество)
  * - DALL-E 3 (если доступен OpenAI ключ)
- * - FLUX.1-schnell (быстрый фолбэк)
+ * - FLUX.1 schnell через Cloudflare (быстрый и дешёвый резерв)
+ *
+ * Состав проверен живыми запросами: `node scripts/probe-image-providers.mjs`.
+ * На момент проверки отвечали FLUX.2 и FLUX.1 schnell; Gemini отдавал 503,
+ * DALL-E — 401 из-за чужого ключа в OPENAI_API_KEY.
  *
  * Особенности:
  * - Автоматический выбор лучшей доступной модели
+ * - Провайдер, дважды ответивший отказом, выводится из ротации на 10 минут
  * - Улучшенные промпты с стилями и композицией
  * - Валидация качества изображения
  * - Логика повторных попыток
@@ -89,6 +94,63 @@ export function resetImageCache(): void {
   imageCache.clear();
 }
 
+// ── Защита от мёртвого провайдера ───────────────────────────────
+
+/**
+ * Провайдер, который только что не ответил, выводится из ротации на 10 минут.
+ *
+ * Зачем это нужно. Проверено живой пробой (`scripts/probe-image-providers.mjs`):
+ * на текущих ключах Gemini отдаёт 503 «high demand», а FLUX.2 работает. Без
+ * защиты каждая иллюстрация сначала шла в Gemini, делала три попытки по
+ * 120 секунд ожидания и только потом попадала в рабочий провайдер — учитель
+ * ждал десятки секунд впустую и квота Gemini списывалась на отказы.
+ *
+ * Порог 2 отказа: одиночный сбой у провайдера — это норма, регулярный — нет.
+ */
+const FAILURE_THRESHOLD = 2;
+const COOLDOWN_MS = 10 * 60 * 1000;
+
+interface FailureRecord {
+  fails: number;
+  until: number;
+}
+
+const failures = new Map<string, FailureRecord>();
+
+/** Провайдер сейчас не оправдывает ожиданий. */
+function isCoolingDown(label: string, now = Date.now()): boolean {
+  const record = failures.get(label);
+  if (!record) return false;
+  if (record.until > now) return true;
+  // Пауза истекла — возвращаем провайдера в ротацию и забываем историю.
+  //
+  // Важно: запись удаляется только здесь и только при истёкшей паузе. Раньше
+  // проверка была устроена так, что любой не охлаждённый провайдер терял
+  // счётчик отказов, порог в 2 никогда не достигался, и защита не работала.
+  if (record.until > 0) failures.delete(label);
+  return false;
+}
+
+function noteFailure(label: string, now = Date.now()): void {
+  const previous = failures.get(label);
+  const fails = (previous?.fails ?? 0) + 1;
+  failures.set(label, { fails, until: fails >= FAILURE_THRESHOLD ? now + COOLDOWN_MS : 0 });
+}
+
+function noteSuccess(label: string): void {
+  failures.delete(label);
+}
+
+/** Сброс состояния отказов — для тестов. */
+export function resetImageFailures(): void {
+  failures.clear();
+}
+
+/** Список провайдеров, временно выведенных из ротации (для диагностики). */
+export function cooledDownProviders(now = Date.now()): string[] {
+  return [...failures.entries()].filter(([, record]) => record.until > now).map(([label]) => label);
+}
+
 // ── Основная функция генерации ──────────────────────────────────
 
 /**
@@ -127,21 +189,29 @@ export async function generateImage(
   // настроено» и сбивали с толку.
   const failures: string[] = [];
   const attempt = async (label: string, run: () => Promise<GenerateImageResult>) => {
+    // Провайдер, дважды подряд ответивший отказом, не опрашивается в течение
+    // паузы: см. «Защита от мёртвого провайдера».
+    if (isCoolingDown(label)) {
+      failures.push(`${label}: пропущен, провайдер не отвечает (пауза 10 мин)`);
+      return null;
+    }
     try {
       const result = await run();
+      noteSuccess(label);
       setInCache(cacheKey, result);
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`${label} failed: ${message}`);
+      noteFailure(label);
       failures.push(`${label}: ${message}`);
       return null;
     }
   };
 
-  // 1. Gemini 3.8 Flash — основная модель, лучшее качество и яркие цвета.
+  // 1. Gemini — основная модель, лучшее качество и яркие цвета.
   if (geminiKey) {
-    const result = await attempt("Gemini 3.8 Flash", () => generateWithGemini(input, geminiKey));
+    const result = await attempt("Gemini", () => generateWithGemini(input, geminiKey));
     if (result) return result;
   }
 
@@ -149,9 +219,16 @@ export async function generateImage(
   if (accountId && token) {
     const result = await attempt("FLUX.2", () => generateWithFlux(input, accountId, token));
     if (result) return result;
+
+    // 3. FLUX.1 schnell — быстрый и дешёвый резерв. Проверен живой пробой:
+    //    в отличие от FLUX.2 принимает JSON-тело и не принимает width/height.
+    //    Без него единственный рабочий провайдер оставался единственным: при
+    //    его лимите иллюстрации не создавались вовсе.
+    const fast = await attempt("FLUX.1 schnell", () => generateWithFluxFast(input, accountId, token));
+    if (fast) return fast;
   }
 
-  // 3. DALL-E 3 — последний резерв.
+  // 4. DALL-E 3 — последний резерв.
   if (openaiKey) {
     const result = await attempt("DALL-E 3", () => generateWithDallE(input, openaiKey));
     if (result) return result;
@@ -317,6 +394,56 @@ async function generateWithFlux(
     provider: "Cloudflare",
     model: "FLUX.2 [dev]",
   };
+}
+
+// ── FLUX.1 schnell через Cloudflare (быстрый резерв) ─────────────
+
+/**
+ * Быстрый резерв на случай, если FLUX.2 недоступен или упёрся в лимит.
+ *
+ * Отличия от FLUX.2 проверены живым запросом и неочевидны:
+ *  * принимает JSON-тело, а не multipart (с multipart отдаёт 6003
+ *    «Request body is not valid json»);
+ *  * не принимает поля width и height (5006 «Additional or unevaluated
+ *    properties '/width, /height'»).
+ *
+ * Качество ниже, скорость выше — для иллюстраций к заданиям это подходит.
+ */
+async function generateWithFluxFast(
+  input: GenerateImageInput,
+  accountId: string,
+  token: string,
+): Promise<GenerateImageResult> {
+  const prompt = buildImagePrompt(input);
+  if (prompt.length > 4000) throw new Error("Промпт изображения слишком длинный");
+
+  const model = "@cf/black-forest-labs/flux-1-schnell";
+  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    // width/height здесь не передаются: модель их не принимает.
+    body: JSON.stringify({ prompt, steps: 4, num_steps: 4 }),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Cloudflare FLUX.1 schnell error ${response.status}${await describeCloudflareError(response)}`);
+  }
+
+  const data = (await response.json()) as { result?: { image?: string } };
+  const base64 = data.result?.image;
+  if (!base64) throw new Error("FLUX.1 schnell не вернул изображение");
+
+  if (!validateImageQuality(base64)) {
+    throw new Error("Сгенерированное изображение не прошло валидацию качества");
+  }
+
+  return { base64, mimeType: "image/png", provider: "Cloudflare", model: "FLUX.1 schnell" };
 }
 
 // ── DALL-E 3 ────────────────────────────────────────────────────

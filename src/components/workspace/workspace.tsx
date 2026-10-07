@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import { useWorkspaceStore, type AppType, type WindowState } from "@/lib/store/workspace";
 import { Desktop } from "./desktop";
 import { Taskbar } from "./taskbar";
@@ -8,6 +8,8 @@ import { Window } from "./window";
 import { BrowserApp } from "./apps/browser";
 import { TerminalApp } from "./apps/terminal";
 import { FileManagerApp } from "./apps/file-manager";
+import { CodeEditorApp } from "./apps/code-editor";
+import { ComputerUseApp } from "./apps/computer-use";
 import { AgentLogApp } from "./apps/agent-log";
 import { IframeApp } from "./apps/iframe";
 
@@ -15,11 +17,18 @@ import { IframeApp } from "./apps/iframe";
 function AppContent({ win }: { win: WindowState }) {
   switch (win.type) {
     case "browser":
-      return <BrowserApp />;
+      return <BrowserApp initialUrl={win.url} />;
     case "terminal":
       return <TerminalApp />;
     case "file-manager":
       return <FileManagerApp />;
+    // Редактор был написан, но его не открывал никто: ни одна иконка, ни
+    // один пункт меню. Окно такого типа открывалось пустым.
+    case "code-editor":
+      return <CodeEditorApp />;
+    // Агент «Использование компьютера»: смотрит на экран и выполняет задачи.
+    case "computer-use":
+      return <ComputerUseApp />;
     case "agent-log":
       return <AgentLogApp />;
     case "iframe":
@@ -39,6 +48,13 @@ function AppContent({ win }: { win: WindowState }) {
 export function WorkspaceSurface({ showDesktop = true }: { showDesktop?: boolean }) {
   const windows = useWorkspaceStore((s) => s.windows);
   const closeWindow = useWorkspaceStore((s) => s.closeWindow);
+
+  // Окна восстанавливаются после монтирования: на сервере их нет, и если
+  // прочитать сохранённое состояние сразу, разметка сервера и клиента
+  // разошлась бы и React выдал бы ошибку гидрации.
+  useEffect(() => {
+    void useWorkspaceStore.persist.rehydrate();
+  }, []);
 
   const handleClose = useCallback((id: string) => closeWindow(id), [closeWindow]);
   const open = windows.filter((w) => w.isOpen);
@@ -62,7 +78,7 @@ function EmptyHint() {
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6 text-center">
       <p className="max-w-sm text-sm leading-6 text-white/45">
         Откройте приложение на рабочем столе или в панели задач — здесь агент
-        показывает результат работы: команды, файлы и страницы.
+        показывает файлы и страницы внешних сервисов, с которыми работает агент.
       </p>
     </div>
   );

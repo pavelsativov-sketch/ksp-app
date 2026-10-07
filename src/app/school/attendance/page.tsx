@@ -1,8 +1,10 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { getAttendancePerClass, getAttendancePerDay, getAttendanceSummary } from "@/lib/school-analytics";
+import { getSchoolStudents } from "@/lib/school";
 import { NoSchool } from "@/components/school/no-school";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AttendanceRecorder } from "@/components/school/attendance-recorder";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +14,11 @@ export default async function AttendancePage() {
   const school = user ? await getActiveSchool(user.id) : null;
   if (!school) return <NoSchool />;
 
-  const [summary, perClass, perDay] = await Promise.all([
+  const [summary, perClass, perDay, roster] = await Promise.all([
     getAttendanceSummary(school._id!.toString(), "2000-01-01", "2099-01-01").catch(() => []),
     getAttendancePerClass(school._id!.toString()).catch(() => []),
     getAttendancePerDay(school._id!.toString()).catch(() => []),
+    getSchoolStudents(school._id!.toString()).catch(() => []),
   ]);
 
   const total = summary.reduce((s, r) => s + r.count, 0);
@@ -38,8 +41,9 @@ export default async function AttendancePage() {
         <p className="mt-1 text-sm text-muted-foreground">{formatSchoolSubtitle(school)}</p>
       </header>
 
+      <AttendanceRecorder schoolId={school._id!.toString()} students={roster.flatMap((student) => student._id ? [{ id: student._id.toString(), name: student.full_name, className: student.class_name }] : [])} />
       {total === 0 ? (
-        <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Записей о посещаемости нет. Наполните школу демо-данными на дашборде.</CardContent></Card>
+        <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Отметок посещаемости пока нет. Выберите класс и сохраните отметки выше.</CardContent></Card>
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

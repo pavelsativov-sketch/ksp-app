@@ -274,6 +274,7 @@ export async function deleteAccountAction(
         await db.collection(COL.mediumtermPlans).deleteMany({ owner_id: user.id }, { session });
         await db.collection(COL.feedback).deleteMany({ user_id: user.id }, { session });
         await db.collection(COL.workspaceFiles).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.workspaceSnapshots).deleteMany({ user_id: user.id }, { session });
         await db.collection(COL.connectors).deleteMany({ owner_id: user.id }, { session });
         // Логи агента привязаны к задаче, а не к пользователю: собираем task_id
         // заранее (внутри транзакции читать без сессии нельзя), иначе
@@ -283,6 +284,10 @@ export async function deleteAccountAction(
           await db.collection(COL.agentExecutions).deleteMany({ task_id: { $in: agentTaskIds } }, { session });
         }
         await db.collection(COL.agentTasks).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.agentBrowserSessions).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.agentPermissionRequests).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.agentPolicies).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.agentControls).deleteMany({ user_id: user.id }, { session });
         await db.collection(COL.planEvents).deleteMany({ user_id: user.id }, { session });
         await db.collection(COL.aiEvents).deleteMany({ user_id: user.id }, { session });
 
@@ -316,6 +321,10 @@ export async function deleteAccountAction(
     } finally {
       await session.endSession();
     }
+    await import("@/lib/workspace/runtime")
+      .then(({ deleteAccountWorkspaceSandbox }) => deleteAccountWorkspaceSandbox(user.id))
+      .catch(() => log.warn("Не удалось удалить Linux-среду удалённого аккаунта", { userId: user.id }));
+    await import("@/lib/agents/browser-session").then(({ clearAgentBrowserSession }) => clearAgentBrowserSession(user.id)).catch(() => {});
     await clearSession();
   } catch {
     return { error: "Не удалось удалить аккаунт. Попробуйте позже." };

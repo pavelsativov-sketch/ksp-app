@@ -1,21 +1,24 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, X, Home, Shield } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut } from 'lucide-react';
 
 const BASE = '/api/agents/browser-stream';
 
-export function BrowserApp() {
+export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState('');
   const [pageTitle, setPageTitle] = useState('');
-  const [inputUrl, setInputUrl] = useState('https://bilimland.kz');
+  const [inputUrl, setInputUrl] = useState(initialUrl?.trim() || 'https://www.google.com');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [typedText, setTypedText] = useState('');
+  const [hideTypedText, setHideTypedText] = useState(false);
   const canvasRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const landingUrl = initialUrl?.trim() || 'https://www.google.com';
 
   const fetchFrame = useCallback(async (params: Record<string, string> = {}) => {
     if (abortRef.current) abortRef.current.abort();
@@ -39,26 +42,21 @@ export function BrowserApp() {
     }
   }, []);
 
-  // Auto-refresh every 1.5s when idle
-  useEffect(() => {
-    refreshIntervalRef.current = setInterval(() => {
-      if (!loading) fetchFrame();
-    }, 1500);
-    return () => { if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current); };
-  }, [fetchFrame, loading]);
-
   const doAction = useCallback(async (params: Record<string, string>) => {
-    if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     setLoading(true);
     try {
       // First perform the action
-      await fetch(`${BASE}?${new URLSearchParams(params)}`, { cache: 'no-store' });
+      const actionResult = await fetch(BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), cache: 'no-store' });
+      if (!actionResult.ok) {
+        const data = await actionResult.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${actionResult.status}`);
+      }
       // Then get fresh screenshot
       await fetchFrame();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
-      // Resume auto-refresh
-      refreshIntervalRef.current = setInterval(() => fetchFrame(), 1500);
     }
   }, [fetchFrame]);
 
@@ -68,10 +66,32 @@ export function BrowserApp() {
     setLoading(true);
     setInputUrl(url);
     try {
-      await fetch(`${BASE}?${new URLSearchParams({ action: 'navigate', url })}`, { cache: 'no-store' });
+      const actionResult = await fetch(BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'navigate', url }), cache: 'no-store' });
+      if (!actionResult.ok) {
+        const data = await actionResult.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${actionResult.status}`);
+      }
       await fetchFrame();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally { setLoading(false); }
   }, [fetchFrame]);
+
+  const typeIntoPage = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!typedText) return;
+    const text = typedText;
+    setTypedText('');
+    await doAction({ action: 'type', text });
+  }, [doAction, typedText]);
+
+  const clearSession = useCallback(async () => {
+    if (!window.confirm('Завершить внешний сеанс и удалить сохранённые данные входа?')) return;
+    const res = await fetch(BASE, { method: 'DELETE' });
+    if (!res.ok) { setError('Не удалось очистить сеанс'); return; }
+    setPageTitle(''); setPageUrl(''); setImgSrc(null); setInputUrl(landingUrl);
+    setError('Внешний сеанс удалён. Войдите снова, чтобы продолжить.');
+  }, [landingUrl]);
 
   // Handle clicks on the screenshot image
   const handleImageClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
@@ -95,8 +115,8 @@ export function BrowserApp() {
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    void navigate('https://www.google.com');
-  }, [navigate]);
+    void navigate(landingUrl);
+  }, [landingUrl, navigate]);
 
   return (
     <div className="flex flex-col h-full bg-[#1e1e2e] select-none">
@@ -129,6 +149,9 @@ export function BrowserApp() {
         <button onClick={() => navigate('https://www.google.com')} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
           <Home className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
+        <button type="button" onClick={() => void clearSession()} title="Завершить внешние сеансы" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+          <LogOut className="w-4 h-4 text-white/50 group-hover:text-rose-300" />
+        </button>
 
         {/* URL Bar */}
         <form
@@ -150,6 +173,23 @@ export function BrowserApp() {
         </form>
       </div>
 
+      <form onSubmit={typeIntoPage} className="flex shrink-0 items-center gap-2 border-b border-black/20 bg-[#252536] px-2 py-1.5">
+        <input
+          value={typedText}
+          onChange={e => setTypedText(e.target.value)}
+          type={hideTypedText ? 'password' : 'text'}
+          maxLength={500}
+          autoComplete="off"
+          placeholder="Введите текст на странице (логин или пароль)"
+          aria-label="Текст для ввода на странице"
+          className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500/50"
+        />
+        <label className="flex items-center gap-1 text-[10px] text-white/50">
+          <input type="checkbox" checked={hideTypedText} onChange={e => setHideTypedText(e.target.checked)} /> Скрыть
+        </label>
+        <button type="submit" disabled={!typedText || loading} className="rounded-md bg-blue-600 px-2.5 py-1.5 text-[11px] font-medium text-white disabled:opacity-40">Ввести</button>
+      </form>
+
       {/* Viewport — real Playwright screenshot */}
       <div ref={containerRef} className="flex-1 overflow-hidden relative bg-white cursor-crosshair">
         {!imgSrc && !error && (
@@ -167,10 +207,12 @@ export function BrowserApp() {
           </div>
         )}
         {imgSrc && (
-          <img
-            ref={canvasRef}
+          <Image
             src={imgSrc}
             alt="Browser viewport"
+            width={1280}
+            height={800}
+            unoptimized
             className="w-full h-full object-cover object-top cursor-default"
             onClick={handleImageClick}
             onWheel={handleWheel}
@@ -185,6 +227,9 @@ export function BrowserApp() {
       {/* Status bar */}
       <div className="h-5 bg-[#252536] border-t border-black/20 flex items-center px-3 shrink-0">
         <span className="text-[10px] text-white/25 truncate">{pageUrl}</span>
+        <span className="ml-auto shrink-0 pl-2 text-[10px] text-white/30" title="Лимит бесплатного Cloudflare Browser Run">
+          Free: 10 мин/день
+        </span>
       </div>
     </div>
   );

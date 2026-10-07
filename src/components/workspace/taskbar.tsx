@@ -3,21 +3,28 @@
 import React, { useEffect, useState } from 'react';
 import { useWorkspaceStore, type AppType } from '@/lib/store/workspace';
 import {
-  Globe, TerminalSquare, FolderOpen, Bot,
-  Wifi, Battery, Volume2, Search, Sparkles
+  Globe, TerminalSquare, FolderOpen, Bot, Code2,
+  Wifi, Battery, Volume2, Search, Sparkles, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
+/**
+ * Приложения дока.
+ *
+ * Список совпадает с рабочим столом: раньше в доке не было редактора кода,
+ * хотя сам редактор существовал и открывался из файлового менеджера.
+ */
 const DOCK_APPS: { id: string; title: string; type: AppType; url?: string; Icon: LucideIcon }[] = [
-  { id: 'ai-assistant', title: 'AI Assistant', type: 'agent-log', Icon: Bot },
-  { id: 'browser-main', title: 'Browser', type: 'browser', Icon: Globe },
-  { id: 'files-main', title: 'Files', type: 'file-manager', Icon: FolderOpen },
-  { id: 'terminal-main', title: 'Terminal', type: 'terminal', Icon: TerminalSquare },
+  { id: 'ai-assistant', title: 'Журнал агента', type: 'agent-log', Icon: Bot },
+  { id: 'browser-main', title: 'Браузер', type: 'browser', Icon: Globe },
+  { id: 'files-main', title: 'Файлы задачи', type: 'file-manager', Icon: FolderOpen },
+  { id: 'code-editor', title: 'Редактор кода', type: 'code-editor', Icon: Code2 },
+  { id: 'terminal-main', title: 'Терминал', type: 'terminal', Icon: TerminalSquare },
 ];
 
 export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: () => void, copilotOpen?: boolean }) {
-  const { windows, activeWindowId, openWindow, focusWindow, minimizeWindow } = useWorkspaceStore();
+  const { windows, activeWindowId, openWindow, focusWindow, minimizeWindow, closeAll } = useWorkspaceStore();
   const [time, setTime] = useState('');
   const [date, setDate] = useState('');
 
@@ -94,6 +101,19 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
 
         {/* Separator */}
         <div className="w-px h-6 bg-white/10 mx-1" />
+
+        {/* Закрыть всё: окна сохраняются в браузере, поэтому без этой
+            кнопки рабочую область приходилось чистить по одной. */}
+        {windows.length > 1 && (
+          <button
+            onClick={closeAll}
+            className="flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/80"
+            title="Закрыть все окна"
+            aria-label="Закрыть все окна"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
 
         {/* Running windows not in dock */}
         {windows.filter(w => !DOCK_APPS.some(d => d.id === w.id)).map(w => (

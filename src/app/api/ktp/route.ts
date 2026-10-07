@@ -69,7 +69,17 @@ export async function POST(request: Request) {
     const subjectName = subject ? (plan.language === "kz" ? subject.name_kz || subject.name_ru : subject.name_ru) : "";
     const ktp = buildKtp(plan, subjectName, parsed.data);
     const watermark = await resolveWatermark(auth.user);
-    const buffer = await buildKtpDocx(ktp, { watermark });
+
+    // Ошибка сборки документа ловится здесь: раньше исключение из docx
+    // превращалось в пустой 500, и учитель не понимал, что произошло.
+    let buffer: Buffer;
+    try {
+      buffer = await buildKtpDocx(ktp, { watermark });
+    } catch (err) {
+      console.error("[ktp] документ не собран", err);
+      return errorResponse("Таблица КТП собрана, но файл Word не удалось сохранить. Попробуйте ещё раз.", 502);
+    }
+
     return NextResponse.json({ ktp, docxBase64: buffer.toString("base64") }, { headers });
   } catch {
     return errorResponse("Не удалось создать КТП. Попробуйте ещё раз.", 500);

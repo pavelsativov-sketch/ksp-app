@@ -18,18 +18,74 @@ describe("KTP draft generation", () => {
       rows: [{ number: 1, topic: "Дроби", hours: 1, date: "", objectives: "5.1 — Сравнивать дроби" }],
     });
   });
-  it("preserves topic order, dates only first row, and copies objectives only to exact trimmed matches", () => {
+  it("preserves topic order, fills dates weekly, and copies objectives to case-insensitive matches", () => {
     const plan = source();
     const before = structuredClone(plan);
     const topics = [" Новая тема ", " Дроби ", "дроби"];
     const result = buildKtp(plan, "Математика", { topics, startDate: "2024-02-29" });
+    // Даты идут по неделям: 2024-02-29 (чт) → 03.03 → 10.03.
+    // Раньше заполнялась только первая строка, и остальные даты приходилось
+    // проставлять вручную.
     expect(result.rows).toEqual([
       { number: 1, topic: "Новая тема", hours: 1, date: "2024-02-29", objectives: "" },
-      { number: 2, topic: "Дроби", hours: 1, date: "", objectives: "5.1 — Сравнивать дроби" },
-      { number: 3, topic: "дроби", hours: 1, date: "", objectives: "" },
+      { number: 2, topic: "Дроби", hours: 1, date: "2024-03-07", objectives: "5.1 — Сравнивать дроби" },
+      // Регистр темы не влияет на перенос целей: раньше «дроби» терял цели урока.
+      { number: 3, topic: "дроби", hours: 1, date: "2024-03-14", objectives: "5.1 — Сравнивать дроби" },
     ]);
     expect(plan).toEqual(before);
     expect(topics[0]).toBe(" Новая тема ");
+  });
+
+  it("не пропускает воскресенье при расчёте дат", () => {
+    // 2026-09-06 — воскресенье; учебная неделя в РК шестидневная. Первая
+    // строка сохраняет указанную дату как есть, дальше идут понедельники.
+    const result = buildKtp(source(), "Математика", {
+      topics: ["А", "Б", "В"],
+      startDate: "2026-09-06",
+    });
+    expect(result.rows.map((r) => r.date)).toEqual(["2026-09-06", "2026-09-07", "2026-09-14"]);
+    // Шаг в неделю от воскресенья снова попадает на воскресенье — раньше
+    // расчёт дат зацикливался и падал на toISOString.
+    expect(result.rows.map((r) => r.date).every(Boolean)).toBe(true);
+  });
+
+  it("даты идут строго по неделям и не повторяются", () => {
+    const result = buildKtp(source(), "Математика", {
+      topics: Array.from({ length: 12 }, (_, i) => `Тема ${i + 1}`),
+      startDate: "2026-01-05",
+    });
+    const dates = result.rows.map((r) => r.date);
+    expect(new Set(dates).size).toBe(dates.length);
+    expect(dates).toHaveLength(12);
+  });
+
+  it("берёт часы и дату прямо из строки темы", () => {
+    const result = buildKtp(source(), "Математика", {
+      topics: [
+        "Дроби · 2 ч.",
+        "Сравнение дробей | 2026-09-14",
+        "Обыкновенные дроби · 2 сағ.",
+        "Повторение",
+      ],
+    });
+    expect(result.rows.map((r) => [r.topic, r.hours, r.date])).toEqual([
+      ["Дроби", 2, ""],
+      ["Сравнение дробей", 1, "2026-09-14"],
+      ["Обыкновенные дроби", 2, ""],
+      ["Повторение", 1, ""],
+    ]);
+  });
+
+  it("не выбрасывает ошибочную дату молча: она остаётся в тексте темы", () => {
+    // Учитель опечатался в дате — молчаливое удаление означало бы, что он
+    // этого не заметил и исправил несуществующую проблему.
+    const result = buildKtp(source(), "Математика", { topics: ["Дроби | 2026-13-45"] });
+    expect(result.rows[0]).toMatchObject({ topic: "Дроби | 2026-13-45", date: "" });
+  });
+
+  it("не принимает неправдоподобное число часов", () => {
+    const result = buildKtp(source(), "Математика", { topics: ["Дроби · 99 ч."] });
+    expect(result.rows[0]).toMatchObject({ topic: "Дроби · 99 ч.", hours: 1 });
   });
   it("keeps missing objectives blank and preserves Kazakh metadata", () => {
     const plan = { ...source(), language: "kz" as const };
@@ -59,7 +115,10 @@ describe("KTP Word export", () => {
     expect(xml.match(/<w:cantSplit\/>/g)).toHaveLength(4);
     expect(xml).toContain("<w:tblHeader/>");
     expect(xml).toContain("w:tcMar");
+    // Даты теперь заполнены по неделям, а не только в первой строке.
     expect(xml.match(/2026-09-01/g)).toHaveLength(1);
+    expect(xml).toContain("2026-09-08");
+    expect(xml).toContain("2026-09-15");
     expect(xml.match(/5.1 — Сравнивать дроби/g)).toHaveLength(1);
     expect(xml).toContain("Новая &lt;тема&gt; &amp; практика");
     const footer = await zip.file(/^word\/footer\d*\.xml$/)[0].async("string");

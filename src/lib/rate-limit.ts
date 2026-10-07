@@ -1,6 +1,6 @@
 /**
  * Rate limiter: MongoDB-backed при настроенном MONGODB_URI (работает на
- * multi-instance/serverless), иначе in-memory fallback для dev/demo.
+ * multi-instance/serverless), иначе in-memory fallback для локальной разработки.
  */
 
 import { getDb, COL, isMongoConfigured } from "@/lib/mongo";

@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import { after } from 'next/server';
 import { getDb, COL } from '@/lib/mongo';
 import { runAgentTask } from './runner';
 
@@ -9,6 +10,12 @@ import { runAgentTask } from './runner';
 export async function startAgentTask(userId: string, schoolId: string | null, prompt: string): Promise<string> {
   const db = await getDb();
   const agentTasks = db.collection(COL.agentTasks);
+
+  const active = await agentTasks.findOne(
+    { user_id: new ObjectId(userId), status: 'running' },
+    { projection: { _id: 1 } },
+  );
+  if (active) throw new Error('AGENT_TASK_ALREADY_RUNNING');
 
   const now = new Date();
   const result = await agentTasks.insertOne({
@@ -22,8 +29,7 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
   });
   const taskId = result.insertedId.toString();
 
-  // Фоновое выполнение: события пишутся в agent_executions, клиент читает их по SSE.
-  void runAgentTask(taskId, prompt, userId, async (event) => {
+  const execute = () => runAgentTask(taskId, prompt, userId, async (event) => {
     try {
       await db.collection(COL.agentExecutions).insertOne({
         task_id: new ObjectId(taskId),
@@ -35,7 +41,35 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
     } catch {
       // лог некритичен — выполнение не должно падать из-за журнала
     }
-  }).catch(() => {});
+  });
+
+  // Vercel uses after(); Cloudflare Free uses Workflows so a task can outlive
+  // the 30-second waitUntil window while keeping a durable task ID for SSE.
+  if (process.env.VERCEL === '1') {
+    after(execute);
+  } else {
+    const { getCloudflareContext } = await import('@opennextjs/cloudflare');
+    let context: Awaited<ReturnType<typeof getCloudflareContext>>;
+    try { context = await getCloudflareContext({ async: true }); }
+    catch {
+      // Local Node dev process stays alive for the lifetime of the task.
+      void execute().catch(() => {});
+      return taskId;
+    }
+    const workflow = (context.env as typeof context.env & {
+      AGENT_TASK_WORKFLOW?: { create(options: { id: string; params: { taskId: string; userId: string; prompt: string } }): Promise<unknown> };
+    }).AGENT_TASK_WORKFLOW;
+    if (workflow) {
+      try { await workflow.create({ id: taskId, params: { taskId, userId, prompt } }); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : "неизвестная ошибка";
+        await agentTasks.updateOne({ _id: result.insertedId }, { $set: { status: "failed", error: `Не удалось запустить Cloudflare Workflow: ${message}`.slice(0, 500), updatedAt: new Date() } });
+        throw new Error("Не удалось запустить рабочий процесс задания");
+      }
+    } else {
+      (context.ctx as { waitUntil(promise: Promise<unknown>): void }).waitUntil(execute().catch(() => {}));
+    }
+  }
 
   return taskId;
 }

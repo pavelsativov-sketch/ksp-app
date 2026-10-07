@@ -1,3 +1,10 @@
+"use client";
+
+// Директива обязательна: компонент читает локаль интерфейса хуком
+// `useUiLocale`, а раньше считался серверным. Страница плана рендерила его на
+// сервере и падала в 500 — «Не удалось открыть страницу», то есть урок,
+// готовый чертёж, презентация и КТП были недоступны целиком.
+
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { checkKspQuality, type QualityStatus } from "@/lib/ksp/quality";

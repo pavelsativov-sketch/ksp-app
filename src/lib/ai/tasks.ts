@@ -4,6 +4,9 @@ import {
 } from "./providers";
 import {
   type InteractiveTask,
+  // Типы конкретных заданий нужны ниже: без них файл не собирается
+  // («Cannot find name 'McqTask'»), даже если сами объявления используются
+  // только в подсказках типов.
   type McqTask,
   type TrueFalseTask,
   type FillBlankTask,
@@ -209,7 +212,7 @@ export async function generateTasks(
 ): Promise<InteractiveTask[]> {
   const count = input.count ?? 3;
   if (!isOpenAIConfigured()) {
-    return stubTasks(input, count);
+    throw new Error("Не настроен AI-провайдер для генерации заданий. Создайте задания вручную или настройте рабочий ключ.");
   }
 
   const stageName =
@@ -499,53 +502,4 @@ function getTopicContext(topic: string, subject: string): string {
   return `КОНТЕКСТ ТЕМЫ:
 Тема «${topic}» относится к предмету «${subject}».
 Убедись, что все задания проверяют знания, связанные с этой конкретной темой, а не общие знания по предмету.`;
-}
-
-function stubTasks(input: GenerateTasksInput, count: number): InteractiveTask[] {
-  const mcq: McqTask = {
-    ...(emptyTask("MCQ") as McqTask),
-    question: `Что лучше всего описывает ключевую идею темы «${input.topic}»?`,
-    options: [
-      `${input.topic} — это один из центральных разделов предмета «${input.subject}».`,
-      "Это второстепенная тема, не связанная с другими разделами.",
-      "Эта тема рассматривается только во внеурочной деятельности.",
-      "Тема не относится к учебной программе.",
-    ],
-    correctIndex: 0,
-    hint: "Обратите внимание, как тема связана с другими разделами предмета.",
-  };
-  const tf: TrueFalseTask = {
-    ...(emptyTask("TRUE_FALSE") as TrueFalseTask),
-    question: `Тема «${input.topic}» изучается в ${input.grade} классе.`,
-    correct: true,
-    hint: "Проверьте учебную программу своего класса.",
-  };
-  const fb: FillBlankTask = {
-    ...(emptyTask("FILL_BLANK") as FillBlankTask),
-    question: "Заполните пропуск в определении.",
-    template: `${input.topic} — это важное понятие предмета «___».`,
-    answers: [input.subject],
-    hint: "Название предмета, в рамках которого изучается тема.",
-  };
-  const ordering: OrderingTask = {
-    ...(emptyTask("ORDERING") as OrderingTask),
-    question: "Расставьте этапы работы с новой темой в правильном порядке.",
-    items: [
-      "Постановка цели урока",
-      "Изучение нового материала",
-      "Тренировочные задания",
-      "Рефлексия и итоги",
-    ],
-    correctOrder: [0, 1, 2, 3],
-    hint: "Сначала цель, затем материал, затем практика, в конце — итоги.",
-  };
-  const numeric: NumericTask = {
-    ...(emptyTask("NUMERIC") as NumericTask),
-    question: `Сколько ключевых понятий встречается в теме «${input.topic}»? (введите примерное число)`,
-    answer: 3,
-    tolerance: 1,
-    hint: "Обычно 2–4 основных понятия.",
-  };
-  const tasks: InteractiveTask[] = [mcq, tf, fb, ordering, numeric];
-  return tasks.slice(0, Math.min(count, tasks.length));
 }

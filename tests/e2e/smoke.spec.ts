@@ -3,8 +3,11 @@ import { test, expect } from "@playwright/test";
 test.describe("smoke", () => {
   test("landing page renders", async ({ page }) => {
     await page.goto("/");
-    // Header / brand text should appear somewhere on the landing page.
-    await expect(page).toHaveTitle(/КСП/i);
+    // Заголовок берём из SITE_NAME, а не ищем слово «КСП»: реальный
+    // заголовок — «Mekty — комплект к уроку за 5 минут», и проверка на
+    // «КСП» падала на живом прогоне, оставаясь в репозитории с прошлых запусков.
+    await expect(page).toHaveTitle(/Mekty/i);
+    await expect(page.getByRole("link", { name: /^Mekty/ }).first()).toBeVisible();
   });
 
   test("quiz join page accepts code via query string", async ({ page }) => {
