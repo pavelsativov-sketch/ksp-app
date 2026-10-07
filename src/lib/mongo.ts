@@ -1,4 +1,6 @@
 import { MongoClient, ObjectId, type Db } from "mongodb";
+import { after } from "next/server";
+import { mongoRequestState } from "@/lib/mongo-request-context";
 
 const URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.MONGODB_DB || "ksp";
@@ -15,7 +17,9 @@ declare global {
 export function getClient(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI || URI;
   if (!uri) throw new Error("MONGODB_URI is not configured");
-  if (!global.__mongoClientPromise) {
+  const requestState = mongoRequestState();
+  const cachedPromise = requestState ? requestState.clientPromise : global.__mongoClientPromise;
+  if (!cachedPromise) {
     // Atlas из Казахстана отвечает медленно: 8 с роняло запросы с 500
     // «Server selection timed out». 20 с — с запасом на холодный старт.
     // Таймауты соединения и сокета.
@@ -29,15 +33,32 @@ export function getClient(): Promise<MongoClient> {
       serverSelectionTimeoutMS: 20_000,
       connectTimeoutMS: 10_000,
       socketTimeoutMS: 20_000,
-      maxPoolSize: 10,
+      // Workers cannot share TCP sockets across requests. The Worker wrapper
+      // gives each request its own client, which is closed with Next's after().
+      maxPoolSize: requestState ? 2 : 10,
+      maxConnecting: requestState ? 1 : 2,
       retryWrites: true,
     });
-    global.__mongoClientPromise = client.connect().catch((error) => {
-      global.__mongoClientPromise = undefined;
+    const promise = client.connect().catch((error) => {
+      if (requestState) requestState.clientPromise = undefined;
+      else global.__mongoClientPromise = undefined;
       throw error;
     });
+    if (requestState) requestState.clientPromise = promise;
+    else global.__mongoClientPromise = promise;
   }
-  return global.__mongoClientPromise;
+  if (requestState && !requestState.cleanupScheduled) {
+    requestState.cleanupScheduled = true;
+    after(async () => {
+      try {
+        const client = await requestState.clientPromise;
+        await client?.close();
+      } catch {
+        // A failed connection has nothing to close; preserve the response.
+      }
+    });
+  }
+  return requestState ? requestState.clientPromise! : global.__mongoClientPromise!;
 }
 
 export const COL = {
@@ -244,7 +265,8 @@ function swallowIndexErrors(errors: PromiseSettledResult<unknown>[]): void {
 export async function getDb(): Promise<Db> {
   const client = await getClient();
   const db = client.db(DB_NAME);
-  if (!global.__mongoIndexesPromise) {
+  const requestScopedWorker = Boolean(mongoRequestState());
+  if (!global.__mongoIndexesPromise && (!requestScopedWorker || process.env.MONGO_AUTO_INDEX === "true")) {
     // Не блокируем выдачу Db индексацией: на Workers у каждого изолята свой
     // global, и 30+ createIndex на холодный старт заметно добавляли латентности.
     global.__mongoIndexesPromise = ensureIndexes(db)
@@ -254,7 +276,10 @@ export async function getDb(): Promise<Db> {
         console.error("[mongo] Инициализация индексов не удалась:", error instanceof Error ? error.message : error);
       });
   }
-  void global.__mongoIndexesPromise;
+  // Index DDL is a deployment/migration concern on Workers. Starting all 86
+  // createIndex operations in every short-lived request would keep sockets
+  // open past the response and can exhaust the per-request connection budget.
+  if (global.__mongoIndexesPromise) void global.__mongoIndexesPromise;
   return db;
 }
 
