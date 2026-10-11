@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChevronRight, Share2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ChevronRight, Share2, ChevronsUpDown } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 
 /** Заголовки разделов для крошек. Незнакомый путь показывается как «Школа». */
@@ -39,10 +40,41 @@ function titleFor(pathname: string): string {
  */
 export function SchoolTopbar({ userName, userEmail }: { userName: string; userEmail: string }) {
   const pathname = usePathname() ?? "/school";
+  const router = useRouter();
   const { toast } = useToast();
+  const [schools, setSchools] = useState<{ id: string; name: string }[]>([]);
+  const [activeSchoolId, setActiveSchoolId] = useState("");
+  const [switching, setSwitching] = useState(false);
   const title = titleFor(pathname);
   const displayName = userName || userEmail;
   const initial = (displayName || "?").trim().charAt(0).toUpperCase();
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/school", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json() as { schools?: { _id?: string; name: string }[]; activeSchoolId?: string };
+        if (!alive) return;
+        setSchools((data.schools ?? []).flatMap((school) => school._id ? [{ id: school._id, name: school.name }] : []));
+        setActiveSchoolId(data.activeSchoolId ?? "");
+      } catch { /* selector is optional if schools endpoint is temporarily unavailable */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  async function selectSchool(schoolId: string) {
+    if (!schoolId || switching || schoolId === activeSchoolId) return;
+    setSwitching(true);
+    try {
+      const response = await fetch("/api/school", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId }) });
+      if (!response.ok) throw new Error("Не удалось переключить школу");
+      setActiveSchoolId(schoolId);
+      router.refresh();
+    } catch { toast.error("Не удалось переключить школу"); }
+    finally { setSwitching(false); }
+  }
 
   async function share() {
     const url = window.location.href;
@@ -77,6 +109,7 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
       </nav>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
+        {schools.length > 1 && <label className="flex max-w-40 items-center gap-1 rounded-lg border border-white/15 px-2 text-xs text-slate-300"><ChevronsUpDown className="size-3 shrink-0" /><span className="sr-only">Активная школа</span><select aria-label="Активная школа" disabled={switching} value={activeSchoolId} onChange={(event) => void selectSchool(event.target.value)} className="min-w-0 bg-transparent py-1.5 outline-none"><option className="bg-slate-900" value="">Школа</option>{schools.map((school) => <option className="bg-slate-900" key={school.id} value={school.id}>{school.name}</option>)}</select></label>}
         <button
           type="button"
           onClick={() => void share()}

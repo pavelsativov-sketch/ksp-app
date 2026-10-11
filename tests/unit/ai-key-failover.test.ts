@@ -87,6 +87,21 @@ describe("разбор ключей из переменной окружения
 });
 
 describe("переключение ключей", () => {
+  it("задача агента начинает с проверенного быстрого Groq tool-call", async () => {
+    const { executeWithFallback } = await loadProviders();
+    process.env.GEMINI_API_KEY = "slow-gemini";
+    process.env.GROQ_API_KEY = "working-groq";
+    behaviour = { "working-groq": ok("tool call ready"), "slow-gemini": ok("late") };
+
+    const result = await executeWithFallback("tasks", async (client, model) => {
+      const response = await client.chat.completions.create({ model, messages: [] });
+      return response.choices[0]?.message?.content ?? "";
+    });
+
+    expect(result).toBe("tool call ready");
+    expect(calls).toEqual([{ apiKey: "working-groq", model: "openai/gpt-oss-120b" }]);
+  });
+
   it("исчерпанный первый ключ не роняет задачу: работает второй", async () => {
     const { executeWithFallback } = await loadProviders();
     process.env.GEMINI_API_KEY = "dead-key,live-key";

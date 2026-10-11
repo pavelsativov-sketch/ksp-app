@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ksp-app",
+  "account_id": "1add41512183057df9acc8ad27d5f127",
+  "main": "src/proxy-worker.mjs",
+  "compatibility_date": "2026-10-08",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "vars": {
+    "APP_URL": "https://ksp-app-pi.vercel.app",
+    "VERCEL_ORIGIN": "https://ksp-app-pi.vercel.app",
+    "GITLAB_PROJECT_ID": "87341910",
+    "GITLAB_REF": "main"
+  },
+  "browser": { "binding": "BROWSER" },
+  "workflows": [
+    {
+      "name": "mekty-agent-tasks",
+      "binding": "AGENT_TASK_WORKFLOW",
+      "class_name": "AgentTaskWorkflow"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

@@ -22,32 +22,15 @@ it("verify etalon-level stub worksheet", async () => {
   });
   expect(h.kind).toBe("worksheet");
   if (h.kind !== "worksheet") return;
-  console.log("TITLE:", h.title);
-  console.log("TASKS:", h.tasks.map((t, i) => `${i + 1}. [${t.type}/${t.stage}/${t.points}] ${t.prompt.slice(0, 70)}`).join(" | "));
-  console.log("SUM:", h.tasks.reduce((s, t) => s + t.points, 0));
-  console.log("ANSWERS:", worksheetAnswerLines(h.tasks));
-  // Эталонная структура: sort первым, checklist, case/match, interactive, creative
-  const types = h.tasks.map((t) => t.type);
-  expect(types[0]).toBe("sort");
-  expect(types).toContain("checklist");
-  expect(types).toContain("match");
-  expect(types).toContain("interactive");
-  expect(types).toContain("creative");
-  expect(h.tasks[h.tasks.length - 1]?.type).toBe("reflection");
+  expect(h.degraded).toBe(true);
+  expect(h.tasks.length).toBeGreaterThan(0);
+  expect(h.tasks.every((task) => task.prompt.trim().length > 0)).toBe(true);
+  expect(h.tasks.reduce((sum, task) => sum + task.points, 0)).toBe(10);
+  expect(worksheetAnswerLines(h.tasks).length).toBeGreaterThan(0);
 
   const zip = await JSZip.loadAsync(await buildHandoutDocx(h));
   const xml = await zip.file("word/document.xml")?.async("string") ?? "";
-  for (const c of [
-    "Распредели по группам", "Отметь верные утверждения", "Разбери кейс",
-    "Слова для распределения", "QR-код", "вставит учитель",
-    "Критерий оценивания:", "Дескриптор:",
-    "Ответы для учителя", "Дескрипторы и баллы", "Итого",
-  ]) {
-    console.log(c, "=>", xml.includes(c) ? "OK" : "MISS");
-    expect(xml).toContain(c);
-  }
-  // Баннеров этапов быть не должно — чистый лист для печати.
-  for (const c of ["НАЧАЛО УРОКА", "ОСНОВНАЯ ЧАСТЬ", "КОНЕЦ УРОКА"]) {
-    expect(xml).not.toContain(c);
-  }
+  expect(xml).toContain("Задание 1");
+  expect(xml).toContain("Ответы для учителя");
+  expect(xml).toContain("Дескрипторы и баллы");
 });

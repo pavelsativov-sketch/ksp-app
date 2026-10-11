@@ -77,7 +77,10 @@ export async function loginAction(_: AuthFormState, formData: FormData): Promise
   try {
     const user = await findUserByEmail(parsed.data.email);
     if (!user || !(await verifyPassword(parsed.data.password, user.password_hash))) return { error: "Неверный email или пароль" };
-    await createSession(user._id.toString(), user.session_version ?? 0);
+    await createSession(user._id.toString(), user.session_version ?? 0, {
+      email: user.email,
+      fullName: user.full_name,
+    });
   } catch (error) {
     log.error("loginAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось войти. Повторите попытку позже." };
@@ -102,7 +105,10 @@ export async function registerAction(_: AuthFormState, formData: FormData): Prom
       email: parsed.data.email.toLowerCase(), password_hash: await hashPassword(parsed.data.password),
       full_name: parsed.data.fullName, created_at: new Date(), session_version: 0,
     });
-    await createSession(result.insertedId.toString());
+    await createSession(result.insertedId.toString(), 0, {
+      email: parsed.data.email.toLowerCase(),
+      fullName: parsed.data.fullName,
+    });
   } catch (error) {
     if (error instanceof MongoServerError && error.code === 11000) return { error: "Пользователь с таким email уже зарегистрирован" };
     log.error("registerAction failed", { error: error instanceof Error ? error.message : String(error) });
@@ -175,7 +181,10 @@ export async function changePasswordAction(
       { $set: { password_hash: await hashPassword(parsed.data.password) }, $inc: { session_version: 1 } },
     );
     // Все сессии, включая текущую, инвалидируются — входим заново.
-    await createSession(user.id, (doc.session_version ?? 0) + 1);
+    await createSession(user.id, (doc.session_version ?? 0) + 1, {
+      email: user.email,
+      fullName: user.fullName,
+    });
   } catch {
     return { error: "Не удалось сменить пароль. Попробуйте позже." };
   }

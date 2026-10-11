@@ -14,7 +14,7 @@ export default async function ClassesPage() {
   const school = user ? await getActiveSchool(user.id) : null;
   if (!school || !school._id) return <NoSchool />;
 
-  const students = await getSchoolStudents(school._id.toString()).catch(() => []);
+  const students = await getSchoolStudents(school._id.toString());
   const byClass = new Map<string, { total: number; boys: number; girls: number }>();
   for (const s of students) {
     const c = byClass.get(s.class_name) ?? { total: 0, boys: 0, girls: 0 };

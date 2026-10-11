@@ -229,9 +229,9 @@ export async function getSchoolOverview(schoolId: string): Promise<SchoolOvervie
   const since = new Date(Date.now() - 60 * 24 * 3600_000);
 
   const [students, teachers, classes, attendance, quality, curriculum, vsk] = await Promise.all([
-    db.collection(COL.students).countDocuments({ school_id: schoolId }),
+    db.collection(COL.students).countDocuments({ school_id: schoolId, $or: [{ status: 'active' }, { status: { $exists: false } }] }),
     db.collection(COL.schoolMembers).countDocuments({ school_id: schoolId, role: { $in: ['teacher', 'director', 'deputy'] } }),
-    db.collection<StudentDoc>(COL.students).distinct('class_name', { school_id: schoolId }),
+    db.collection<StudentDoc>(COL.students).distinct('class_name', { school_id: schoolId, $or: [{ status: 'active' }, { status: { $exists: false } }] }),
     db.collection<AttendanceRecord>(COL.attendance).aggregate<{ _id: string; count: number }>([
       { $match: { school_id: schoolId, date: { $gte: new Date(since).toISOString().slice(0, 10) } } },
       { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -277,7 +277,7 @@ export async function getSchoolOverview(schoolId: string): Promise<SchoolOvervie
   }
 
   return {
-    hasData: totalMarks > 0 || lessons.length > 0 || students > 0,
+    hasData: totalMarks > 0 || lessons.length > 0 || students > 0 || vsk.length > 0 || qualityScore !== null,
     students, teachers, classes: classes.length,
     attendanceRate, qualityScore, curriculumProgress, vskAverage,
     score, issues, warnings,

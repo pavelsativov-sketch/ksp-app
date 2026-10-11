@@ -79,11 +79,9 @@ const COPY = {
 function topicWords(input: HandoutInput, limit: number): string[] {
   const seen = new Set<string>();
   const found: string[] = [];
-  const sources = [
-    ...(input.kspContext?.learningObjectives ?? []),
-    input.topic,
-    input.subject ?? "",
-  ];
+  const sources = input.customWords?.length
+    ? input.customWords.map(({ word }) => word)
+    : [...(input.kspContext?.learningObjectives ?? []), input.topic, input.subject ?? ""];
   for (const source of sources) {
     for (const raw of String(source).toUpperCase().match(WORD_RE) ?? []) {
       const word = raw.replace(/[^А-ЯӘҒҚҢӨҰҮҺІЁA-Z]/g, "");
@@ -148,9 +146,12 @@ export function buildLocalCrossword(input: HandoutInput): Crossword {
   const copy = COPY[input.language === "kz" ? "kz" : "ru"];
   const wanted = Math.max(3, Math.min(20, input.count));
   const terms = topicWords(input, wanted);
+  const customClues = new Map(
+    (input.customWords ?? []).map(({ word, clue }) => [word.trim().toUpperCase(), clue.trim()]),
+  );
   const words: CrosswordWord[] = terms.map((term) => ({
     word: term,
-    clue: copy.clue(term, input.topic),
+    clue: customClues.get(term) || copy.clue(term, input.topic),
   }));
   const laid = layoutCrossword(words, copy.crosswordTitle(input.topic), copy.crosswordIntro(input.topic));
   return {

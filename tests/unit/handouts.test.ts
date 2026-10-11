@@ -225,7 +225,7 @@ describe("buildHandoutDocx", () => {
     const zip = await JSZip.loadAsync(await buildCombinedDocx([worksheet, memos]));
     const documentXml = await zip.file("word/document.xml")?.async("string");
     expect(documentXml).toContain("Задание 1");
-    expect(documentXml).toContain("Памятки: Дроби");
+    expect(documentXml).toContain("Памятки по теме «Дроби»");
     expect(documentXml).toContain("Дескрипторы и баллы");
   });
 
@@ -261,17 +261,15 @@ describe("buildHandoutDocx", () => {
     expect(buf.length).toBeGreaterThan(2000);
   });
 
-  it("crossword → valid docx buffer", async () => {
-    const h = await generateHandout({
+  it("refuses to create a crossword when the topic has too few terms", async () => {
+    await expect(generateHandout({
       kind: "crossword",
       topic: "X",
       subject: "Y",
       grade: 5,
       language: "ru",
       count: 5,
-    });
-    const buf = await buildHandoutDocx(h);
-    expect(buf.subarray(0, 4).equals(ZIP_MAGIC)).toBe(true);
+    })).rejects.toThrow("добавьте не менее трёх терминов");
   });
 
   it("crossword custom words: свои вопросы без AI + ответы отдельно", async () => {
@@ -297,6 +295,7 @@ describe("buildHandoutDocx", () => {
     expect(h.kind).toBe("crossword");
     if (h.kind !== "crossword") return;
     expect(h.placed.map((w) => w.word)).toContain("ДРОБЬ");
+    expect(h.placed.find((w) => w.word === "ДРОБЬ")?.clue).toBe("часть целого");
 
     // Учительская версия — с ответами, ученическая — без.
     const teacherZip = await JSZip.loadAsync(await buildHandoutDocx(h, { includeAnswers: true }));

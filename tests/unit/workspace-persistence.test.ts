@@ -53,15 +53,37 @@ describe("окна переживают перезагрузку", () => {
     }
   });
 
-  it("восстановленные окна не остаются свёрнутыми", () => {
+  it("свёрнутое окно остаётся свёрнутым после сохранения", () => {
     useWorkspaceStore.getState().openWindow("a", "Файлы", "file-manager");
     useWorkspaceStore.getState().openWindow("b", "Терминал", "terminal");
     useWorkspaceStore.getState().minimizeWindow("b");
 
     const saved = readPersisted();
-    // Свёрнутым окно можно сделать и вручную, но после перезагрузки рабочая
-    // область должна открыться собранной, а не пустой.
-    expect(saved!.state.windows.every((w) => w.isMinimized === false)).toBe(true);
+    // Раньше partialize принудительно сбрасывал isMinimized=false и после
+    // обновления страницы показывал все окна поверх рабочего стола.
+    expect(saved!.state.windows.find((w) => w.id === "a")?.isMinimized).toBe(false);
+    expect(saved!.state.windows.find((w) => w.id === "b")?.isMinimized).toBe(true);
+    expect(saved!.state.activeWindowId).toBe("a");
+  });
+
+  it("при миграции старых данных сворачивает накопившиеся окна", async () => {
+    localStorage.setItem(KEY, JSON.stringify({
+      version: 2,
+      state: {
+        windows: [{
+          id: "old-terminal", title: "Терминал", type: "terminal", isOpen: true,
+          isMinimized: false, isMaximized: true, zIndex: 1,
+        }],
+        activeWindowId: "old-terminal",
+      },
+    }));
+
+    await useWorkspaceStore.persist.rehydrate();
+
+    const state = useWorkspaceStore.getState();
+    expect(state.windows[0].isMinimized).toBe(true);
+    expect(state.windows[0].isMaximized).toBe(false);
+    expect(state.activeWindowId).toBeNull();
   });
 
   it("закрытые окна не восстанавливаются", () => {

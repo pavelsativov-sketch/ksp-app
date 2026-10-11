@@ -34,6 +34,13 @@ describe("клик по элементу под курсором", () => {
     ["Удалить", "DATA_MODIFICATION"],
     ["Подтвердить, что вы не робот", "CAPTCHA"],
     ["Паспорт", "SENSITIVE_DATA_MODIFICATION"],
+    ["Выставить оценку ученику", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Отметить отсутствующих", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Закрыть электронный журнал", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Создать урок", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Опубликовать СОР", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Провести урок", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Начать урок", "EDUCATIONAL_RECORDS_MODIFICATION"],
     // Скачивание и сохранение файлов из сети — по документации Computer Use
     // тоже требует подтверждения («User Data Management»).
     ["Скачать презентацию КСП", "DATA_MODIFICATION"],
@@ -59,6 +66,8 @@ describe("клик по элементу под курсором", () => {
     ["Расписание"],
     ["Класс 7А"],
     ["Домой"],
+    ["Журнал"],
+    ["КТП"],
   ])("остаётся автоматическим: «%s»", (label) => {
     expect(classifyClick(label).requiresConfirmation).toBe(false);
   });
@@ -101,6 +110,19 @@ describe("ввод текста", () => {
 
   it("ввод в поле персональных данных требует подтверждения", () => {
     expect(classifyTyping("123456789012", "ИНН").requiresConfirmation).toBe(true);
+  });
+
+  it("ввод оценок и посещаемости требует подтверждения", () => {
+    expect(classifyTyping("5", "Оценка за урок").policy).toBe("EDUCATIONAL_RECORDS_MODIFICATION");
+    expect(classifyTyping("н", "Посещаемость ученика").requiresConfirmation).toBe(true);
+    expect(classifyTyping("Задача 1", "Название СОР").requiresConfirmation).toBe(true);
+    expect(classifyTyping("Введение", "Название урока").requiresConfirmation).toBe(true);
+    expect(classifyTyping("Задача для класса", "", true).requiresConfirmation).toBe(true);
+    expect(classifyTyping("5", "Поле поиска", true).requiresConfirmation).toBe(false);
+  });
+
+  it("обычное поле КТП без признаков изменения оценок не считается чувствительным", () => {
+    expect(classifyTyping("Тема урока", "Тема КТП").requiresConfirmation).toBe(true);
   });
 });
 

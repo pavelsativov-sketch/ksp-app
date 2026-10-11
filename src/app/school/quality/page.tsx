@@ -15,8 +15,8 @@ export default async function QualityPage() {
   if (!school) return <NoSchool />;
 
   const [subjects, roster] = await Promise.all([
-    getQualityMetrics(school._id!.toString()).catch(() => []),
-    getSchoolStudents(school._id!.toString()).catch(() => []),
+    getQualityMetrics(school._id!.toString()),
+    getSchoolStudents(school._id!.toString()),
   ]);
   const overall = subjects.length
     ? Math.round((subjects.reduce((s, r) => s + r.average_score, 0) / subjects.length) * 100)

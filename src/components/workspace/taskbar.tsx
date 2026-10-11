@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useWorkspaceStore, type AppType } from '@/lib/store/workspace';
 import {
   Globe, TerminalSquare, FolderOpen, Bot, Code2,
-  Wifi, Battery, Volume2, Search, Sparkles, X
+  Wifi, Battery, Volume2, LayoutGrid, MonitorPlay, Sparkles, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -24,7 +24,7 @@ const DOCK_APPS: { id: string; title: string; type: AppType; url?: string; Icon:
 ];
 
 export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: () => void, copilotOpen?: boolean }) {
-  const { windows, activeWindowId, openWindow, focusWindow, minimizeWindow, closeAll } = useWorkspaceStore();
+  const { windows, activeWindowId, openWindow, focusWindow, minimizeWindow, minimizeAll, closeAll } = useWorkspaceStore();
   const [time, setTime] = useState('');
   const [date, setDate] = useState('');
 
@@ -54,27 +54,15 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
 
   return (
     <div className="h-12 bg-[#1a1a2e]/80 backdrop-blur-2xl border-t border-white/[0.06] flex items-center justify-between px-3 shrink-0 relative z-[9999]">
-      {/* Left: Start (Exit OS) + Search */}
-      <div className="flex items-center gap-1 w-52">
-        <Link href="/" className="h-8 w-8 rounded-md hover:bg-white/[0.08] flex items-center justify-center transition-colors group relative" title="Выйти из рабочей области на главную">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 text-blue-400 group-hover:scale-90 transition-transform" fill="currentColor" aria-hidden="true">
-            <rect x="1" y="1" width="6" height="6" rx="1"/>
-            <rect x="9" y="1" width="6" height="6" rx="1"/>
-            <rect x="1" y="9" width="6" height="6" rx="1"/>
-            <rect x="9" y="9" width="6" height="6" rx="1"/>
-          </svg>
+      {/* Start/exit control stays explicit; an unlabeled icon was easy to miss. */}
+      <div className="flex w-52 items-center gap-1">
+        <Link href="/school" aria-label="Главное меню школы" className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-semibold text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white" title="Вернуться в главное меню школы">
+          <LayoutGrid className="size-4 text-blue-300" aria-hidden="true" />
+          <span>Главное меню</span>
         </Link>
-        <button
-          className="h-8 w-8 rounded-md hover:bg-white/[0.08] flex items-center justify-center transition-colors"
-          title="Развернуть свёрнутое окно"
-          aria-label="Развернуть свёрнутое окно"
-          onClick={() => {
-            // Раньше кнопка была без обработчика: клик ничего не делал.
-            const firstMinimized = windows.find(w => w.isMinimized);
-            if (firstMinimized) focusWindow(firstMinimized.id);
-          }}
-        >
-          <Search className="w-4 h-4 text-white/50" />
+        <button type="button" onClick={minimizeAll} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white" title="Свернуть окна и показать рабочий стол" aria-label="Показать рабочий стол">
+          <MonitorPlay className="size-4 text-sky-300" aria-hidden="true" />
+          <span>Рабочий стол</span>
         </button>
       </div>
 

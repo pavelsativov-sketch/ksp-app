@@ -22,6 +22,7 @@ import {
   sanitizePrompt,
   type SafetyDecision,
 } from "./safety";
+import { bilimClassInstructions, isBilimClassContext } from "@/lib/agents/domain-skills/bilimclass";
 
 /**
  * Цикл агента «Использование компьютера».
@@ -72,6 +73,7 @@ export interface AgentPage {
   goForward: (opts?: { waitUntil?: string; timeout?: number }) => Promise<unknown>;
   waitForTimeout: (ms: number) => Promise<void>;
   url: () => string;
+  title: () => Promise<string>;
   evaluate: (fn: (arg: never) => unknown, arg?: unknown) => Promise<unknown>;
 }
 
@@ -328,8 +330,10 @@ export function pruneImages(messages: OpenAI.Chat.Completions.ChatCompletionMess
  */
 async function observation(page: AgentPage): Promise<string> {
   const url = currentUrl(page as never);
+  const title = await page.title().catch(() => "");
   const items = await readInteractables(page as never);
   const parts = [`Адрес: ${url}`];
+  if (title) parts.push(`Заголовок вкладки (document.title): ${title}`);
   if (items) parts.push(`Элементы страницы (номер в скобках — координаты):\n${items}`);
   else parts.push("Список элементов недоступен — ориентируйся по снимку.");
   // Список режется здесь, а не в screen.ts: ограничение связано с лимитом
@@ -475,6 +479,11 @@ export async function runComputerUse(opts: RunOptions): Promise<string> {
       // запроса, а цикл добавляет и то, и другое на каждом ходу.
       trimHistory(messages);
       pruneImages(messages);
+      const url = await currentUrl(page as never);
+      const domainInstructions = isBilimClassContext(clean.text, url)
+        ? `\n\n${bilimClassInstructions()}`
+        : "";
+      messages[0] = { role: "system", content: `${SYSTEM_PROMPT}${domainInstructions}` };
       const response = await client.chat.completions.create({
         model,
         messages,
@@ -670,7 +679,7 @@ async function performAction(
       if (!text) return "ошибка: пустой текст";
       // Подпись поля под текущим фокусом: у activeElement она своя.
       const label = await activeFieldLabel(page);
-      const decision = classifyTyping(text, label);
+      const decision = classifyTyping(text, label, isBilimClassContext("", page.url()));
       const probe: ElementProbe = { label, tag: "input", type: "text", visible: true };
 
       if (ctx.forceConfirm || decision.requiresConfirmation) {

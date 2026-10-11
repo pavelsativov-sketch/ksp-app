@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut, ExternalLink } from 'lucide-react';
 
 const BASE = '/api/agents/browser-stream';
 
@@ -18,64 +18,75 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const canvasRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const actionPendingRef = useRef(false);
   const landingUrl = initialUrl?.trim() || 'https://www.google.com';
+  const dailyQuotaBlocked = /дневн.{0,30}лимит/i.test(error);
 
-  const fetchFrame = useCallback(async (params: Record<string, string> = {}) => {
+  const acceptFrame = useCallback(async (res: Response) => {
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(data.error ?? `HTTP ${res.status}`);
+    }
+    if (!res.headers.get('content-type')?.startsWith('image/')) {
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(data.error ?? 'Браузер вернул пустую страницу');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const title = decodeURIComponent(res.headers.get('X-Page-Title') || '');
+    const currentUrl = decodeURIComponent(res.headers.get('X-Page-Url') || '');
+    setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
+    if (title) setPageTitle(title);
+    if (currentUrl) { setPageUrl(currentUrl); setInputUrl(currentUrl); }
+    setError('');
+    return currentUrl;
+  }, []);
+
+  const fetchFrame = useCallback(async () => {
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
-    
-    const qs = new URLSearchParams({ action: 'screenshot', ...params }).toString();
     try {
-      const res = await fetch(`${BASE}?${qs}`, { signal: abortRef.current.signal, cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const title = decodeURIComponent(res.headers.get('X-Page-Title') || '');
-      const currentUrl = decodeURIComponent(res.headers.get('X-Page-Url') || '');
-      setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
-      if (title) setPageTitle(title);
-      if (currentUrl) { setPageUrl(currentUrl); setInputUrl(currentUrl); }
-      setError('');
+      const res = await fetch(`${BASE}?action=screenshot`, { signal: abortRef.current.signal, cache: 'no-store' });
+      return await acceptFrame(res);
     } catch (e: unknown) {
       const isAbort = e instanceof Error && e.name === 'AbortError';
       if (!isAbort) setError(e instanceof Error ? e.message : String(e));
+      return undefined;
     }
-  }, []);
+  }, [acceptFrame]);
 
   const doAction = useCallback(async (params: Record<string, string>) => {
+    if (actionPendingRef.current) return;
+    actionPendingRef.current = true;
     setLoading(true);
+    setError('');
     try {
-      // First perform the action
       const actionResult = await fetch(BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), cache: 'no-store' });
-      if (!actionResult.ok) {
-        const data = await actionResult.json().catch(() => ({})) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${actionResult.status}`);
-      }
-      // Then get fresh screenshot
-      await fetchFrame();
+      // POST already returns the resulting frame. A second screenshot request
+      // reopened the same remote site and could discard a login form's focus.
+      await acceptFrame(actionResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      actionPendingRef.current = false;
       setLoading(false);
     }
-  }, [fetchFrame]);
+  }, [acceptFrame]);
 
   const navigate = useCallback(async (target: string) => {
-    if (!target.trim()) return;
+    if (!target.trim() || actionPendingRef.current) return;
+    actionPendingRef.current = true;
     const url = target.startsWith('http') ? target : target.includes('.') ? 'https://' + target : 'https://www.google.com/search?q=' + encodeURIComponent(target);
     setLoading(true);
     setInputUrl(url);
+    setError('');
     try {
       const actionResult = await fetch(BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'navigate', url }), cache: 'no-store' });
-      if (!actionResult.ok) {
-        const data = await actionResult.json().catch(() => ({})) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${actionResult.status}`);
-      }
-      await fetchFrame();
+      await acceptFrame(actionResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally { setLoading(false); }
-  }, [fetchFrame]);
+    } finally { actionPendingRef.current = false; setLoading(false); }
+  }, [acceptFrame]);
 
   const typeIntoPage = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -93,13 +104,32 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     setError('Внешний сеанс удалён. Войдите снова, чтобы продолжить.');
   }, [landingUrl]);
 
+  const openExternally = useCallback(() => {
+    const target = pageUrl || inputUrl || landingUrl;
+    const externalUrl = /^https?:\/\//i.test(target)
+      ? target
+      : target.includes('.')
+        ? `https://${target}`
+        : `https://www.google.com/search?q=${encodeURIComponent(target)}`;
+    window.open(externalUrl, '_blank', 'noopener,noreferrer');
+  }, [inputUrl, landingUrl, pageUrl]);
+
   // Handle clicks on the screenshot image
   const handleImageClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
     if (!canvasRef.current || !containerRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    // Map click position to 1280x800 viewport
-    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1280);
-    const y = Math.round(((e.clientY - rect.top) / rect.height) * 800);
+    // The image is contained inside the viewport. Account for the letterbox
+    // before mapping a local pointer to the remote 1280x800 viewport.
+    const scale = Math.min(rect.width / 1280, rect.height / 800);
+    const renderedWidth = 1280 * scale;
+    const renderedHeight = 800 * scale;
+    const offsetX = (rect.width - renderedWidth) / 2;
+    const offsetY = (rect.height - renderedHeight) / 2;
+    const rawX = (e.clientX - rect.left - offsetX) / scale;
+    const rawY = (e.clientY - rect.top - offsetY) / scale;
+    if (rawX < 0 || rawY < 0 || rawX >= 1280 || rawY >= 800) return;
+    const x = Math.round(rawX);
+    const y = Math.round(rawY);
     doAction({ action: 'click', x: x.toString(), y: y.toString() });
   }, [doAction]);
 
@@ -115,8 +145,13 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    void navigate(landingUrl);
-  }, [landingUrl, navigate]);
+    void (async () => {
+      // Reopen the last page (and its authenticated session) before choosing
+      // a landing page. This prevents each window opening from losing BilimClass.
+      const restoredUrl = await fetchFrame();
+      if (restoredUrl === 'about:blank') await navigate(landingUrl);
+    })();
+  }, [fetchFrame, landingUrl, navigate]);
 
   return (
     <div className="flex flex-col h-full bg-[#1e1e2e] select-none">
@@ -132,7 +167,6 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           )}
           <span className="text-[11px] text-white/60 truncate flex-1">{pageTitle || pageUrl || 'New Tab'}</span>
         </div>
-        <button className="w-7 h-7 mb-0.5 flex items-center justify-center text-white/30 hover:text-white/60 text-lg">+</button>
       </div>
 
       {/* Navigation Bar */}
@@ -191,19 +225,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       </form>
 
       {/* Viewport — real Playwright screenshot */}
-      <div ref={containerRef} className="flex-1 overflow-hidden relative bg-white cursor-crosshair">
+      <div ref={containerRef} className="flex-1 overflow-hidden relative bg-[#090b12] cursor-crosshair">
         {!imgSrc && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 flex-col gap-3">
+          <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3">
             <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-400 text-sm">Starting browser...</p>
-          </div>
-        )}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-            <div className="text-center">
-              <p className="text-gray-500 text-sm mb-2">{error}</p>
-              <button onClick={() => navigate(pageUrl || 'https://google.com')} className="text-blue-500 text-sm underline">Retry</button>
-            </div>
+            <p className="text-white/55 text-sm">Загрузка безопасного браузера…</p>
           </div>
         )}
         {imgSrc && (
@@ -213,11 +239,30 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             width={1280}
             height={800}
             unoptimized
-            className="w-full h-full object-cover object-top cursor-default"
+            className="w-full h-full object-contain cursor-default"
+            ref={canvasRef}
             onClick={handleImageClick}
             onWheel={handleWheel}
             draggable={false}
           />
+        )}
+        {error && (
+          <div className={`absolute z-10 flex justify-center px-3 ${imgSrc ? 'left-3 right-3 top-3' : 'inset-0 items-center bg-[#090b12]'}`}>
+            <div className={`flex max-w-full items-center gap-3 rounded-lg border border-amber-300/20 bg-[#151722]/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
+              <p className="min-w-0 flex-1 text-sm text-white/75">{error}</p>
+              {dailyQuotaBlocked ? (
+                <>
+                  <button type="button" onClick={openExternally} className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-sky-300/25 bg-sky-300/10 px-2.5 py-1.5 text-xs font-medium text-sky-200 hover:bg-sky-300/20">
+                    <ExternalLink className="size-3.5" /> Открыть сайт отдельно
+                  </button>
+                  <span className="shrink-0 text-xs text-amber-200/70">Сброс в 00:00 UTC</span>
+                </>
+              ) : (
+                <button type="button" onClick={() => navigate(pageUrl || landingUrl)} className="shrink-0 text-sm text-blue-300 underline underline-offset-2">Повторить</button>
+              )}
+              <button type="button" onClick={() => setError('')} aria-label="Скрыть сообщение" className="shrink-0 text-white/50 hover:text-white"><X className="size-4" /></button>
+            </div>
+          </div>
         )}
         {loading && (
           <div className="absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
@@ -228,7 +273,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       <div className="h-5 bg-[#252536] border-t border-black/20 flex items-center px-3 shrink-0">
         <span className="text-[10px] text-white/25 truncate">{pageUrl}</span>
         <span className="ml-auto shrink-0 pl-2 text-[10px] text-white/30" title="Лимит бесплатного Cloudflare Browser Run">
-          Free: 10 мин/день
+          Бесплатно: 10 мин/день · тайм-аут бездействия 1 мин
         </span>
       </div>
     </div>

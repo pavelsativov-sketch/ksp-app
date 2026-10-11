@@ -73,13 +73,17 @@ export default function CreateSchoolPage() {
             <Field label="Код школы (для подключения учителей)"><Input name="code" required minLength={3} placeholder="SCH-2026-25" /></Field>
             <Field label="Область"><Input name="region" required minLength={2} placeholder="Костанайская" /></Field>
             <Field label="Город"><Input name="city" required minLength={2} placeholder="Костанай" /></Field>
-            <Field label="Учебный год"><Input name="academic_year" placeholder="2026-2027" /></Field>
+            <Field label="Учебный год"><Input name="academic_year" required pattern="\d{4}-\d{4}" placeholder="2026-2027" /></Field>
             <Field label="Язык обучения">
               <select name="language" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
                 <option value="ru">Русский</option>
                 <option value="kk">Қазақша</option>
               </select>
             </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Количество смен"><select name="shifts" required defaultValue="" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="" disabled>Выберите сменность</option><option value="1">Одна смена</option><option value="2">Две смены</option></select></Field>
+            <Field label="Система оценивания"><select name="grading_system" required defaultValue="" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="" disabled>Выберите систему</option><option value="5-point">5-балльная</option><option value="10-point">10-балльная</option></select></Field>
           </div>
           <Button type="submit" className="w-full" disabled={pending}>
             {pending && <Loader2 className="animate-spin" />} Создать школу

@@ -67,8 +67,9 @@ export async function runAgentTask(
       : TOOL_SCHEMAS.filter((tool) => tool.function.name !== 'runCommand');
     const systemPrompt = shellAvailable
       ? SYSTEM_PROMPT
-      : `${SYSTEM_PROMPT}\nВ этой рабочей области доступны браузер и файлы, но нет Linux shell. Не вызывай команды и не утверждай, что скрипты запускались. Если задаче необходимо выполнить программу или системную команду, заверши её как заблокированную и объясни, что на бесплатном Cloudflare Workers нет Linux-среды.`;
+      : `${SYSTEM_PROMPT}\nВ этой рабочей области доступны браузер и файлы, но Linux-среда выполнения сейчас недоступна. Не вызывай команды и не утверждай, что скрипты запускались. Если задаче необходимо выполнить программу или системную команду, заверши её как заблокированную и объясни, что среда выполнения не настроена.`;
     const deadline = Date.now() + TIME_BUDGET_MS;
+    let browserFailureMessage: string | undefined;
 
     // Мульти-провайдерный фоллбэк: Groq → Cerebras → Gemini → OpenRouter.
     // Провайдер используется для всего цикла; при его сбое (лимит 429 и т.п.)
@@ -79,11 +80,11 @@ export async function runAgentTask(
         const planResp = await client.chat.completions.create({
           model,
           temperature: 0.2,
+          max_completion_tokens: 512,
           messages: [
-            { role: 'system', content: 'Составь короткий план решения задачи для учителя: 3–5 шагов, по одному предложению на шаг, на русском. Верни ТОЛЬКО JSON: {"steps":["..."]}' },
-            { role: 'user', content: prompt },
+            { role: 'system', content: 'Ты только составляешь план для другого агента, у которого есть инструменты для файлов и браузера. Не исполняй поручение, не отказывайся и не говори, что у тебя нет доступа. Составь 3–5 коротких шагов по-русски. Выведи только JSON без Markdown строго вида {"steps":["шаг 1","шаг 2","шаг 3"]}.' },
+            { role: 'user', content: `Задание другого агента: ${prompt}` },
           ],
-          response_format: { type: 'json_object' },
         });
         const raw = planResp.choices[0]?.message?.content ?? '{}';
         const parsed = JSON.parse(raw) as { steps?: unknown };
@@ -139,6 +140,7 @@ export async function runAgentTask(
 
         const response = await client.chat.completions.create({
           model,
+          max_completion_tokens: 1024,
           messages,
           tools: activeToolSchemas,
           tool_choice: 'auto',
@@ -196,9 +198,22 @@ export async function runAgentTask(
             }
           }
           await log({ type: 'TOOL_RESULT', message: humanToolResult(name, resultStr), data: { tool: name, result: resultStr } });
+          if (name === 'browserNavigate') {
+            try {
+              const browserResult = JSON.parse(resultStr) as { success?: boolean; error?: string };
+              if (browserResult.success === false) {
+                browserFailureMessage = browserResult.error || 'Встроенный браузер не смог открыть страницу';
+                await log({ type: 'ERROR', message: `Браузерный шаг остановлен: ${browserFailureMessage}` });
+                done = true;
+              }
+            } catch {
+              // A non-JSON result is returned to the model for normal handling.
+            }
+          }
         }
 
         messages.push({ role: 'tool', tool_call_id: (call as { id?: string }).id ?? '', content: resultStr });
+        if (browserFailureMessage) break;
       }
       }
 
@@ -210,6 +225,11 @@ export async function runAgentTask(
       }
       return summary;
     });
+
+    if (browserFailureMessage) {
+      await finish('failed', { error: browserFailureMessage });
+      return;
+    }
 
     // «Остановлено пользователем» не перезатираем финалом цикла.
     const afterStop = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });

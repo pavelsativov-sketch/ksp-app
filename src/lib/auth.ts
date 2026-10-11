@@ -3,10 +3,13 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
+import { cache } from "react";
 import { getDb, COL } from "@/lib/mongo";
 
 const COOKIE_NAME = "ksp_session";
-const SESSION_DAYS = 30;
+// Keep sessions short-lived and validate their version against the user record,
+// so password changes revoke other sessions immediately.
+const SESSION_HOURS = 12;
 const DEV_SECRET = "ksp-app-development-secret-only";
 
 export interface SessionUser {
@@ -14,6 +17,8 @@ export interface SessionUser {
   email: string;
   fullName: string | null;
 }
+
+export type SessionIdentity = Pick<SessionUser, "email" | "fullName">;
 
 export interface UserDoc {
   _id: ObjectId;
@@ -51,11 +56,19 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
-export async function createSession(userId: string, sessionVersion = 0): Promise<void> {
-  const token = await new SignJWT({ sub: userId, sessionVersion })
+export async function createSession(
+  userId: string,
+  sessionVersion = 0,
+  identity?: SessionIdentity,
+): Promise<void> {
+  const token = await new SignJWT({
+    sub: userId,
+    sessionVersion,
+    ...(identity ? { email: identity.email, fullName: identity.fullName } : {}),
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_DAYS}d`)
+    .setExpirationTime(`${SESSION_HOURS}h`)
     .sign(secret());
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
@@ -63,7 +76,7 @@ export async function createSession(userId: string, sessionVersion = 0): Promise
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    maxAge: SESSION_HOURS * 60 * 60,
   });
 }
 
@@ -84,7 +97,7 @@ export async function clearSession(): Promise<void> {
 export async function readSessionSubject(token: string | undefined): Promise<string | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret());
+    const { payload } = await jwtVerify(token, secret(), { maxTokenAge: "12h" });
     if (!payload.sub || !/^[0-9a-f]{24}$/i.test(payload.sub)) return null;
     return payload.sub;
   } catch {
@@ -94,24 +107,32 @@ export async function readSessionSubject(token: string | undefined): Promise<str
 
 export const SESSION_COOKIE = COOKIE_NAME;
 
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret());
+    const { payload } = await jwtVerify(token, secret(), { maxTokenAge: "12h" });
     if (!payload.sub || !/^[0-9a-f]{24}$/i.test(payload.sub)) return null;
+    // Reject legacy or malformed identities before opening a Mongo connection.
+    const email = payload.email;
+    const fullName = payload.fullName;
+    if (typeof email !== "string" || email.length > 320 || !/^\S+@\S+\.\S+$/.test(email)) return null;
+    if (fullName !== null && typeof fullName !== "string") return null;
+    // Ensure the account still exists and the token's version is current. This
+    // makes password changes and account deletion revoke older sessions.
     const db = await getDb();
-    const doc = (await db.collection(COL.users).findOne(
+    const account = await db.collection<UserDoc>(COL.users).findOne(
       { _id: new ObjectId(payload.sub) },
-      { projection: { email: 1, full_name: 1, session_version: 1 } },
-    )) as Pick<UserDoc, "_id" | "email" | "full_name" | "session_version"> | null;
-    if (!doc || (payload.sessionVersion ?? 0) !== (doc.session_version ?? 0)) return null;
-    return doc ? { id: doc._id.toString(), email: doc.email, fullName: doc.full_name } : null;
+      { projection: { session_version: 1 } },
+    );
+    const tokenVersion = typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0;
+    if (!account || (account.session_version ?? 0) !== tokenVersion) return null;
+    return { id: payload.sub, email, fullName };
   } catch {
     return null;
   }
-}
+});
 
 export async function findUserByEmail(email: string): Promise<UserDoc | null> {
   const db = await getDb();

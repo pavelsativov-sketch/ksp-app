@@ -24,6 +24,16 @@ interface PendingAction {
   probe: { label: string; tag: string; visible: boolean };
 }
 
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const body = await response.text();
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    const status = response.status ? ` (HTTP ${response.status})` : "";
+    throw new Error(`Сервис компьютерного агента вернул страницу ошибки вместо данных${status}.`);
+  }
+}
+
 const RISK_LABEL: Record<string, string> = {
   FINANCIAL_TRANSACTIONS: "Платёж или покупка",
   SENSITIVE_DATA_MODIFICATION: "Личные или государственные данные",
@@ -34,12 +44,13 @@ const RISK_LABEL: Record<string, string> = {
   LEGAL_TERMS_AND_AGREEMENTS: "Принятие условий",
   CAPTCHA: "Проверка «я не робот»",
   LOGIN: "Вход в учётную запись",
+  EDUCATIONAL_RECORDS_MODIFICATION: "Изменение оценок, посещаемости или учебных записей",
 };
 
 const SUGGESTIONS = [
-  "Найди на сайте школы расписание на завтра",
-  "Открой материалы по теме «Дроби» и найди в них видео",
-  "Собери ссылки на бесплатные тренажёры по математике 5 класс",
+  "BilimClass: отметь урок проведённым — дата, класс, предмет",
+  "BilimClass: укажи тему урока — дата, класс, предмет, тема",
+  "BilimClass: добавь домашнее задание — урок и текст задания",
 ];
 
 export function ComputerUseApp() {
@@ -132,12 +143,12 @@ export function ComputerUseApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goal: task, startUrl: startUrl.trim() || undefined }),
       });
-      const data = (await res.json()) as {
+      const data = await readJsonResponse<{
         ok?: boolean;
         summary?: string;
         error?: string;
         events?: Array<{ type: string; message: string }>;
-      };
+      }>(res);
 
       for (const event of data.events ?? []) appendLog(event);
 

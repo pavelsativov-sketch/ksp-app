@@ -17,8 +17,8 @@ export default async function SettingsPage() {
 
   const schoolId = school._id.toString();
   const [member, members] = await Promise.all([
-    requireSchoolAccess(user!.id, schoolId).catch(() => null),
-    getSchoolMembers(schoolId).catch(() => []),
+    requireSchoolAccess(user!.id, schoolId),
+    getSchoolMembers(schoolId),
   ]);
 
   return (

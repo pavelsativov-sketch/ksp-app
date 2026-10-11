@@ -55,6 +55,58 @@ async function runAction(userId: string, args: BrowserAction) {
   const action = args.action ?? "screenshot";
   try {
     const session = await getAgentBrowserSession(userId);
+    if (session.remote) {
+      let remoteAction = action;
+      let remoteArgs: Record<string, unknown> = {};
+      let allowedOrigin: string | undefined;
+
+      if (action === "navigate") {
+        const nav = searchUrl(typeof args.url === "string" ? args.url : "");
+        const checked = await checkPublicUrl(nav);
+        if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
+        remoteArgs = { url: checked.url.toString(), timeoutMs: 20_000 };
+        allowedOrigin = checked.url.origin;
+      } else if (action === "click") {
+        const x = Number(args.x ?? 0);
+        const y = Number(args.y ?? 0);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= 1280 || y >= 800) {
+          return NextResponse.json({ error: "Координаты клика вне страницы" }, { status: 400 });
+        }
+        remoteArgs = { x, y };
+      } else if (action === "type") {
+        const text = typeof args.text === "string" ? args.text.slice(0, 500) : "";
+        if (!text) return NextResponse.json({ error: "Введите текст для страницы" }, { status: 400 });
+        remoteArgs = { text };
+      } else if (action === "key") {
+        const key = typeof args.key === "string" ? args.key.slice(0, 30) : "Enter";
+        if (!/^(?:[\w]+|Control\+[\w]+|Shift\+[\w]+|Alt\+[\w]+)$/.test(key)) {
+          return NextResponse.json({ error: "Недопустимая клавиша" }, { status: 400 });
+        }
+        remoteAction = "press";
+        remoteArgs = { key };
+      } else if (action === "scroll") {
+        const dy = Number(args.dy ?? 0);
+        if (!Number.isFinite(dy)) return NextResponse.json({ error: "Некорректная прокрутка" }, { status: 400 });
+        remoteAction = "wheel";
+        remoteArgs = { dx: 0, dy: Math.max(-2000, Math.min(2000, dy)) };
+      } else if (["screenshot", "back", "forward", "reload"].includes(action)) {
+        remoteArgs = {};
+      } else {
+        return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
+      }
+
+      const frame = await session.remote.performUiAction(remoteAction, remoteArgs, allowedOrigin);
+      await persistAgentBrowserSession(userId);
+      return new NextResponse(new Uint8Array(frame.screenshot), {
+        headers: {
+          "Content-Type": "image/jpeg",
+          "X-Page-Title": encodeURIComponent(frame.title),
+          "X-Page-Url": encodeURIComponent(frame.currentUrl),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
     const { page } = session;
 
     let guardOrigin: string | null = null;

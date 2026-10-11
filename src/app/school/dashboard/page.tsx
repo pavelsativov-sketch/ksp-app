@@ -19,7 +19,7 @@ export default async function SchoolDashboardPage() {
   if (!school) return <NoSchool />;
 
   const schoolId = school._id!.toString();
-  const overview = await getSchoolOverview(schoolId).catch(() => null);
+  const overview = await getSchoolOverview(schoolId);
 
   const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
@@ -31,7 +31,7 @@ export default async function SchoolDashboardPage() {
         <p className="mt-1 text-sm text-muted-foreground">{formatSchoolSubtitle(school)}</p>
       </header>
 
-      {!overview?.hasData ? (
+      {!overview.hasData ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
             <School className="size-8 text-muted-foreground" />
@@ -57,7 +57,7 @@ export default async function SchoolDashboardPage() {
 
           {/* Ключевые показатели */}
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <MetricCard href="/school/attendance" title="Посещаемость" value={pct(overview.attendanceRate)} icon={<Users className="size-4" />} />
+            <MetricCard href="/school/attendance" title="Посещаемость · 60 дней" value={pct(overview.attendanceRate)} icon={<Users className="size-4" />} />
             <MetricCard href="/school/quality" title="Качество знаний" value={pct(overview.qualityScore)} icon={<GraduationCap className="size-4" />} />
             <MetricCard href="/school/vsk" title="Средний балл ВШК" value={overview.vskAverage === null ? "—" : `${Math.round(overview.vskAverage)}/100`} icon={<ClipboardCheck className="size-4" />} />
           </div>

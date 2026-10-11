@@ -11,7 +11,7 @@ export const browserTools = {
       if (!checked.ok) return { success: false, error: checked.error };
       const session = await getAgentBrowserSession(ctx.userId);
       await installRequestGuard(session.page);
-      await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
       await persistAgentBrowserSession(ctx.userId);
       const page = session.page;
       const title = await page.title();

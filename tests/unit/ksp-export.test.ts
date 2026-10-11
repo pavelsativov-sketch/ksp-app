@@ -3,6 +3,7 @@ import { buildKspDocx, buildTeacherScriptDocx } from "@/lib/export/docx";
 import JSZip from "jszip";
 import { buildKspPptx } from "@/lib/export/pptx";
 import { generateKsp, mergeAiIntoKsp } from "@/lib/ai/generate";
+import type { AiKspPayload } from "@/lib/ai/prompt";
 import { emptyKsp, type LessonPlanRow } from "@/lib/types/ksp";
 
 const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
@@ -156,33 +157,22 @@ describe("buildKspPptx", () => {
   });
 });
 
-describe("generateKsp (stub)", () => {
-  it("returns a populated KSP body", async () => {
-    const out = await generateKsp({
+describe("generateKsp (configured AI only)", () => {
+  it("reports a clear error when no AI provider is configured", async () => {
+    await expect(generateKsp({
       grade: 5,
       subject: "Математика",
       topic: "Дроби",
       learningObjectives: ["5.1.2.1 — Тест"],
       language: "ru",
-    });
-    expect(out.topic).toBe("Дроби");
-    expect(out.lessonObjectives.length).toBeGreaterThan(0);
-    expect(out.stages.beginning.teacherActions.length).toBeGreaterThan(0);
-    expect(out.stages.end.homework).toBeDefined();
-    expect(out.evaluation.differentiation.length).toBeGreaterThan(0);
+    })).rejects.toThrow("Не настроен ни один AI-провайдер");
   });
 
   it("mergeAiIntoKsp overlays AI body without touching header/learningObjectives", async () => {
     const before = emptyKsp();
     before.header.school = "Школа №1";
     before.learningObjectives = [{ code: "5.1.1.1", text: "X" }];
-    const ai = await generateKsp({
-      grade: 5,
-      subject: "Математика",
-      topic: "Y",
-      learningObjectives: [],
-      language: "ru",
-    });
+    const ai = { ...emptyKsp(), topic: "Y" } as AiKspPayload;
     const merged = mergeAiIntoKsp(before, ai);
     expect(merged.header.school).toBe("Школа №1");
     expect(merged.learningObjectives).toEqual(before.learningObjectives);

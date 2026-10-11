@@ -3,7 +3,7 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { log } from "@/lib/logger";
-import { browserFailure, launchAgentBrowser } from "@/lib/agents/browser-session";
+import { browserFailure, getAgentBrowserSession, persistAgentBrowserSession } from "@/lib/agents/browser-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,19 +38,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: checked.error }, { status: checked.status });
   }
 
-  let browser: Awaited<ReturnType<typeof launchAgentBrowser>> | null = null;
   try {
-    browser = await launchAgentBrowser();
-    const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block" });
-    const page = await context.newPage();
-    await installRequestGuard(page);
+    const session = await getAgentBrowserSession(auth.user.id);
+    await installRequestGuard(session.page);
 
-    const resp = await page.goto(checked.url.toString(), { waitUntil: "domcontentloaded", timeout: 15_000 });
-    const title = await page.title();
-    const content = await page.evaluate(() => {
+    const resp = await session.page.goto(checked.url.toString(), { waitUntil: "domcontentloaded", timeout: 15_000 });
+    const title = await session.page.title();
+    const content = await session.page.evaluate(() => {
       document.querySelectorAll("script, style, nav, footer, iframe, noscript, svg").forEach((el) => el.remove());
       return document.body?.innerText?.substring(0, 3000) ?? "";
     });
+    await persistAgentBrowserSession(auth.user.id);
 
     return NextResponse.json({ title, content, status: resp?.status() ?? null });
   } catch (error) {
@@ -60,7 +58,5 @@ export async function GET(req: Request) {
     });
     const failure = browserFailure(error);
     return NextResponse.json({ error: failure.message, title: checked.url.toString(), content: "" }, { status: failure.status });
-  } finally {
-    if (browser) await browser.close().catch(() => {});
   }
 }

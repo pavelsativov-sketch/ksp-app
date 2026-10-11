@@ -22,8 +22,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     await requireSchoolAccess(user.id, id);
     const url = new URL(req.url);
     const classFilter = url.searchParams.get('class') || undefined;
+    const includeInactive = url.searchParams.get('includeInactive') === 'true';
     
-    const students = await getSchoolStudents(id, classFilter);
+    const students = await getSchoolStudents(id, classFilter, includeInactive);
 
     return NextResponse.json({ students });
   } catch (error) {

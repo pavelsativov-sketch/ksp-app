@@ -6,7 +6,7 @@ import { requireSchoolAccess, getSchoolMembers, addSchoolMember } from '@/lib/sc
 // Роль не принимается из запроса произвольно: enum задаёт допустимые значения.
 const addMemberSchema = z.object({
   user_id: z.string().min(1).max(128),
-  role: z.enum(['director', 'deputy', 'teacher', 'admin']),
+  role: z.enum(['deputy', 'teacher']),
   full_name: z.string().trim().min(1).max(200),
   subject: z.string().trim().max(200).optional(),
 });
@@ -35,7 +35,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const user = authResult.user;
     const { id } = await ctx.params;
     
-    await requireSchoolAccess(user.id, id, 'admin');
+    await requireSchoolAccess(user.id, id, 'director');
     let body: unknown;
     try {
       body = await req.json();

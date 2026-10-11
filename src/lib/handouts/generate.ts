@@ -31,6 +31,11 @@ export async function generateHandout(input: HandoutInput): Promise<Handout> {
   if (!isAnyProviderConfigured() && !process.env.OPENAI_API_KEY) {
     if (input.kind === "worksheet") {
       const sheet: Worksheet = { kind: "worksheet", language: input.language, ...buildLocalWorksheet(input), degraded: true, learningObjectives: input.kspContext?.learningObjectives };
+      // Preserve requested card layout in the local fallback too; image
+      // generation stays an independent opt-in feature.
+      if (input.cardLayout || input.withImages || input.generateImages) {
+        sheet.cardLayout = true;
+      }
       if (input.withImages || input.generateImages) {
         const { items, created } = await illustrateWorksheetTasks(sheet.tasks, { topic: input.topic, subject: input.subject, grade: input.grade }, imageSlotReserver(input));
         sheet.tasks = items;

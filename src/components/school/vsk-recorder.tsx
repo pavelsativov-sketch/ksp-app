@@ -13,14 +13,24 @@ export function VskRecorder({ schoolId, teachers }: { schoolId: string; teachers
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
-    const form = new FormData(event.currentTarget);
-    const scores = criteria.map((criterion, i) => ({ criterion, score: Number(form.get(`score-${i}`)), max_score: 5 }));
-    const overall = Math.round(scores.reduce((sum, item) => sum + item.score, 0) / scores.length * 20);
-    const response = await fetch(`/api/school/${schoolId}/vsk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teacher_id: form.get("teacher"), teacher_name: teachers.find(t => t.id === form.get("teacher"))?.name, subject: form.get("subject"), class_name: form.get("class"), date: form.get("date"), direction: "Посещение урока", checklist: scores, overall_score: overall, findings: form.get("findings"), recommendations: form.get("recommendations"), status: "completed" }) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) { setError(data.error ?? "Не удалось сохранить проверку"); setBusy(false); return; }
-    router.refresh(); event.currentTarget.reset(); setBusy(false);
+    event.preventDefault();
+    if (busy) return;
+    const formElement = event.currentTarget;
+    setBusy(true); setError("");
+    try {
+      const form = new FormData(formElement);
+      const scores = criteria.map((criterion, i) => ({ criterion, score: Number(form.get(`score-${i}`)), max_score: 5 }));
+      const overall = Math.round(scores.reduce((sum, item) => sum + item.score, 0) / scores.length * 20);
+      const response = await fetch(`/api/school/${schoolId}/vsk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teacher_id: form.get("teacher"), teacher_name: teachers.find(t => t.id === form.get("teacher"))?.name, subject: form.get("subject"), class_name: form.get("class"), date: form.get("date"), direction: "Посещение урока", checklist: scores, overall_score: overall, findings: form.get("findings"), recommendations: form.get("recommendations"), status: "completed" }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { setError(data.error ?? "Не удалось сохранить проверку"); return; }
+      formElement.reset();
+      router.refresh();
+    } catch {
+      setError("Не удалось связаться с сервером. Проверьте соединение и попробуйте снова.");
+    } finally {
+      setBusy(false);
+    }
   }
   return <Card className="mb-6"><CardHeader><CardTitle className="text-base">Новая проверка урока</CardTitle></CardHeader><CardContent>
     {teachers.length === 0 ? <p className="text-sm text-muted-foreground">Добавьте педагогов в раздел «Сотрудники», чтобы начать проверку.</p> : <form onSubmit={submit} className="space-y-4">

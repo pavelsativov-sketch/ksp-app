@@ -15,8 +15,8 @@ export default async function VskPage() {
   if (!school) return <NoSchool />;
 
   const [inspections, members] = await Promise.all([
-    getVskSummary(school._id!.toString()).catch(() => []),
-    getSchoolMembers(school._id!.toString()).catch(() => []),
+    getVskSummary(school._id!.toString()),
+    getSchoolMembers(school._id!.toString()),
   ]);
   const teachers = members.filter((member) => member.role === "teacher").map((member) => ({ id: member.user_id, name: member.full_name, subject: member.subject }));
   const completed = inspections.filter((i) => i.status === "completed");

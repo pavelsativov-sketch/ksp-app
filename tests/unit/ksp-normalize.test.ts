@@ -48,6 +48,19 @@ describe("lessonObjectives остаётся массивом", () => {
     expect(Array.isArray(out.lessonObjectives)).toBe(true);
     expect(out.lessonObjectives).toEqual(["Объяснить правило", "Решить примеры"]);
   });
+
+  it("criteria objects become separate strings instead of rejecting the whole plan", () => {
+    const out = normalizeTextFields({
+      assessmentCriteria: [
+        { text: "Определяет числитель и знаменатель" },
+        { criterion: "Сравнивает дроби" },
+      ],
+    });
+    expect(out.assessmentCriteria).toEqual([
+      "Определяет числитель и знаменатель",
+      "criterion: Сравнивает дроби",
+    ]);
+  });
 });
 
 describe("числовые поля", () => {

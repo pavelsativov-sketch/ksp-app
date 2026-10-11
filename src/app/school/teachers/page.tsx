@@ -14,7 +14,7 @@ export default async function TeachersPage() {
   const school = user ? await getActiveSchool(user.id) : null;
   if (!school || !school._id) return <NoSchool />;
 
-  const members = await getSchoolMembers(school._id.toString()).catch(() => []);
+  const members = await getSchoolMembers(school._id.toString());
   const roleOrder: Record<string, number> = { director: 0, admin: 1, deputy: 2, teacher: 3 };
   const sorted = [...members].sort((a, b) => (roleOrder[a.role] ?? 9) - (roleOrder[b.role] ?? 9) || a.full_name.localeCompare(b.full_name, "ru"));
 

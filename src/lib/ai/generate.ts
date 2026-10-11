@@ -170,6 +170,14 @@ export function normalizeTextFields<T>(value: T): T {
     "assessmentMethod",
     "homework",
     "summary",
+    "question",
+    "hint",
+    "objectiveCode",
+    "unit",
+    "template",
+    "id",
+    "code",
+    "text",
     "name",
     "topic",
     "instruction",
@@ -178,11 +186,29 @@ export function normalizeTextFields<T>(value: T): T {
     "differentiation",
     "reflection",
     "formativeAssessment",
+    "healthAndSafety",
+    "values",
+    "crossCurricularLinks",
+    "priorKnowledge",
   ]);
 
   // Поля, где схема ждёт МАССИВ строк. Их нельзя склеивать: документ
   // показывает пункты по отдельности.
-  const LIST_KEYS = new Set(["lessonObjectives", "reflectionQuestions"]);
+  const LIST_KEYS = new Set([
+    "lessonObjectives",
+    "reflectionQuestions",
+    "assessmentCriteria",
+    "keyQuestions",
+    "descriptors",
+    "terms",
+    "phrases",
+    "acceptedAnswers",
+    "options",
+    "left",
+    "right",
+    "items",
+    "answers",
+  ]);
 
   // Поля, где схема ждёт число, а модель пишет строку («7» вместо 7).
   const NUMBER_KEYS = new Set(["answer", "tolerance"]);

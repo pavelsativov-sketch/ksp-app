@@ -8,7 +8,7 @@ import {
   FolderOpen, Globe, LayoutGrid, ScrollText, TerminalSquare, FileCode, Archive, Undo2,
 } from "lucide-react";
 import { AgentComposer } from "@/components/agents/agent-composer";
-import { clearActiveAgentTask, setActiveAgentTask, useActiveAgentTask } from "@/components/agents/agent-dock";
+import { setActiveAgentTask, useActiveAgentTask } from "@/components/agents/agent-dock";
 import { AgentSession, StatusDot, type AgentStatus } from "@/components/agents/agent-session";
 import { CodeEditorApp } from "@/components/workspace/apps/code-editor";
 import { PermissionCard } from "@/components/agents/permission-card";
@@ -29,7 +29,7 @@ interface TabDef {
 
 /** Вкладки, которые есть всегда. */
 const BASE_TABS: TabDef[] = [
-  { id: "os", label: "ОС", icon: LayoutGrid },
+  { id: "os", label: "Рабочий стол", icon: LayoutGrid },
   { id: "browser", label: "Браузер", icon: Globe },
   { id: "files", label: "Файлы", icon: FolderOpen },
   { id: "editor", label: "Редактор", icon: FileCode },
@@ -42,7 +42,7 @@ const EXTRA_TABS: TabDef[] = [{ id: "log", label: "Задача", icon: ScrollTe
 /**
  * Рабочая область как в референсе: слева чат с агентом (пузырь запроса,
  * план-чеклист, прогресс, отмена задачи), справа — рабочий стол с вкладками
- * приложений, кнопками «Запустить» / «Остановить» и разворотом.
+ * приложений, режимом ручного управления и отдельными действиями задачи.
  */
 export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?: string; initialTab?: OsTab }) {
   const router = useRouter();
@@ -51,12 +51,14 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
   const setTab = useOsShellStore((s) => s.setTab);
   const [extraTabs, setExtraTabs] = useState<OsTab[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [status, setStatus] = useState<AgentStatus>("running");
+  const [status, setStatus] = useState<AgentStatus>("completed");
   const [elapsed, setElapsed] = useState<string | null>(null);
-  const [control, setControlState] = useState<"user" | "ai">("ai");
+  const [control, setControlState] = useState<"user" | "ai">("user");
+  const [controlLoaded, setControlLoaded] = useState(false);
   const [editorFile, setEditorFile] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -78,22 +80,29 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
   // Владелец управления: опрос + локальное применение кнопок.
   useEffect(() => {
     let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
         const res = await fetch("/api/agents/control", { cache: "no-store" });
-        if (!res.ok || !alive) return;
-        const data = (await res.json()) as { control?: "user" | "ai" };
-        if (data.control) setControlState(data.control);
+        if (res.ok && alive) {
+          const data = (await res.json()) as { control?: "user" | "ai" };
+          if (data.control) setControlState(data.control);
+          setControlLoaded(true);
+        }
       } catch { /* некритично */ }
+      if (alive) timer = setTimeout(() => void poll(), 15000);
     };
     void poll();
-    const iv = setInterval(poll, 2000);
-    return () => { alive = false; clearInterval(iv); };
+    return () => { alive = false; if (timer) clearTimeout(timer); };
   }, []);
 
   const setControl = async (mode: "user" | "ai") => {
-    setControlState(mode);
-    try { await fetch("/api/agents/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ control: mode }) }); } catch { /* повторится опросом */ }
+    setNotice(null);
+    try {
+      const response = await fetch("/api/agents/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ control: mode }) });
+      if (!response.ok) throw new Error("Не удалось передать управление");
+      setControlState(mode);
+    } catch { setNotice("Не удалось изменить режим управления. Проверьте соединение."); }
   };
 
   // Таймер «Работает MM:SS» — от createdAt активной задачи (история задач).
@@ -157,18 +166,21 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
       }
       const data = (await res.json()) as { taskId?: string };
       if (res.ok && data.taskId) setActiveAgentTask(data.taskId, prompt.slice(0, 80), prompt);
-    } catch { /* ошибку покажет композер при следующем запуске */ }
-    setStarting(false);
+    } catch { /* ошибка не должна блокировать повторный запуск */ }
+    finally { setStarting(false); }
   }
 
-  const running = !task || status === "running" || status === "connecting";
+  const running = Boolean(task) && (status === "running" || status === "connecting");
 
   return (
     <div className="flex h-full min-h-0">
       {/* ── Левая колонка: чат ── */}
-      <section aria-label="Чат с агентом" className="flex w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#0b0d13] lg:w-[420px]">
+      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#0b0d13] lg:flex lg:w-[420px]`}>
         <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5">
           <h1 className="text-sm font-bold text-slate-100">Новый чат</h1>
+          <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] font-semibold text-sky-200 lg:hidden">
+            <LayoutGrid className="size-3.5" /> Открыть ОС
+          </button>
           <span
             className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-slate-300"
             title="Модель подбирается автоматически с фоллбэком: Gemini → Groq → OpenAI"
@@ -177,11 +189,11 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
           </span>
         </header>
 
-        {/* Владелец управления: TAKE CONTROL / GIVE CONTROL TO AI */}
+        {/* User control stays obvious while the AI is paused. */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 pb-2.5">
           <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${control === "user" ? "text-sky-300" : "text-emerald-300"}`}>
             <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-sky-400" : "animate-pulse bg-emerald-400"}`} />
-            {control === "user" ? "ВЫ УПРАВЛЯЕТЕ" : "AI РАБОТАЕТ"}
+            {!controlLoaded ? "ПРОВЕРЯЮ СОСТОЯНИЕ" : control === "user" ? "ВЫ УПРАВЛЯЕТЕ" : "AI РАБОТАЕТ"}
           </span>
           {control === "ai" ? (
             <button
@@ -189,7 +201,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
               onClick={() => void setControl("user")}
               className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20"
             >
-              TAKE CONTROL
+              Забрать управление себе
             </button>
           ) : (
             <button
@@ -197,7 +209,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
               onClick={() => void setControl("ai")}
               className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20"
             >
-              GIVE CONTROL TO AI
+              Передать управление ИИ
             </button>
           )}
         </div>
@@ -254,7 +266,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
         className={
           fullscreen
             ? "fixed inset-0 z-[80] flex min-w-0 flex-1 flex-col bg-[#0a0a1c]"
-            : "hidden min-w-0 flex-1 flex-col lg:flex"
+            : `${mobileWorkspaceOpen ? "flex" : "hidden"} min-w-0 flex-1 flex-col lg:flex`
         }
       >
         {/* Переключатель панелей. Раньше это были просто кнопки без ролей:
@@ -347,15 +359,24 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            {tab === "os" && (
+              <span className="hidden items-center gap-1.5 px-2 text-[10px] font-medium text-emerald-300 sm:inline-flex" title="Рабочий стол открыт; вы можете управлять окнами вручную">
+                <span className="size-1.5 rounded-full bg-emerald-400" /> ОС включена · ручное управление
+              </span>
+            )}
+            <button type="button" onClick={() => setMobileWorkspaceOpen(false)} className="rounded-lg px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10 lg:hidden">Чат агента</button>
+            {task?.prompt && (
             <button
               type="button"
               onClick={() => void startLast()}
               disabled={!task?.prompt || starting || running}
-              title={task?.prompt ? "Запустить последнюю задачу ещё раз" : "Сначала запустите задачу из чата"}
+              title="Повторить последнюю задачу агента"
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-40"
             >
-              {starting ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />} Запустить
+              {starting ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />} Повторить задачу
             </button>
+            )}
+            {task && (
             <button
               type="button"
               onClick={() => void stopTask()}
@@ -363,8 +384,9 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
               title="Остановить активную задачу"
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-40"
             >
-              {stopping ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />} Остановить
+              {stopping ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />} Остановить задачу
             </button>
+            )}
             <button
               type="button"
               onClick={() => setFullscreen((v) => !v)}
@@ -376,7 +398,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
             {fullscreen && (
               <button
                 type="button"
-                onClick={() => { setFullscreen(false); clearActiveAgentTask(); }}
+                onClick={() => setFullscreen(false)}
                 className="rounded p-1.5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
                 aria-label="Закрыть область"
               >
@@ -386,7 +408,10 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
           </div>
         </div>
 
-        <div className="relative min-h-0 flex-1">
+        {/* Дочерние приложения (особенно WorkspaceSurface) используют flex-1;
+            без flex-контейнера ОС схлопывалась до высоты сетки иконок, оставляя
+            большую пустую полосу внизу рабочей области. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
           {tab === "os" && <WorkspaceSurface />}
           {tab === "browser" && <BrowserApp />}
           {tab === "files" && <FileManagerApp />}

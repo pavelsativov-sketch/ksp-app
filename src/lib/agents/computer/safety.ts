@@ -42,7 +42,8 @@ export type SafetyPolicy =
   | "USER_CONSENT_MANAGEMENT"
   | "LEGAL_TERMS_AND_AGREEMENTS"
   | "CAPTCHA"
-  | "LOGIN";
+  | "LOGIN"
+  | "EDUCATIONAL_RECORDS_MODIFICATION";
 
 /** Категория политики -> человекочитаемое объяснение для учителя. */
 export const POLICY_LABELS: Record<SafetyPolicy, string> = {
@@ -55,6 +56,7 @@ export const POLICY_LABELS: Record<SafetyPolicy, string> = {
   LEGAL_TERMS_AND_AGREEMENTS: "Принятие договора или условий",
   CAPTCHA: "Проверка «я не робот»",
   LOGIN: "Вход в учётную запись",
+  EDUCATIONAL_RECORDS_MODIFICATION: "Изменение оценок, посещаемости или учебных записей",
 };
 
 /**
@@ -83,6 +85,11 @@ function words(...alts: string[]): string {
 }
 
 const CLICK_RULES: ClickRule[] = [
+  {
+    policy: "EDUCATIONAL_RECORDS_MODIFICATION",
+    re: /(закрыть|завершить|подтвердить)\s+(электронный\s+)?журнал|((создать|провести|начать|завершить|выставить|изменить|редактировать|сохранить|поставить|отметить|опубликовать|удалить)\s+.{0,35}(урок|сор|соч|тест|оценк|посещаем|отсутств|пропуск|домашн.{0,12}задан|учебн.{0,12}запис|ктп))|(оценк|посещаем|отсутств|пропуск|сор|соч).{0,30}(сохранить|отправить|опубликовать|подтвердить)|урок.{0,25}(провед[её]н|заверш[её]н)/i,
+    reason: "изменение или закрытие учебной записи",
+  },
   // Оплата — раньше прочих: «Купить» и «Оплатить» не должны попадать
   // в общую категорию «отправки данных».
   {
@@ -180,8 +187,19 @@ export function classifyClick(label: string): SafetyDecision {
 }
 
 /** Ввод текста: опасен, когда в поле просят секрет или персональные данные. */
-export function classifyTyping(text: string, fieldLabel: string): SafetyDecision {
+export function classifyTyping(text: string, fieldLabel: string, educationalContext = false): SafetyDecision {
   const label = fieldLabel.replace(/\s+/g, " ").trim();
+  if (
+    (educationalContext && !label) ||
+    /(оценк|балл|посещаем|отсутств|пропуск|домашн.{0,12}задан|дз|тема.{0,12}урок|электронн.{0,12}журнал|ктп|сор|соч|тест|урок|учебн.{0,12}запис)/i.test(label)
+  ) {
+    return {
+      risk: "high",
+      requiresConfirmation: true,
+      reason: "ввод или изменение учебной записи",
+      policy: "EDUCATIONAL_RECORDS_MODIFICATION",
+    };
+  }
   const rule = CLICK_RULES.find(
     (r) => (r.policy === "SENSITIVE_DATA_MODIFICATION" || r.policy === "LOGIN") && r.re.test(label),
   );

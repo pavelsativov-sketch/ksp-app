@@ -51,9 +51,13 @@ export function Window({ id, title, children, onClose }: WindowProps) {
   };
   const onTitlePointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current.dragging) return;
+    const parent = containerRef.current?.parentElement;
+    const windowElement = containerRef.current;
+    const maxX = parent && windowElement ? Math.max(0, parent.clientWidth - windowElement.offsetWidth) : Number.POSITIVE_INFINITY;
+    const maxY = parent && windowElement ? Math.max(0, parent.clientHeight - windowElement.offsetHeight) : Number.POSITIVE_INFINITY;
     setPos({
-      x: dragRef.current.origX + (e.clientX - dragRef.current.startX),
-      y: Math.max(0, dragRef.current.origY + (e.clientY - dragRef.current.startY)),
+      x: Math.max(0, Math.min(maxX, dragRef.current.origX + (e.clientX - dragRef.current.startX))),
+      y: Math.max(0, Math.min(maxY, dragRef.current.origY + (e.clientY - dragRef.current.startY))),
     });
   };
   const onTitlePointerUp = (e: React.PointerEvent) => {
@@ -83,6 +87,18 @@ export function Window({ id, title, children, onClose }: WindowProps) {
     if (r.edge.includes('w')) { newW = Math.max(420, r.origW - dx); newX = r.origX + (r.origW - newW); }
     if (r.edge.includes('n')) { newH = Math.max(280, r.origH - dy); newY = r.origY + (r.origH - newH); }
 
+    const parent = containerRef.current?.parentElement;
+    if (parent) {
+      newX = Math.max(0, Math.min(newX, parent.clientWidth));
+      newY = Math.max(0, Math.min(newY, parent.clientHeight));
+      const maxW = Math.max(280, parent.clientWidth - newX);
+      const maxH = Math.max(160, parent.clientHeight - newY);
+      newW = Math.min(newW, maxW);
+      newH = Math.min(newH, maxH);
+      newX = Math.min(newX, Math.max(0, parent.clientWidth - newW));
+      newY = Math.min(newY, Math.max(0, parent.clientHeight - newH));
+    }
+
     setSize({ w: newW, h: newH });
     setPos({ x: newX, y: newY });
   };
@@ -95,7 +111,12 @@ export function Window({ id, title, children, onClose }: WindowProps) {
     ? { position: 'absolute', top: 0, left: 0, width: '100%', height: 'calc(100% - 48px)', zIndex: windowState.zIndex, borderRadius: 0 }
     // max-* удерживает окно внутри рабочей области: в двухпанельной раскладке
     // колонка уже, чем размер окна по умолчанию (960×640).
-    : { position: 'absolute', top: pos.y, left: pos.x, width: size.w, height: size.h, maxWidth: '100%', maxHeight: '100%', zIndex: windowState.zIndex };
+    : {
+        position: 'absolute', top: pos.y, left: pos.x, width: size.w, height: size.h,
+        maxWidth: `calc(100% - ${Math.max(0, pos.x)}px)`,
+        maxHeight: `calc(100% - ${Math.max(0, pos.y)}px)`,
+        zIndex: windowState.zIndex,
+      };
 
   return (
     <div

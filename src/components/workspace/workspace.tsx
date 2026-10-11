@@ -75,8 +75,8 @@ export function WorkspaceSurface({ showDesktop = true }: { showDesktop?: boolean
 /** Подсказка, пока ни одно окно не открыто. */
 function EmptyHint() {
   return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6 text-center">
-      <p className="max-w-sm text-sm leading-6 text-white/45">
+    <div className="pointer-events-none absolute inset-x-0 bottom-16 hidden justify-center px-6 text-center sm:flex max-[500px]:hidden [@media(max-height:220px)]:hidden">
+      <p className="max-w-sm rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-xs leading-5 text-white/45">
         Откройте приложение на рабочем столе или в панели задач — здесь агент
         показывает файлы и страницы внешних сервисов, с которыми работает агент.
       </p>

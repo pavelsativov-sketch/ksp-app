@@ -4,16 +4,27 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { getDb, COL } from "@/lib/mongo";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
+import { browserRpc, BrowserRpcError, createBrowserRpcSession } from "@/lib/agents/browser-rpc";
+export { browserFailure } from "@/lib/agents/browser-failure";
 
 export interface AgentBrowserSession {
   browser: Browser;
   context: BrowserContext;
   page: Page;
   lastSeen: number;
+  remote?: RemoteBrowserSession;
 }
 
-// Cloudflare Free allows only 10 browser minutes per day. Persist cookies and
-// release an idle remote browser after one minute instead of holding a slot.
+export interface RemoteBrowserSession {
+  validate: () => Promise<boolean>;
+  sessionId: string;
+  getInteractionState: () => unknown;
+  performUiAction: (action: string, args?: Record<string, unknown>, allowedOrigin?: string) => Promise<{ screenshot: Uint8Array; title: string; currentUrl: string }>;
+}
+
+// Reuse one Browser Run session for a short task. Cloudflare's keep_alive is
+// an idle timeout, so it keeps a user session available without being a hard
+// five-minute maximum. Cookies and form state are encrypted in Mongo.
 const SESSION_TTL_MS = 5 * 60_000;
 const sessions = new Map<string, AgentBrowserSession>();
 const opening = new Map<string, Promise<AgentBrowserSession>>();
@@ -41,17 +52,6 @@ export async function launchAgentBrowser(): Promise<Browser> {
   const localPackage = "playwright";
   const { chromium } = await import(localPackage);
   return chromium.launch({ headless: true });
-}
-
-export function browserFailure(error: unknown): { message: string; status: number } {
-  const detail = error instanceof Error ? error.message : String(error);
-  if (/429|rate.?limit|quota|time limit exceeded|too many browsers/i.test(detail)) {
-    return {
-      message: "Достигнут бесплатный лимит Cloudflare Browser Run: 10 минут в день и до 3 одновременных браузеров. Попробуйте после сброса дневного лимита.",
-      status: 429,
-    };
-  }
-  return { message: "Облачный браузер временно недоступен. Попробуйте ещё раз позже.", status: 503 };
 }
 
 function storageKey(): Buffer {
@@ -82,6 +82,8 @@ function decryptState(encoded: string): string | null {
 type SavedBrowserState = {
   storageState: Awaited<ReturnType<BrowserContext["storageState"]>>;
   currentUrl?: string;
+  sessionId?: string;
+  interactionState?: unknown;
 };
 
 async function readStoredState(userId: string): Promise<SavedBrowserState | undefined> {
@@ -98,6 +100,8 @@ async function readStoredState(userId: string): Promise<SavedBrowserState | unde
       return {
         storageState: value.storageState as SavedBrowserState["storageState"],
         currentUrl: typeof value.currentUrl === "string" ? value.currentUrl : undefined,
+        sessionId: typeof value.sessionId === "string" ? value.sessionId : undefined,
+        interactionState: value.interactionState,
       };
     }
   } catch {
@@ -111,10 +115,12 @@ export async function persistAgentBrowserSession(userId: string): Promise<void> 
   if (!session || session.page.isClosed()) return;
   const state = await session.context.storageState({ indexedDB: true });
   const currentUrl = /^https?:\/\//i.test(session.page.url()) ? session.page.url() : undefined;
+  const sessionId = session.remote?.sessionId;
+  const interactionState = session.remote?.getInteractionState?.();
   const db = await getDb();
   await db.collection(COL.agentBrowserSessions).updateOne(
     { user_id: userId },
-    { $set: { encrypted_state: encryptState(JSON.stringify({ storageState: state, currentUrl })), updated_at: new Date() }, $setOnInsert: { created_at: new Date() } },
+    { $set: { encrypted_state: encryptState(JSON.stringify({ storageState: state, currentUrl, sessionId, interactionState })), updated_at: new Date() }, $setOnInsert: { created_at: new Date() } },
     { upsert: true },
   );
 }
@@ -125,6 +131,11 @@ export async function clearAgentBrowserSession(userId: string): Promise<void> {
   if (session) {
     await session.context.close().catch(() => {});
     await session.browser.close().catch(() => {});
+  } else if (process.env.VERCEL === "1") {
+    const stored = await readStoredState(userId).catch(() => undefined);
+    if (stored?.sessionId) {
+      await browserRpc(userId, "close", { sessionId: stored.sessionId }).catch(() => {});
+    }
   }
   const db = await getDb();
   await db.collection(COL.agentBrowserSessions).deleteOne({ user_id: userId });
@@ -147,8 +158,12 @@ export async function getAgentBrowserSession(userId: string): Promise<AgentBrows
 
   const current = sessions.get(userId);
   if (current && current.browser.isConnected() && !current.page.isClosed()) {
-    current.lastSeen = now;
-    return current;
+    if (current.remote && !await current.remote.validate()) {
+      sessions.delete(userId);
+    } else {
+      current.lastSeen = now;
+      return current;
+    }
   }
 
   const pending = opening.get(userId);
@@ -171,8 +186,20 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
     await current.browser.close().catch(() => {});
   }
 
-  const browser = await launchAgentBrowser();
   const stored = await readStoredState(userId).catch(() => undefined);
+  if (process.env.VERCEL === "1") {
+    if (stored?.sessionId) {
+      const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now);
+      if (await remote.remote!.validate()) return remote;
+    }
+    const created = await createBrowserRpcSession(userId, {
+      storageState: stored?.storageState,
+      currentUrl: stored?.currentUrl,
+    });
+    return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now);
+  }
+
+  const browser = await launchAgentBrowser();
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     javaScriptEnabled: true,
@@ -188,6 +215,119 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
     }
   }
   const session = { browser, context, page, lastSeen: now };
+  sessions.set(userId, session);
+  return session;
+}
+
+function createRemoteSession(userId: string, sessionId: string, initialUrl: string | undefined, initialStorageState: unknown, initialInteractionState: unknown, now: number): AgentBrowserSession {
+  let currentUrl = initialUrl ?? "about:blank";
+  let currentStorageState = initialStorageState;
+  let currentInteractionState = initialInteractionState;
+  let closed = false;
+  let closeRequest: Promise<void> | undefined;
+
+  const send = async <T,>(action: string, args?: Record<string, unknown>, allowedOrigin?: string, captureScreenshot = false) => {
+    if (closed && action !== "close") throw new BrowserRpcError("Browser session is closed", 410);
+    const response = await browserRpc<T>(userId, action, {
+      sessionId,
+      currentUrl,
+      interactionState: currentInteractionState,
+      ...(allowedOrigin ? { allowedOrigin } : {}),
+      ...(captureScreenshot ? { captureScreenshot: true } : {}),
+      ...(args ? { args } : {}),
+      timeoutMs: action === "navigate" ? 35_000 : 55_000,
+    });
+    if (response.currentUrl) currentUrl = response.currentUrl;
+    if ("storageState" in response && response.storageState !== undefined) currentStorageState = response.storageState;
+    if ("interactionState" in response && response.interactionState !== undefined) currentInteractionState = response.interactionState;
+    return response;
+  };
+
+  const closeRemote = async () => {
+    if (!closeRequest) {
+      closed = true;
+      closeRequest = browserRpc(userId, "close", { sessionId }).then(() => undefined).catch(() => undefined);
+    }
+    await closeRequest;
+  };
+
+  const page = {
+    isClosed: () => closed,
+    url: () => currentUrl,
+    title: async () => (await send<string>("title")).result,
+    screenshot: async (opts: { type: "jpeg"; quality: number }) => (await send<Uint8Array>("screenshot", { quality: opts.quality })).result,
+    goto: async (rawUrl: string, opts?: { waitUntil?: string; timeout?: number }) => {
+      const target = new URL(rawUrl);
+      if (target.protocol !== "http:" && target.protocol !== "https:") throw new BrowserRpcError("Разрешены только http и https", 400);
+      const response = await send<{ url: string; status: number | null }>("navigate", { url: target.toString(), timeoutMs: opts?.timeout ?? 15_000 }, target.origin);
+      return response.result ? { status: () => response.result.status } : null;
+    },
+    goBack: async (opts?: { timeout?: number }) => { await send("back", { timeoutMs: opts?.timeout }); return null; },
+    goForward: async (opts?: { timeout?: number }) => { await send("forward", { timeoutMs: opts?.timeout }); return null; },
+    reload: async (opts?: { timeout?: number }) => { await send("reload", { timeoutMs: opts?.timeout }); return null; },
+    waitForTimeout: async (ms: number) => { await send("wait", { ms }); },
+    evaluate: async <R, Arg = never>(fn: ((arg: Arg) => R | Promise<R>) | string, arg?: Arg): Promise<R> => {
+      const script = typeof fn === "string" ? fn : fn.toString();
+      return (await send<R>("evaluate", { script, arg })).result;
+    },
+    mouse: {
+      click: async (x: number, y: number, opts?: { clickCount?: number }) => { await send("click", { x, y, clickCount: opts?.clickCount }); },
+      move: async (x: number, y: number) => { await send("move", { x, y }); },
+      wheel: async (dx: number, dy: number) => { await send("wheel", { dx, dy }); },
+      down: async () => { await send("down"); },
+      up: async () => { await send("up"); },
+    },
+    keyboard: {
+      type: async (text: string) => { await send("type", { text }); },
+      press: async (key: string) => { await send("press", { key }); },
+    },
+    route: async () => undefined,
+    unroute: async () => undefined,
+  } as unknown as Page;
+
+  const context = {
+    pages: () => [page],
+    newPage: async () => page,
+    storageState: async () => currentStorageState as Awaited<ReturnType<BrowserContext["storageState"]>>,
+    close: closeRemote,
+    route: async () => undefined,
+    unroute: async () => undefined,
+  } as unknown as BrowserContext;
+  const browser = {
+    isConnected: () => !closed,
+    contexts: () => [context],
+    close: closeRemote,
+  } as unknown as Browser;
+  const session: AgentBrowserSession = {
+    browser,
+    context,
+    page,
+    lastSeen: now,
+    remote: {
+      sessionId,
+      getInteractionState: () => currentInteractionState,
+      performUiAction: async (action, args, allowedOrigin) => {
+        const response = await send<{ url?: string; status?: number | null }>(action, args, allowedOrigin, true);
+        if (!response.screenshotBase64) throw new BrowserRpcError("Browser service did not return a page image", 502);
+        return {
+          screenshot: new Uint8Array(Buffer.from(response.screenshotBase64, "base64")),
+          title: response.pageTitle ?? "",
+          currentUrl: response.currentUrl ?? currentUrl,
+        };
+      },
+      validate: async () => {
+        if (closed) return false;
+        try {
+          const status = await send<{ open: boolean; url: string }>("status");
+          currentUrl = status.result.url || currentUrl;
+          return status.result.open;
+        } catch (error) {
+          if (error instanceof BrowserRpcError && error.status === 410) return false;
+          throw error;
+        }
+      },
+    },
+  };
   sessions.set(userId, session);
   return session;
 }

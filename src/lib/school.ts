@@ -51,6 +51,7 @@ export async function createSchool(
   const db = await getDb();
   const school: SchoolDoc = {
     ...data,
+    code: data.code.trim().toUpperCase(),
     created_by: userId,
     created_at: new Date(),
     updated_at: new Date(),
@@ -59,13 +60,19 @@ export async function createSchool(
   const result = await db.collection(COL.schools).insertOne(school);
 
   // Создатель становится директором с реальным именем.
-  await db.collection(COL.schoolMembers).insertOne({
-    school_id: result.insertedId.toString(),
-    user_id: userId,
-    role: 'director',
-    full_name: fullName,
-    joined_at: new Date(),
-  });
+  try {
+    await db.collection(COL.schoolMembers).insertOne({
+      school_id: result.insertedId.toString(),
+      user_id: userId,
+      role: 'director',
+      full_name: fullName,
+      joined_at: new Date(),
+    });
+  } catch (error) {
+    // Do not leave a school that has no director if membership creation fails.
+    await db.collection(COL.schools).deleteOne({ _id: result.insertedId }).catch(() => undefined);
+    throw error;
+  }
 
   return result.insertedId.toString();
 }
@@ -111,9 +118,10 @@ export async function addSchoolMember(schoolId: string, data: Omit<SchoolMemberD
   return result.insertedId.toString();
 }
 
-export async function getSchoolStudents(schoolId: string, classFilter?: string): Promise<StudentDoc[]> {
+export async function getSchoolStudents(schoolId: string, classFilter?: string, includeInactive = false): Promise<StudentDoc[]> {
   const db = await getDb();
   const query: Filter<StudentDoc> = { school_id: schoolId };
+  if (!includeInactive) query.status = { $in: ['active', null] } as unknown as StudentDoc['status'];
   if (classFilter) {
     query.class_name = classFilter;
   }
@@ -136,7 +144,10 @@ export async function addStudents(schoolId: string, students: Omit<StudentDoc, '
 
 export async function getSchoolClasses(schoolId: string): Promise<string[]> {
   const db = await getDb();
-  const classes = await db.collection<StudentDoc>(COL.students).distinct('class_name', { school_id: schoolId });
+  const classes = await db.collection<StudentDoc>(COL.students).distinct('class_name', {
+    school_id: schoolId,
+    $or: [{ status: 'active' }, { status: { $exists: false } }],
+  });
   return classes.sort();
 }
 

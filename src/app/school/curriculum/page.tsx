@@ -11,7 +11,7 @@ export default async function CurriculumPage() {
   const school = user ? await getActiveSchool(user.id) : null;
   if (!school?._id) return <NoSchool />;
 
-  const rows = await getCurriculumProgress(school._id.toString()).catch(() => []);
+  const rows = await getCurriculumProgress(school._id.toString());
   const plans = rows.flatMap((plan) => plan._id ? [{
     id: plan._id.toString(),
     subject: plan.subject,

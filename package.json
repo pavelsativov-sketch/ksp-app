@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
-    "cf:build": "opennextjs-cloudflare build",
-    "cf:deploy": "opennextjs-cloudflare deploy",
-    "cf:dry-run": "wrangler deploy --dry-run",
+    "cf:build": "wrangler deploy --dry-run --config wrangler.proxy.jsonc",
+    "cf:deploy": "wrangler deploy --config wrangler.proxy.jsonc",
+    "cf:dry-run": "wrangler deploy --dry-run --config wrangler.proxy.jsonc",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -49,7 +49,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^1.8.0",
     "monaco-editor": "^0.57.0",
-    "mongodb": "^7.6.0",
+    "mongodb": "^7.7.0",
     "next": "^16.2.6",
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
@@ -89,6 +89,6 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.6",
-    "wrangler": "^4.131.2"
+    "wrangler": "^4.148.0"
   }
 }

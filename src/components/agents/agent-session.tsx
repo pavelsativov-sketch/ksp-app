@@ -10,7 +10,7 @@ export interface AgentEvent {
   createdAt?: string | null;
 }
 
-type Status = "connecting" | "running" | "completed" | "failed";
+type Status = "connecting" | "running" | "completed" | "failed" | "stopped";
 
 /**
  * Живой лог сессии агента: подписка на SSE-поток /api/agents/task/[id],
@@ -31,6 +31,9 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
   
 
   useEffect(() => {
+    // The panel is reused for the next task; remove the previous task's log.
+    setEvents([]);
+    setStatus("connecting");
     const es = new EventSource(`/api/agents/task/${taskId}`);
     let final = false;
 
@@ -38,7 +41,7 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
       try {
         const ev = JSON.parse(e.data) as AgentEvent & { status?: string };
         if (ev.type === "STATUS_UPDATE") {
-          setStatus(ev.status === "failed" ? "failed" : "completed");
+          setStatus(ev.status === "failed" ? "failed" : ev.status === "stopped" ? "stopped" : "completed");
           final = true;
           es.close();
           return;
@@ -51,7 +54,7 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
         }
         setEvents((prev) => [...prev.slice(-400), ev]);
         if (ev.type === "END") {
-          setStatus("completed");
+          setStatus(ev.message === "Остановлено пользователем" ? "stopped" : "completed");
           final = true;
           es.close();
         }
@@ -84,7 +87,9 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
   const metaEv = events.find((e) => e.type === "META") as unknown as (AgentEvent & { plan?: string[] }) | undefined;
   const plan = metaEv?.plan ?? (metaEv?.data as unknown as { plan?: string[] } | undefined)?.plan ?? null;
   const doneSteps = events.filter((e) => e.type === "TOOL_RESULT").length;
-  const progress = plan && plan.length ? Math.min(100, Math.round((doneSteps / plan.length) * 100)) : null;
+  const progress = plan && plan.length
+    ? status === "completed" ? 100 : Math.min(100, Math.round((doneSteps / plan.length) * 100))
+    : null;
   const running = status === "running" || status === "connecting";
 
   return (
@@ -94,8 +99,12 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
         <div className="mx-3 mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-              {running ? <Loader2 className="size-3.5 animate-spin" /> : <CircleCheck className="size-3.5 text-emerald-400" />}
-              {running ? "Выполняю задачу…" : "Задача выполнена"}
+              {running ? <Loader2 className="size-3.5 animate-spin" />
+                : status === "completed" ? <CircleCheck className="size-3.5 text-emerald-400" />
+                  : <CircleX className={`size-3.5 ${status === "failed" ? "text-red-400" : "text-slate-400"}`} />}
+              {running ? "Выполняю задачу…"
+                : status === "completed" ? "Задача выполнена"
+                  : status === "failed" ? "Задача не выполнена" : "Задача остановлена"}
             </p>
             {progress !== null && <span className="text-xs text-slate-400">{progress}%</span>}
           </div>
@@ -106,7 +115,7 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
           )}
           <ul className="space-y-1.5 text-[11px] leading-snug">
             {plan.map((step, idx) => {
-              const stepDone = running ? idx < doneSteps : true;
+              const stepDone = status === "completed" || idx < doneSteps;
               const stepCurrent = running && idx === doneSteps;
               return (
                 <li key={idx} className={`flex items-start gap-2 ${stepDone ? "text-slate-400" : stepCurrent ? "text-slate-100" : "text-slate-500"}`}>
@@ -128,7 +137,7 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
         }}
         className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
       >
-        {events.length === 0 && status !== "completed" && (
+        {events.length === 0 && running && (
           <p className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" /> Агент запускается…
           </p>
@@ -141,6 +150,9 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
         )}
         {status === "failed" && (
           <p className="flex items-center gap-1.5 pt-1 text-red-400"><CircleX className="size-3.5" /> Задача завершилась с ошибкой</p>
+        )}
+        {status === "stopped" && (
+          <p className="flex items-center gap-1.5 pt-1 text-slate-400"><CircleX className="size-3.5" /> Задача остановлена</p>
         )}
       </div>
     </div>
@@ -204,6 +216,6 @@ function extractResult(ev: AgentEvent): string | null {
 }
 
 export function StatusDot({ status }: { status: Status }) {
-  const color = status === "running" || status === "connecting" ? "bg-amber-400 animate-pulse" : status === "completed" ? "bg-emerald-400" : "bg-red-400";
+  const color = status === "running" || status === "connecting" ? "bg-amber-400 animate-pulse" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
   return <span className={`inline-block size-2 rounded-full ${color}`} aria-hidden />;
 }

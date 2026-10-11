@@ -39,7 +39,7 @@ it("renders a request pane and an OS workspace pane together", () => {
   // после перевода дока на русский имена («Браузер», «Терминал») совпали с
   // названиями вкладок — поиск по имени находил сразу два элемента.
   const osTabs = within(osPane).getByRole("tablist");
-  for (const label of ["ОС", "Браузер", "Файлы", "Терминал"]) {
+  for (const label of ["Рабочий стол", "Браузер", "Файлы", "Терминал"]) {
     expect(within(osTabs).getByRole("tab", { name: label })).toBeTruthy();
   }
 

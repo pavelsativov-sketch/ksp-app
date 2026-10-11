@@ -34,6 +34,8 @@ interface WorkspaceStore {
   minimizeWindow: (id: string) => void;
   maximizeWindow: (id: string) => void;
   focusWindow: (id: string) => void;
+  /** Hides every open app window to reveal the desktop. */
+  minimizeAll: () => void;
   /** Открывает файл песочницы в редакторе, создавая окно при первом разе. */
   openInEditor: (file: string) => void;
   closeAll: () => void;
@@ -102,19 +104,44 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           activeWindowId: id
         };
       }),
+      minimizeAll: () => set((state) => ({
+        windows: state.windows.map((window) => ({ ...window, isMinimized: true, isMaximized: false })),
+        activeWindowId: null,
+      })),
       openInEditor: (file) => get().openWindow(EDITOR_WINDOW_ID, EDITOR_TITLE, 'code-editor', undefined, file),
       closeAll: () => set({ windows: [], activeWindowId: null }),
     }),
     {
       name: 'mekty.workspace.windows',
-      version: 2,
+      version: 3,
       // Окна восстанавливаются только на клиенте: сервер их не знает, и
       // синхронное восстановление привело бы к расхождению разметки.
       skipHydration: true,
-      // Сохраняем только состав окон, а не функции.
+      // Старая версия принудительно показывала все сохранённые окна после
+      // каждой навигации. Это возвращало на экран несколько перекрывающих
+      // окон, включая развёрнутый терминал. Один раз сворачиваем старый
+      // набор; дальше сохраняем фактическое состояние окна.
+      migrate: (persistedState, version) => {
+        const stored = persistedState as Partial<WorkspaceStore>;
+        const windows = Array.isArray(stored.windows) ? stored.windows : [];
+        if (version < 3) {
+          return {
+            windows: windows.map((window) => ({ ...window, isMinimized: true, isMaximized: false })),
+            activeWindowId: null,
+          };
+        }
+        return {
+          windows,
+          activeWindowId: stored.activeWindowId ?? null,
+        };
+      },
+      // Сохраняем только состояние окон, а не функции. Если активное окно
+      // свернули, не восстанавливаем фокус на скрытом приложении.
       partialize: (state) => ({
-        windows: state.windows.map(w => ({ ...w, isMinimized: false })),
-        activeWindowId: state.activeWindowId,
+        windows: state.windows,
+        activeWindowId: state.windows.some((window) => window.id === state.activeWindowId && !window.isMinimized)
+          ? state.activeWindowId
+          : null,
       }),
     },
   ),

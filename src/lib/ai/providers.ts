@@ -5,8 +5,9 @@
  * Платформа пробует первую модель, и при ошибке (лимиты, баланс, недоступность)
  * автоматически переключается на следующую.
  *
- * Порядок по задачам задаётся ниже: Gemini → Groq → xAI Grok → прочие
- * настроенные провайдеры. Недоступный ключ пропускается, не подменяется.
+ * Порядок по задачам задаётся ниже. Для коротких заданий первым стоит
+ * провайдер, который проверен живым вызовом инструмента и быстро отвечает.
+ * Недоступный ключ пропускается, не подменяется.
  */
 
 import OpenAI from "openai";
@@ -141,10 +142,11 @@ const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-pro", supportsJsonSchema: false, label: "OpenRouter Nex 2.5 Pro (Free Emergency Fallback)", temperature: 0.5, maxTokens: 8192 }),
   ],
   tasks: () => [
-    // Gemini — отвечает и не требует strict-схемы.
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Primary)", temperature: 0.7, maxTokens: 8192 }),
-    // Groq GPT OSS 120B — держит strict-схему. 8192 проверено вживую.
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: true, label: "Groq GPT OSS 120B (Fallback 1)", temperature: 0.7, maxTokens: 8192 }),
+    // Groq проверен живым вызовом listFiles: tool_calls вернулся за 808 мс.
+    // Ставим его первым, чтобы короткие задания не ждали медленный Gemini.
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: true, label: "Groq GPT OSS 120B (Primary)", temperature: 0.2, maxTokens: 1024 }),
+    // Gemini остаётся резервом после быстрого проверенного маршрута.
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 1)", temperature: 0.2, maxTokens: 1024 }),
     withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),
     // Groq GPT OSS 20B — быстрый резерв.
     withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-20b", supportsJsonSchema: true, label: "Groq GPT OSS 20B (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),
@@ -223,49 +225,20 @@ export function getResponseFormat(
  * перебирая резервных провайдеров в случае ошибки. Каждая попытка пишется
  * в телеметрию (ai_events): провайдер, модель, время, успех/ошибка, токены.
  */
-/** Таймаут одного провайдера. */
-const PROVIDER_TIMEOUT_MS = 35_000;
+/** Таймаут одного запроса провайдеру. Короткие задачи должны быстро переключаться дальше. */
+const PROVIDER_TIMEOUT_MS: Record<AiTask, number> = {
+  generation: 30_000,
+  enhance: 20_000,
+  tasks: 12_000,
+  image: 30_000,
+  vision: 15_000,
+};
 
 /** Общий бюджет времени на весь каскад фоллбэка (все провайдеры подряд). */
 const FALLBACK_BUDGET_MS = 90_000;
 
 /** Ниже этого остатка новый провайдер уже не запускается. */
 const MIN_PROVIDER_BUDGET_MS = 8_000;
-
-/** Задержка перед повтором временно упавшего провайдера. */
-const TRANSIENT_RETRY_DELAY_MS = 4_000;
-
-/**
- * Временные сбои, после которых повтор на том же провайере осмыслен.
- *
- * Раньше 503 от Gemini (лимит запросов) и 429 от Groq (OTPM) немедленно
- * перебрасывали каскад на следующего провайдера, хотя через несколько
- * секунд тот же запрос проходил. Из-за этого рабочий лист падал с 500,
- * хотя единственный живой провайдер был просто временно перегружен.
- */
-function isTransientError(err: unknown): boolean {
-  const status = (err as { status?: number })?.status;
-  if (status === 429 || status === 503 || status === 502 || status === 504) return true;
-  const message = err instanceof Error ? err.message : String(err);
-  return /\b(429|500|502|503|504)\b|rate limit|too many requests|overloaded|timeout|ECONNRESET|fetch failed/i.test(
-    message,
-  );
-}
-
-async function executeWithTransientRetry<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    // Исчерпанный лимит или отозванный ключ повтором не лечатся: ждать
-    // 4 секунды и снова бить в тот же ключ — это потерянное время перед
-    // переходом на запасной. Такие ошибки уходят дальше по каскаду сразу.
-    if (shouldTryNextKey(err)) throw err;
-    if (!isTransientError(err)) throw err;
-    logAiEvent({ task: "retry", provider: "transient", model: "-", duration_ms: 0, ok: false, error: "retry_after_backoff" });
-    await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS));
-    return await fn();
-  }
-}
 
 /**
  * Ошибка, после которой стоит перейти на другой ключ того же провайдера.
@@ -295,9 +268,8 @@ export async function executeWithFallback<T>(
 
   let lastError: unknown = new Error("Неизвестная ошибка фоллбэка");
 
-  // Общий дедлайн на ВЕСЬ каскад. Раньше лимит был только на провайдера
-  // (35 c × 1 ретрай × до 5 провайдеров = до 175 c), из-за чего прокси и
-  // Cloudflare убивали запрос, а учитель видел 500 без причины.
+  // Общий дедлайн на каскад. Повтор SDK выключен, иначе его внутренняя
+  // попытка могла превысить оставшееся время до перехода на следующий ключ.
   const deadline = Date.now() + FALLBACK_BUDGET_MS;
 
   for (const config of configs) {
@@ -325,13 +297,13 @@ export async function executeWithFallback<T>(
         const client = new OpenAI({
           apiKey,
           baseURL: config.baseURL,
-          timeout: Math.min(PROVIDER_TIMEOUT_MS, remaining),
-          maxRetries: 1,
+          timeout: Math.min(PROVIDER_TIMEOUT_MS[task], remaining),
+          maxRetries: 0,
         });
         // Ключ из обрыва ответа модели (`apiKey` в конфиге) — для промптов,
         // которые печатают ключ в текст ошибки.
         const withKey = apiKey === config.apiKey ? config : { ...config, apiKey };
-        const result = await executeWithTransientRetry(() => executeFn(client, config.model, withKey));
+        const result = await executeFn(client, config.model, withKey);
         logAiEvent({
           task,
           provider: config.label,

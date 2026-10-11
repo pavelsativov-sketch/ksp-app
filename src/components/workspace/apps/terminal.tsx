@@ -87,7 +87,7 @@ export function TerminalApp() {
         <span className="truncate">{status}</span>
       </header>
       <div className="flex-1 overflow-y-auto p-4" onClick={() => inputRef.current?.focus()}>
-        <div className="mb-3 text-xs text-white/40">Файлы рабочей области сохраняются в вашем аккаунте. Пятиминутные задания агента работают через облачный браузер; Linux shell на бесплатном Cloudflare Worker не предоставляется.</div>
+        <div className="mb-3 text-xs text-white/40">Файлы рабочей области сохраняются в вашем аккаунте. Команды запускаются в изолированной Linux Sandbox; одна команда может выполняться до 90 секунд, сессия — до 15 минут.</div>
         {entries.map((entry, index) => (
           <div key={`${index}-${entry.command}`} className="mb-3 whitespace-pre-wrap break-words">
             <div><span className="text-emerald-300">workspace $</span> <span>{entry.command}</span></div>
@@ -107,7 +107,7 @@ export function TerminalApp() {
           ref={inputRef} value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={handleKeyDown}
           disabled={!available || busy} aria-label="Команда Linux" autoComplete="off" spellCheck={false}
           className="min-w-0 flex-1 bg-transparent text-white outline-none placeholder:text-white/30 disabled:opacity-50"
-          placeholder={available ? "Введите команду…" : "Linux-команды недоступны на бесплатном хостинге"}
+          placeholder={available ? "Введите команду…" : "Linux-среда пока недоступна"}
         />
         <button type="submit" disabled={!available || busy || !command.trim()} className="rounded-md bg-white/10 px-3 py-1.5 text-xs text-white/80 hover:bg-white/15 disabled:opacity-40">Запустить</button>
       </form>

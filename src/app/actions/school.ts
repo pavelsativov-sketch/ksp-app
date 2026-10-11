@@ -16,10 +16,10 @@ async function clientIp(): Promise<string> {
 
 const createSchoolSchema = z.object({
   name: z.string().min(2),
-  code: z.string().min(3),
+  code: z.string().trim().min(3).max(32).regex(/^[A-Za-z0-9-]+$/).transform(value => value.toUpperCase()),
   region: z.string().min(2),
   city: z.string().min(2),
-  academic_year: z.string(),
+  academic_year: z.string().trim().regex(/^\d{4}-\d{4}$/),
   settings: z.object({
     language: z.enum(['ru', 'kk']),
     shifts: z.number().min(1).max(2),
@@ -37,11 +37,11 @@ export async function createSchoolAction(formData: FormData): Promise<{ id: stri
       code: String(formData.get('code') ?? ''),
       region: String(formData.get('region') ?? ''),
       city: String(formData.get('city') ?? ''),
-      academic_year: String(formData.get('academic_year') ?? '') || '2026-2027',
+      academic_year: String(formData.get('academic_year') ?? ''),
       settings: {
         language: String(formData.get('language') ?? '') || 'ru',
-        shifts: parseInt(String(formData.get('shifts') ?? ''), 10) || 2,
-        grading_system: String(formData.get('grading_system') ?? '') || '10-point'
+        shifts: Number(formData.get('shifts')),
+        grading_system: String(formData.get('grading_system') ?? '')
       }
     };
 
@@ -101,8 +101,7 @@ export async function joinSchoolAction(code: string): Promise<{ ok: true } | { e
     const db = await getDb();
     const school = await db
       .collection(COL.schools)
-      .findOne({ code: parsed.data.code.toUpperCase() })
-      .catch(() => null);
+      .findOne({ code: { $regex: `^${parsed.data.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } });
 
     // Одинаковый ответ для «нет такого кода» и «нет такого пользователя»,
     // чтобы по времени/тексту нельзя было перебирать существующие коды.

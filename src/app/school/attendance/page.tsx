@@ -15,10 +15,10 @@ export default async function AttendancePage() {
   if (!school) return <NoSchool />;
 
   const [summary, perClass, perDay, roster] = await Promise.all([
-    getAttendanceSummary(school._id!.toString(), "2000-01-01", "2099-01-01").catch(() => []),
-    getAttendancePerClass(school._id!.toString()).catch(() => []),
-    getAttendancePerDay(school._id!.toString()).catch(() => []),
-    getSchoolStudents(school._id!.toString()).catch(() => []),
+    getAttendanceSummary(school._id!.toString(), "2000-01-01", "2099-01-01"),
+    getAttendancePerClass(school._id!.toString()),
+    getAttendancePerDay(school._id!.toString()),
+    getSchoolStudents(school._id!.toString()),
   ]);
 
   const total = summary.reduce((s, r) => s + r.count, 0);
@@ -39,6 +39,7 @@ export default async function AttendancePage() {
         <p className="editorial-kicker">Аналитика</p>
         <h1 className="editorial-display mt-1 text-3xl">Посещаемость</h1>
         <p className="mt-1 text-sm text-muted-foreground">{formatSchoolSubtitle(school)}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Показатели рассчитаны по всем отметкам за всё время.</p>
       </header>
 
       <AttendanceRecorder schoolId={school._id!.toString()} students={roster.flatMap((student) => student._id ? [{ id: student._id.toString(), name: student.full_name, className: student.class_name }] : [])} />
