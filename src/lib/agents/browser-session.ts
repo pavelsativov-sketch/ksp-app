@@ -141,6 +141,32 @@ export async function clearAgentBrowserSession(userId: string): Promise<void> {
   await db.collection(COL.agentBrowserSessions).deleteOne({ user_id: userId });
 }
 
+/**
+ * Сохраняет состояние браузера Vercel Sandbox (куки, localStorage, URL) в MongoDB.
+ * После завершения агента пользователь может открыть вкладку «Браузер» и продолжить
+ * работу с той же страницы — Cloudflare браузер восстановит эти куки.
+ */
+export async function persistSandboxBrowserState(
+  userId: string,
+  storageState: unknown,
+  currentUrl: string | undefined,
+): Promise<void> {
+  if (!storageState) return;
+  const state: SavedBrowserState = {
+    storageState: storageState as Awaited<ReturnType<BrowserContext["storageState"]>>,
+    currentUrl: currentUrl && /^https?:\/\//i.test(currentUrl) ? currentUrl : undefined,
+  };
+  const db = await getDb();
+  await db.collection(COL.agentBrowserSessions).updateOne(
+    { user_id: userId },
+    {
+      $set: { encrypted_state: encryptState(JSON.stringify(state)), updated_at: new Date() },
+      $setOnInsert: { created_at: new Date() },
+    },
+    { upsert: true },
+  );
+}
+
 function reapSessions(now = Date.now()): void {
   for (const [userId, session] of sessions) {
     if (now - session.lastSeen < SESSION_TTL_MS) continue;

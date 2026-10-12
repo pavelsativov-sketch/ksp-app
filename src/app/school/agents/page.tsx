@@ -34,9 +34,14 @@ export default function AgentHistoryPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 md:px-6">
-      <header className="mb-6">
-        <p className="editorial-kicker">Рабочая область</p>
-        <h1 className="editorial-display mt-2 text-3xl">История задач агента</h1>
+      <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="editorial-kicker">Рабочая область</p>
+          <h1 className="editorial-display mt-2 text-3xl">История задач агента</h1>
+        </div>
+        <Link href="/school" className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">
+          + Новая задача
+        </Link>
       </header>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

@@ -53,9 +53,21 @@ const SUGGESTIONS = [
   "BilimClass: добавь домашнее задание — урок и текст задания",
 ];
 
-export function ComputerUseApp() {
-  const [goal, setGoal] = useState("");
-  const [startUrl, setStartUrl] = useState("");
+export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: string; initialUrl?: string } = {}) {
+  const [goal, setGoal] = useState(
+    initialGoal ?? (initialUrl?.includes("bilimclass")
+      ? "Войти в BilimClass и открыть расписание"
+      : initialUrl?.includes("nobd")
+        ? "Войти в НОБД и открыть отчёты"
+        : "")
+  );
+  const [startUrl, setStartUrl] = useState(initialUrl ?? "");
+
+  // Читаем цель из sessionStorage (устанавливается AgentComposer при редиректе)
+  React.useEffect(() => {
+    const stored = sessionStorage.getItem('computer-use-goal');
+    if (stored) { setGoal(stored); sessionStorage.removeItem('computer-use-goal'); }
+  }, []);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<LogLine[]>([]);
   const [summary, setSummary] = useState<string | null>(null);

@@ -3,7 +3,9 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { log } from "@/lib/logger";
-import { browserFailure, clearAgentBrowserSession, getAgentBrowserSession, persistAgentBrowserSession } from "@/lib/agents/browser-session";
+import { browserFailure, clearAgentBrowserSession, getAgentBrowserSession, persistAgentBrowserSession, persistSandboxBrowserState } from "@/lib/agents/browser-session";
+import { startSandboxBrowser, getSandboxBrowserState, type BrowserSandbox } from "@/lib/agents/browser-sandbox";
+import { getVercelSandbox } from "@/lib/workspace/runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +55,87 @@ async function authorize() {
 
 async function runAction(userId: string, args: BrowserAction) {
   const action = args.action ?? "screenshot";
+
+  // ── Vercel Sandbox Playwright (без дневного лимита Cloudflare) ────────────
+  const sandbox = await getVercelSandbox(userId).catch(() => null) as BrowserSandbox | null;
+  if (sandbox) {
+    try {
+      const page = await startSandboxBrowser(sandbox);
+
+      if (action === "navigate") {
+        const nav = searchUrl(typeof args.url === "string" ? args.url : "");
+        const checked = await checkPublicUrl(nav);
+        if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
+        await page.goto(checked.url.toString(), { timeout: 20_000 });
+      } else if (action === "click") {
+        const x = Number(args.x ?? 0);
+        const y = Number(args.y ?? 0);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= 1280 || y >= 800) {
+          return NextResponse.json({ error: "Координаты клика вне страницы" }, { status: 400 });
+        }
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(300);
+      } else if (action === "type") {
+        const text = typeof args.text === "string" ? args.text.slice(0, 500) : "";
+        if (!text) return NextResponse.json({ error: "Введите текст для страницы" }, { status: 400 });
+        await page.keyboard.type(text);
+      } else if (action === "key") {
+        const key = typeof args.key === "string" ? args.key.slice(0, 30) : "Enter";
+        if (!/^(?:[\w]+|Control\+[\w]+|Shift\+[\w]+|Alt\+[\w]+)$/.test(key)) {
+          return NextResponse.json({ error: "Недопустимая клавиша" }, { status: 400 });
+        }
+        await page.keyboard.press(key);
+        await page.waitForTimeout(400);
+      } else if (action === "scroll") {
+        const dy = Number(args.dy ?? 0);
+        if (!Number.isFinite(dy)) return NextResponse.json({ error: "Некорректная прокрутка" }, { status: 400 });
+        await page.mouse.wheel(0, Math.max(-2000, Math.min(2000, dy)));
+        await page.waitForTimeout(200);
+      } else if (action === "back") {
+        await page.goBack({ timeout: 10_000 });
+      } else if (action === "forward") {
+        await page.goForward({ timeout: 10_000 });
+      } else if (action === "reload") {
+        // Перезагрузка через повторный goto текущего URL
+        await page.goto(page.url() || "about:blank", { timeout: 15_000 });
+      } else if (action !== "screenshot") {
+        return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
+      }
+
+      const screenshot = await page.screenshot({ type: "jpeg", quality: 80 });
+      const title = await page.title();
+      const currentUrl = page.url();
+
+      // Сохраняем сессию после каждого действия (не только скриншота)
+      if (action !== "screenshot") {
+        const state = await getSandboxBrowserState(sandbox);
+        await persistSandboxBrowserState(userId, state.storageState, state.currentUrl).catch(() => {});
+      }
+
+      return new NextResponse(new Uint8Array(screenshot as Uint8Array), {
+        headers: {
+          "Content-Type": "image/jpeg",
+          "X-Page-Title": encodeURIComponent(title),
+          "X-Page-Url": encodeURIComponent(currentUrl),
+          "Cache-Control": "no-store",
+        },
+      });
+    } catch (sbErr) {
+      const reason = sbErr instanceof Error ? sbErr.message : String(sbErr);
+      log.error("browser-stream sandbox failed", { userId, action, reason });
+      // Если установка ещё идёт — сообщаем пользователю
+      if (reason.includes("failed to start") || reason.includes("installation failed")) {
+        return NextResponse.json(
+          { error: "Браузер запускается (~5 мин при первом старте). Обновите страницу через минуту." },
+          { status: 503 },
+        );
+      }
+      // Любая другая ошибка sandbox → падаем с понятным сообщением
+      return NextResponse.json({ error: reason.slice(0, 200) }, { status: 502 });
+    }
+  }
+
+  // ── Cloudflare Browser Run (фоллбэк без Sandbox) ──────────────────────────
   try {
     const session = await getAgentBrowserSession(userId);
     if (session.remote) {

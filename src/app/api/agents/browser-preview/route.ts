@@ -1,3 +1,5 @@
+import { getVercelSandbox } from '@/lib/workspace/runtime';
+import { startSandboxBrowser, type BrowserSandbox } from '@/lib/agents/browser-sandbox';
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
@@ -39,6 +41,17 @@ export async function GET(req: Request) {
   }
 
   try {
+    const sandbox = await getVercelSandbox(auth.user.id).catch(() => null) as BrowserSandbox | null;
+    if (sandbox) {
+      const page = await startSandboxBrowser(sandbox, { currentUrl: checked.url.toString() });
+      await page.goto(checked.url.toString(), { waitUntil: "domcontentloaded", timeout: 20_000 });
+      const title = await page.title();
+      const content = await page.evaluate(() => {
+        document.querySelectorAll("script, style, nav, footer, iframe, noscript, svg").forEach((el) => el.remove());
+        return document.body?.innerText?.substring(0, 3000) ?? "";
+      });
+      return NextResponse.json({ url: checked.url.toString(), title, content });
+    }
     const session = await getAgentBrowserSession(auth.user.id);
     await installRequestGuard(session.page);
 

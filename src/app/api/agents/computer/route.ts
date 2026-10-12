@@ -10,7 +10,9 @@ import {
   type ConfirmationRequest,
 } from "@/lib/agents/computer/confirm";
 import { log } from "@/lib/logger";
-import { browserFailure, getAgentBrowserSession, persistAgentBrowserSession } from "@/lib/agents/browser-session";
+import { browserFailure, getAgentBrowserSession, persistAgentBrowserSession, persistSandboxBrowserState } from "@/lib/agents/browser-session";
+import { startSandboxBrowser, closeSandboxBrowser, getSandboxBrowserState, type BrowserSandbox } from "@/lib/agents/browser-sandbox";
+import { getVercelSandbox } from "@/lib/workspace/runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,7 +76,57 @@ export async function POST(req: Request) {
   const events: LoopEvent[] = [];
   running.set(userId, { startedAt: Date.now(), goal: goal.slice(0, 200) });
 
+  // Vercel Sandbox Playwright — основной путь (без дневного лимита Cloudflare).
+  // Cloudflare Browser Run — фоллбэк когда Sandbox не настроен.
+  const sandbox = await getVercelSandbox(userId).catch(() => null) as BrowserSandbox | null;
+
   try {
+    if (sandbox) {
+      // ── Vercel Sandbox: Playwright внутри VM ──────────────────────────────
+      let agentPage: AgentPage;
+      try {
+        agentPage = await startSandboxBrowser(sandbox, {
+          // startUrl передаём как начальную страницу браузера
+          currentUrl: typeof body.startUrl === "string" && body.startUrl.trim()
+            ? body.startUrl.trim()
+            : undefined,
+        });
+      } catch (initErr) {
+        const reason = initErr instanceof Error ? initErr.message : String(initErr);
+        log.error("sandbox browser init failed", { userId, reason });
+        return NextResponse.json(
+          { error: `Не удалось запустить браузер в песочнице: ${reason.slice(0, 200)}`, events },
+          { status: 502 },
+        );
+      }
+
+      const summary = await runComputerUse({
+        page: agentPage,
+        goal,
+        userId,
+        maxTurns: MAX_TURNS,
+        log: async (event) => {
+          events.push(event);
+          log.info(`[computer-use:sandbox] ${event.message}`, { userId, type: event.type });
+        },
+        checkUrl: async (url) => {
+          const checked = await checkPublicUrl(url);
+          if (!checked.ok) return { ok: false, error: checked.error };
+          return { ok: true, url: checked.url.toString() };
+        },
+        confirm:     (action, decision, probe) => waitForConfirmation(userId, action, decision, probe),
+        shouldPause: async ()                  => await getControlOwner(userId) === "user",
+      });
+
+      // Сохраняем сессию (куки, URL) в MongoDB — пользователь продолжает в браузере
+      await closeSandboxBrowser(sandbox).catch(() => {});
+      const finalState = await getSandboxBrowserState(sandbox);
+      await persistSandboxBrowserState(userId, finalState.storageState, finalState.currentUrl).catch(() => {});
+
+      return NextResponse.json({ ok: true, summary, events });
+    }
+
+    // ── Cloudflare Browser Run (фоллбэк без Sandbox) ──────────────────────
     const session = await getAgentBrowserSession(userId);
 
     // Стартовая страница: её агент тоже открывает через безопасный путь.

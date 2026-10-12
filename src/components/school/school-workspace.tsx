@@ -360,8 +360,10 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
 
           <div className="ml-auto flex items-center gap-1">
             {tab === "os" && (
-              <span className="hidden items-center gap-1.5 px-2 text-[10px] font-medium text-emerald-300 sm:inline-flex" title="Рабочий стол открыт; вы можете управлять окнами вручную">
-                <span className="size-1.5 rounded-full bg-emerald-400" /> ОС включена · ручное управление
+                <span className={"hidden items-center gap-1.5 px-2 text-[10px] font-medium sm:inline-flex " + (running && control === 'ai' ? 'text-emerald-300' : 'text-sky-300')}
+                title={running && control === 'ai' ? 'AI управляет браузером' : running ? 'Вы управляете вручную' : 'Рабочий стол открыт'}>
+                <span className={"size-1.5 rounded-full " + (running && control === 'ai' ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400')} />
+                {running && control === 'ai' ? 'ОС включена · AI работает' : running ? 'ОС включена · вы управляете' : 'ОС включена · ваш браузер'}
               </span>
             )}
             <button type="button" onClick={() => setMobileWorkspaceOpen(false)} className="rounded-lg px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10 lg:hidden">Чат агента</button>

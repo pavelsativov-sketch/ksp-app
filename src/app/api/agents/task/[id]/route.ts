@@ -120,6 +120,25 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           if (task.status !== "running") {
             push({ type: "STATUS_UPDATE", status: task.status, result: (task as { result?: string }).result ?? null, error: (task as { error?: string }).error ?? null });
             close();
+            return;
+          }
+
+          // Если задача зависла в статусе «running» дольше допустимого,
+          // функция Vercel/Cloudflare уже убита без обновления статуса.
+          // Исправляем статус в БД, чтобы пользователь не видел вечный спиннер.
+          const MAX_TASK_AGE_MS = 12 * 60_000; // 12 мин — выше потолка Vercel Pro (10 мин) + запас
+          const taskStarted = (task.created_at ?? task.createdAt)?.getTime() ?? 0;
+          if (taskStarted > 0 && Date.now() - taskStarted > MAX_TASK_AGE_MS) {
+            const staleMsg = "Задача превысила лимит времени и была остановлена автоматически.";
+            try {
+              await agentTasks.updateOne(
+                { _id: taskObjectId, status: "running" },
+                { $set: { status: "failed", error: staleMsg, updated_at: new Date() } },
+              );
+            } catch { /* некритично — статус дойдёт по следующему тику */ }
+            push({ type: "ERROR", message: staleMsg });
+            push({ type: "STATUS_UPDATE", status: "failed", error: staleMsg });
+            close();
           }
         } catch {
           // кратковременный сбой БД: не роняем поток — попробуем на следующем тике

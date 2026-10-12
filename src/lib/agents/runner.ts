@@ -73,7 +73,11 @@ export async function runAgentTask(
       ? SYSTEM_PROMPT
       : `${SYSTEM_PROMPT}\nВ этой рабочей области доступны браузер и файлы, но Linux-среда выполнения сейчас недоступна. Не вызывай команды и не утверждай, что скрипты запускались. Если задаче необходимо выполнить программу или системную команду, заверши её как заблокированную и объясни, что среда выполнения не настроена.`;
     const deadline = Date.now() + TIME_BUDGET_MS;
-    let browserFailureMessage: string | undefined;
+    // Сообщение о жёстком ограничении браузера (дневной лимит, 429):
+    // только такие ошибки прерывают весь цикл. Мягкие ошибки (таймаут
+    // загрузки, недоступная страница) возвращаются модели — она сама
+    // решает, повторить или завершить задачу.
+    let hardBrowserFailure: string | undefined;
 
     // Мульти-провайдерный фоллбэк: Groq → Cerebras → Gemini → OpenRouter.
     // Провайдер используется для всего цикла; при его сбое (лимит 429 и т.п.)
@@ -109,6 +113,7 @@ export async function runAgentTask(
       ];
       let done = false;
       let summary = '';
+      let textOnlyStreak = 0;
 
       for (let step = 1; step <= MAX_LOOPS && !done; step++) {
         if (Date.now() > deadline) {
@@ -138,6 +143,22 @@ export async function runAgentTask(
             return 'Остановлено пользователем';
           }
           await log({ type: 'RESUMED', message: 'Управление возвращено агенту. Продолжаю.' });
+          // После паузы агент не знает, что пользователь сделал в браузере.
+          // Вставляем текущий URL в историю — модель поймёт контекст и не
+          // завершит задачу «вслепую» после возобновления.
+          try {
+            const { getAgentBrowserSession } = await import('@/lib/agents/browser-session');
+            const browserSess = await getAgentBrowserSession(userId).catch(() => null);
+            if (browserSess) {
+              const currentUrl = browserSess.page.url();
+              if (currentUrl && /^https?:\/\//i.test(currentUrl)) {
+                messages.push({
+                  role: 'user',
+                  content: `Управление возвращено агенту. Пока вы работали вручную, текущая страница: ${currentUrl}. Продолжай выполнять исходную задачу с этой точки.`,
+                });
+              }
+            }
+          } catch { /* браузер мог ещё не открыться — некритично */ }
         }
 
         await log({ type: 'THINK', message: `Шаг ${step}: обдумываю следующий ход…` });
@@ -162,6 +183,14 @@ export async function runAgentTask(
       const toolCalls = message.tool_calls ?? [];
       if (toolCalls.length === 0) {
         const text = String(message.content ?? '').slice(0, 2000);
+        textOnlyStreak = (textOnlyStreak ?? 0) + 1;
+        if (textOnlyStreak >= 3) {
+          // Модель 3 раза подряд не вызвала инструмент — завершаем автоматически
+          summary = text.slice(0, 500) || 'Задача завершена (авто)';
+          await log({ type: 'END', message: `Агент завершил ответом: ${summary}` });
+          done = true;
+          continue;
+        }
         await log({ type: 'WARNING', message: 'Модель не вызвала finishTask — прошу подтвердить результат инструментом.' });
         messages.push({
           role: 'user',
@@ -170,6 +199,8 @@ export async function runAgentTask(
         if (text) await log({ type: 'REASONING', message: text });
         continue;
       }
+      textOnlyStreak = 0;
+
 
       for (const call of toolCalls) {
         const fn = (call as { function?: { name?: string; arguments?: string } }).function;
@@ -206,18 +237,29 @@ export async function runAgentTask(
             try {
               const browserResult = JSON.parse(resultStr) as { success?: boolean; error?: string };
               if (browserResult.success === false) {
-                browserFailureMessage = browserResult.error || 'Встроенный браузер не смог открыть страницу';
-                await log({ type: 'ERROR', message: `Браузерный шаг остановлен: ${browserFailureMessage}` });
-                done = true;
+                const errMsg = browserResult.error ?? 'Браузер не смог открыть страницу';
+                // Жёсткий лимит (дневная квота Cloudflare, 429) — прерываем всё.
+                // Мягкие ошибки (таймаут, недоступная страница) передаём модели:
+                // она получает resultStr с {success:false, error:...} и сама
+                // решает — повторить навигацию, попробовать другой URL или
+                // завершить задачу с объяснением.
+                const isHardLimit = /daily.{0,30}limit|time limit exceeded|10 minutes per day|достигнут дневной лимит/i.test(errMsg);
+                if (isHardLimit) {
+                  hardBrowserFailure = errMsg;
+                  await log({ type: 'ERROR', message: `Браузер недоступен (дневной лимит): ${errMsg}` });
+                  done = true;
+                } else {
+                  await log({ type: 'WARNING', message: `Браузер вернул ошибку: ${errMsg}. Агент продолжает.` });
+                }
               }
             } catch {
-              // A non-JSON result is returned to the model for normal handling.
+              // Не-JSON результат уходит модели без изменений.
             }
           }
         }
 
         messages.push({ role: 'tool', tool_call_id: (call as { id?: string }).id ?? '', content: resultStr });
-        if (browserFailureMessage) break;
+        if (hardBrowserFailure) break;
       }
       }
 
@@ -230,8 +272,8 @@ export async function runAgentTask(
       return summary;
     });
 
-    if (browserFailureMessage) {
-      await finish('failed', { error: browserFailureMessage });
+    if (hardBrowserFailure) {
+      await finish('failed', { error: hardBrowserFailure });
       return;
     }
 

@@ -28,7 +28,7 @@ function AppContent({ win }: { win: WindowState }) {
       return <CodeEditorApp />;
     // Агент «Использование компьютера»: смотрит на экран и выполняет задачи.
     case "computer-use":
-      return <ComputerUseApp />;
+      return <ComputerUseApp initialUrl={win.url} />;
     case "agent-log":
       return <AgentLogApp />;
     case "iframe":

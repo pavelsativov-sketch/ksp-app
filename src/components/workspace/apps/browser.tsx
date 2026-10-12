@@ -21,6 +21,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const actionPendingRef = useRef(false);
   const landingUrl = initialUrl?.trim() || 'https://www.google.com';
   const dailyQuotaBlocked = /дневн.{0,30}лимит/i.test(error);
+  const isInstalling = /устанавливается|запускается.*мин|failed to start/i.test(error);
 
   const acceptFrame = useCallback(async (res: Response) => {
     if (!res.ok) {
@@ -246,7 +247,23 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             draggable={false}
           />
         )}
-        {error && (
+        {isInstalling && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#090b12] gap-4 px-8 text-center z-10">
+            <div className="relative w-14 h-14">
+              <div className="absolute inset-0 rounded-full border-[3px] border-blue-500/20" />
+              <div className="absolute inset-0 rounded-full border-[3px] border-blue-400 border-t-transparent animate-spin" />
+            </div>
+            <div>
+              <p className="text-white/80 font-semibold text-sm">Устанавливаю браузер…</p>
+              <p className="text-white/45 text-xs mt-1.5">Первый запуск занимает ~5 минут. Обновите страницу через минуту.</p>
+            </div>
+            <button type="button" onClick={() => { setError(''); void fetchFrame(); }}
+              className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
+              Проверить снова
+            </button>
+          </div>
+        )}
+        {!isInstalling && error && (
           <div className={`absolute z-10 flex justify-center px-3 ${imgSrc ? 'left-3 right-3 top-3' : 'inset-0 items-center bg-[#090b12]'}`}>
             <div className={`flex max-w-full items-center gap-3 rounded-lg border border-amber-300/20 bg-[#151722]/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
               <p className="min-w-0 flex-1 text-sm text-white/75">{error}</p>
@@ -273,7 +290,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       <div className="h-5 bg-[#252536] border-t border-black/20 flex items-center px-3 shrink-0">
         <span className="text-[10px] text-white/25 truncate">{pageUrl}</span>
         <span className="ml-auto shrink-0 pl-2 text-[10px] text-white/30" title="Лимит бесплатного Cloudflare Browser Run">
-          Бесплатно: 10 мин/день · тайм-аут бездействия 1 мин
+          Ручной просмотр: 10 мин/день · Агент: без лимита ✓
         </span>
       </div>
     </div>
