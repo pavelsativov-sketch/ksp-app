@@ -486,16 +486,35 @@ export interface ActiveFieldInfo {
   tag: string;
   type: string;
   label: string;
+  name?: string;
+  placeholder?: string;
+  value?: string;
+  box?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 /**
  * Определяет, какое поле ввода сейчас в фокусе на странице в браузере ОС.
  * Позволяет пользователю вводить логин и пароль напрямую с клавиатуры на экране ОС.
  */
-export async function inspectActiveField(page: { evaluate: AgentPage["evaluate"] }): Promise<ActiveFieldInfo> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function inspectActiveField(page: { evaluate: (fn: any, arg?: any) => Promise<any> }): Promise<ActiveFieldInfo> {
   try {
     const info = await page.evaluate((() => {
-      const el = document.activeElement as HTMLElement | null;
+      let el = document.activeElement as HTMLElement | null;
+      try {
+        if (el && el.tagName.toLowerCase() === "iframe" && (el as HTMLIFrameElement).contentDocument) {
+          const sub = (el as HTMLIFrameElement).contentDocument?.activeElement as HTMLElement | null;
+          if (sub && sub !== (el as HTMLIFrameElement).contentDocument?.body) {
+            el = sub;
+          }
+        }
+      } catch {}
+
       if (!el || el === document.body || el === document.documentElement) {
         return { isEditable: false, isPassword: false, tag: "", type: "", label: "" };
       }
@@ -509,21 +528,57 @@ export async function inspectActiveField(page: { evaluate: AgentPage["evaluate"]
         el.getAttribute("role") === "textbox";
       const isPassword = tag === "input" && type === "password";
       const parts: string[] = [];
-      if (el.getAttribute("aria-label")) parts.push(el.getAttribute("aria-label")!);
+      const ariaLabel = el.getAttribute("aria-label");
+      if (ariaLabel) parts.push(ariaLabel.trim());
       if (el.id) {
         try {
           const lab = document.querySelector<HTMLElement>(`label[for="${CSS.escape(el.id)}"]`);
           if (lab?.innerText) parts.push(lab.innerText.trim());
         } catch {}
       }
-      const ph = el.getAttribute("placeholder") || el.getAttribute("name") || "";
+      const ph = el.getAttribute("placeholder") || "";
+      const name = el.getAttribute("name") || "";
       if (ph) parts.push(ph.trim());
+      else if (name) parts.push(name.trim());
+
+      let box: { x: number; y: number; width: number; height: number } | undefined;
+      try {
+        const r = el.getBoundingClientRect();
+        if (r && r.width > 0 && r.height > 0) {
+          box = {
+            x: Math.round(r.left),
+            y: Math.round(r.top),
+            width: Math.round(r.width),
+            height: Math.round(r.height),
+          };
+        }
+      } catch {}
+
+      let val = "";
+      try {
+        if ("value" in el && typeof (el as HTMLInputElement).value === "string") {
+          val = (el as HTMLInputElement).value;
+        } else if (el.isContentEditable) {
+          val = el.innerText || "";
+        }
+      } catch {}
+
+      const fieldLabel = isPassword
+        ? (parts.length > 0 ? parts.join(" · ") : "Пароль")
+        : (parts.length > 0
+            ? parts.join(" · ")
+            : (ph || name || (tag === "textarea" ? "Текстовое поле" : "Поле ввода")));
+
       return {
         isEditable,
         isPassword,
         tag,
         type,
-        label: parts.join(" · ").replace(/\s+/g, " ").slice(0, 80),
+        label: fieldLabel.replace(/\s+/g, " ").slice(0, 80),
+        name,
+        placeholder: ph,
+        value: val,
+        box,
       };
     }) as never);
     if (info && typeof info === "object") return info as ActiveFieldInfo;
@@ -541,7 +596,8 @@ export interface PageAuthBarrier {
  * Проверяет, есть ли на странице форма входа (логин/пароль), CAPTCHA или 2FA/СМС-код,
  * требующие ручного ввода пользователем в рабочей области ОС.
  */
-export async function detectPageAuthBarrier(page: { evaluate: AgentPage["evaluate"] }): Promise<PageAuthBarrier> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function detectPageAuthBarrier(page: { evaluate: (fn: any, arg?: any) => Promise<any> }): Promise<PageAuthBarrier> {
   try {
     const res = await page.evaluate((() => {
       const isVisible = (el: Element | null) => {

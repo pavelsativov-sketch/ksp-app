@@ -269,9 +269,21 @@ export async function GET(req: Request) {
     }
     try {
       session.lastSeen = Date.now();
-      const screenshot = await session.page.screenshot({ type: "jpeg", quality: 70 });
+      const [screenshot, title, activeField, authBarrier] = await Promise.all([
+        session.page.screenshot({ type: "jpeg", quality: 70 }),
+        session.page.title().catch(() => ""),
+        inspectActiveField(session.page),
+        detectPageAuthBarrier(session.page),
+      ]);
       return new NextResponse(new Uint8Array(screenshot), {
-        headers: { "Content-Type": "image/jpeg", "Cache-Control": "no-store" },
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Cache-Control": "no-store",
+          "X-Page-Title": encodeURIComponent(title),
+          "X-Page-Url": encodeURIComponent(session.page.url()),
+          "X-Active-Field": encodeURIComponent(JSON.stringify(activeField)),
+          "X-Auth-Barrier": encodeURIComponent(JSON.stringify(authBarrier)),
+        },
       });
     } catch {
       return NextResponse.json({ error: "Не удалось получить снимок браузера" }, { status: 502 });

@@ -244,8 +244,12 @@ async function runAction(userId: string, args: BrowserAction) {
     await installRequestGuard(page);
     if (action !== "screenshot") await persistAgentBrowserSession(userId);
 
-    const screenshot = await page.screenshot({ type: "jpeg", quality: 80 });
-    const title = await page.title().catch(() => "");
+    const [screenshot, title, activeField, authBarrier] = await Promise.all([
+      page.screenshot({ type: "jpeg", quality: 80 }),
+      page.title().catch(() => ""),
+      inspectActiveField(page),
+      detectPageAuthBarrier(page),
+    ]);
     const currentUrl = page.url();
 
     return new NextResponse(new Uint8Array(screenshot), {
@@ -253,6 +257,8 @@ async function runAction(userId: string, args: BrowserAction) {
         "Content-Type": "image/jpeg",
         "X-Page-Title": encodeURIComponent(title),
         "X-Page-Url": encodeURIComponent(currentUrl),
+        "X-Active-Field": encodeURIComponent(JSON.stringify(activeField)),
+        "X-Auth-Barrier": encodeURIComponent(JSON.stringify(authBarrier)),
         "Cache-Control": "no-store",
       },
     });
