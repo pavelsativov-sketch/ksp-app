@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   MonitorPlay, Loader2, Play, ShieldAlert, ShieldCheck, Check, X,
-  Lock, Hand, User, Eye, EyeOff, CornerDownLeft,
+  Lock, Hand,
 } from "lucide-react";
 
 /**
@@ -111,13 +111,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   const [activeField, setActiveField] = useState<ActiveFieldInfo | null>(null);
   const [screenBusy, setScreenBusy] = useState(false);
 
-  const [fieldLiveValue, setFieldLiveValue] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [imgLayout, setImgLayout] = useState<{ width: number; height: number } | null>(null);
-  const fieldLiveValueRef = useRef("");
-  const currentFieldKeyRef = useRef("");
-  const fieldHistoryRef = useRef<Record<string, string>>({});
-  const liveInputRef = useRef<HTMLInputElement>(null);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -142,18 +136,11 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       try {
         const parsed = JSON.parse(decodeURIComponent(rawActiveField)) as ActiveFieldInfo;
         setActiveField(parsed);
-        const newKey = `${parsed.name || ""}_${parsed.type || ""}_${parsed.box ? `${parsed.box.x},${parsed.box.y}` : ""}`;
-        if (newKey && newKey !== currentFieldKeyRef.current) {
-          if (currentFieldKeyRef.current) {
-            fieldHistoryRef.current[currentFieldKeyRef.current] = fieldLiveValueRef.current;
-          }
-          currentFieldKeyRef.current = newKey;
-          const nextVal = fieldHistoryRef.current[newKey] ?? parsed.value ?? "";
-          fieldLiveValueRef.current = nextVal;
-          setFieldLiveValue(nextVal);
-          setShowPassword(false);
-        }
-      } catch { /* ignore */ }
+      } catch {
+        setActiveField(null);
+      }
+    } else {
+      setActiveField(null);
     }
     if (rawAuthBarrier) {
       try {
@@ -250,7 +237,6 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
 
   const handleScreenClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
     if (!imgRef.current) return;
-    liveInputRef.current?.focus({ preventScroll: true });
     kbInputRef.current?.focus({ preventScroll: true });
     flushTypedBuffer();
     const rect = imgRef.current.getBoundingClientRect();
@@ -266,12 +252,6 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     if (specialKeys.includes(e.key)) {
       e.preventDefault();
       if (e.key === "Backspace") {
-        const nextVal = fieldLiveValueRef.current.slice(0, -1);
-        fieldLiveValueRef.current = nextVal;
-        setFieldLiveValue(nextVal);
-        if (currentFieldKeyRef.current) {
-          fieldHistoryRef.current[currentFieldKeyRef.current] = nextVal;
-        }
         if (typeBufferRef.current.length > 0) {
           typeBufferRef.current = typeBufferRef.current.slice(0, -1);
           return;
@@ -289,85 +269,12 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     const val = e.target.value;
     if (!val) return;
     e.target.value = "";
-    const nextVal = fieldLiveValueRef.current + val;
-    fieldLiveValueRef.current = nextVal;
-    setFieldLiveValue(nextVal);
-    if (currentFieldKeyRef.current) {
-      fieldHistoryRef.current[currentFieldKeyRef.current] = nextVal;
-    }
     typeBufferRef.current += val;
     if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
     typeTimerRef.current = setTimeout(() => {
       flushTypedBuffer();
-    }, 180);
+    }, 150);
   }, [flushTypedBuffer]);
-
-  const handleLiveInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVal = e.target.value;
-    const oldVal = fieldLiveValueRef.current;
-    fieldLiveValueRef.current = newVal;
-    setFieldLiveValue(newVal);
-    if (currentFieldKeyRef.current) {
-      fieldHistoryRef.current[currentFieldKeyRef.current] = newVal;
-    }
-
-    if (newVal.startsWith(oldVal)) {
-      const added = newVal.slice(oldVal.length);
-      typeBufferRef.current += added;
-      if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
-      typeTimerRef.current = setTimeout(() => {
-        flushTypedBuffer();
-      }, 180);
-    } else {
-      flushTypedBuffer();
-      void (async () => {
-        await enqueueScreenAction({ action: "key", key: "Control+A" }).catch(() => {});
-        await enqueueScreenAction({ action: "key", key: "Backspace" }).catch(() => {});
-        if (newVal) {
-          await enqueueScreenAction({ action: "type", text: newVal }).catch(() => {});
-        }
-      })();
-    }
-  }, [enqueueScreenAction, flushTypedBuffer]);
-
-  const handleLiveInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      flushTypedBuffer();
-      void enqueueScreenAction({ action: "key", key: "Enter" });
-    } else if (e.key === "Tab") {
-      e.preventDefault();
-      flushTypedBuffer();
-      void enqueueScreenAction({ action: "key", key: "Tab" });
-    } else if (e.key === "Escape") {
-      liveInputRef.current?.blur();
-    }
-  }, [enqueueScreenAction, flushTypedBuffer]);
-
-  const handleClearField = useCallback(() => {
-    fieldLiveValueRef.current = "";
-    setFieldLiveValue("");
-    typeBufferRef.current = "";
-    if (currentFieldKeyRef.current) {
-      fieldHistoryRef.current[currentFieldKeyRef.current] = "";
-    }
-    flushTypedBuffer();
-    void (async () => {
-      await enqueueScreenAction({ action: "key", key: "Control+A" }).catch(() => {});
-      await enqueueScreenAction({ action: "key", key: "Backspace" }).catch(() => {});
-    })();
-    liveInputRef.current?.focus();
-  }, [enqueueScreenAction, flushTypedBuffer]);
-
-  const handleSendTab = useCallback(() => {
-    flushTypedBuffer();
-    void enqueueScreenAction({ action: "key", key: "Tab" });
-  }, [enqueueScreenAction, flushTypedBuffer]);
-
-  const handleSendEnter = useCallback(() => {
-    flushTypedBuffer();
-    void enqueueScreenAction({ action: "key", key: "Enter" });
-  }, [enqueueScreenAction, flushTypedBuffer]);
 
   const handleScreenPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -608,7 +515,8 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           onKeyDown={handleScreenKeyDown}
           onChange={handleScreenInputChange}
           onPaste={handleScreenPaste}
-          className="pointer-events-none fixed -left-[9999px] top-0 h-1 w-1 opacity-0"
+          className="absolute left-0 top-0 h-0 w-0 opacity-0 pointer-events-none p-0 m-0 border-0"
+          tabIndex={-1}
         />
 
         {screenshot && (
@@ -624,136 +532,19 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
             {screenBusy && (
               <div className="absolute right-2 top-2 h-4 w-4 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" />
             )}
-            {/* Интерактивная рамка и живой текст прямо над полем удалённой страницы */}
+            {/* Интерактивная рамка подсветки активного поля на экране */}
             {fieldOverlayStyle && (
               <div
                 style={fieldOverlayStyle}
-                className={`pointer-events-none absolute z-20 flex items-center overflow-hidden rounded border-2 px-2 text-xs shadow-lg backdrop-blur-[1px] transition-all ${
+                className={`pointer-events-none absolute z-20 rounded border-2 transition-all ${
                   activeField?.isPassword
-                    ? "border-amber-400 bg-amber-950/40 text-amber-100 shadow-amber-500/20"
-                    : "border-sky-400 bg-slate-950/40 text-sky-100 shadow-sky-500/20"
+                    ? "border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)]"
+                    : "border-sky-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)]"
                 }`}
-              >
-                <span className="truncate font-mono font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                  {fieldLiveValue
-                    ? (activeField?.isPassword
-                        ? (showPassword ? fieldLiveValue : "•".repeat(fieldLiveValue.length))
-                        : fieldLiveValue)
-                    : (
-                      <span className="opacity-40 italic">
-                        {activeField?.placeholder || (activeField?.isPassword ? "Пароль" : "Логин")}
-                      </span>
-                    )}
-                </span>
-                <span className="ml-1 inline-block h-3.5 w-[2px] animate-pulse bg-sky-300" />
-              </div>
-            )}
-
-            {/* Панель прямого дублирования ввода в ОС (Логин / Пароль / Поля) */}
-            {(activeField?.isEditable || fieldLiveValue || authBarrier?.requiresUserAction) && (
-              <div
-                data-testid="live-input-bar"
-                className="absolute bottom-6 left-3 right-3 z-30 flex flex-wrap items-center gap-2 rounded-xl border border-white/20 bg-[#121526]/95 px-3 py-2 text-xs shadow-2xl backdrop-blur-md"
-              >
-                {/* Иконка и название поля */}
-                <div
-                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                    activeField?.isPassword
-                      ? "border border-amber-400/40 bg-amber-500/20 text-amber-200"
-                      : "border border-sky-400/40 bg-sky-500/20 text-sky-200"
-                  }`}
-                >
-                  {activeField?.isPassword ? (
-                    <Lock className="size-3.5 text-amber-300" />
-                  ) : (
-                    <User className="size-3.5 text-sky-300" />
-                  )}
-                  <span>
-                    {activeField?.isPassword
-                      ? "Пароль"
-                      : (activeField?.label || activeField?.placeholder || activeField?.name || "Логин")}
-                  </span>
-                </div>
-
-                {/* Поле ввода в ОС: мгновенное дублирование с клавиатуры и прямой ввод */}
-                <div className="relative flex min-w-[200px] flex-1 items-center">
-                  <input
-                    ref={liveInputRef}
-                    type={activeField?.isPassword && !showPassword ? "password" : "text"}
-                    value={fieldLiveValue}
-                    onChange={handleLiveInputChange}
-                    onKeyDown={handleLiveInputKeyDown}
-                    placeholder={
-                      activeField?.isPassword
-                        ? "Печатайте пароль — дублируется в ОС…"
-                        : `Печатайте «${activeField?.placeholder || activeField?.name || "логин"}» — дублируется в ОС…`
-                    }
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    aria-label="Прямой ввод в активное поле ОС"
-                    className="w-full rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 pr-8 font-mono text-xs text-white placeholder-white/40 outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
-                  />
-                  {activeField?.isPassword && (
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-2 text-white/50 hover:text-white"
-                      title={showPassword ? "Скрыть пароль" : "Показать пароль"}
-                      aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
-                    >
-                      {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                    </button>
-                  )}
-                </div>
-
-                {/* Счётчик символов для пароля */}
-                {activeField?.isPassword && fieldLiveValue && (
-                  <span className="shrink-0 text-[11px] text-amber-300/80 font-mono">
-                    {fieldLiveValue.length} симв.
-                  </span>
-                )}
-
-                {/* Кнопки действий */}
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {fieldLiveValue && (
-                    <button
-                      type="button"
-                      onClick={handleClearField}
-                      className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
-                      title="Очистить"
-                      aria-label="Очистить"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleSendTab}
-                    className="rounded-lg bg-white/10 px-2 py-1.5 text-[11px] font-medium text-white/80 hover:bg-white/15 hover:text-white"
-                    title="Перейти к следующему полю (Tab)"
-                  >
-                    Tab ⇥
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSendEnter}
-                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                      activeField?.isPassword
-                        ? "bg-amber-400 text-slate-950 hover:bg-amber-300"
-                        : "bg-sky-400 text-slate-950 hover:bg-sky-300"
-                    }`}
-                    title="Отправить (Enter)"
-                  >
-                    <CornerDownLeft className="size-3" />
-                    <span>{activeField?.isPassword ? "Войти" : "Ввести"}</span>
-                  </button>
-                </div>
-              </div>
+              />
             )}
             <figcaption className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
-              <span>Интерактивный экран ОС (кликните по полю логина/пароля и печатайте с клавиатуры)</span>
+              <span>Интерактивный экран ОС (кликните по полю логина/пароля и печатайте напрямую)</span>
               <span>Сессии сохраняются ✓</span>
             </figcaption>
           </figure>

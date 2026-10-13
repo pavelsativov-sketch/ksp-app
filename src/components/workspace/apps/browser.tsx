@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut,
-  ExternalLink, Lock, Play, User, Eye, EyeOff, CornerDownLeft,
+  ExternalLink, Lock, Play,
 } from 'lucide-react';
 
 const BASE = '/api/agents/browser-stream';
@@ -49,13 +49,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [clickPing, setClickPing] = useState<{ x: number; y: number; id: number } | null>(null);
   const [handingOver, setHandingOver] = useState(false);
 
-  const [fieldLiveValue, setFieldLiveValue] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [imgLayout, setImgLayout] = useState<{ width: number; height: number } | null>(null);
-  const fieldLiveValueRef = useRef('');
-  const currentFieldKeyRef = useRef('');
-  const fieldHistoryRef = useRef<Record<string, string>>({});
-  const liveInputRef = useRef<HTMLInputElement | null>(null);
 
   // Нативный <img> вместо Next.js <Image> — иначе pointer-events теряются на обёртке
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -92,18 +86,9 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       try {
         const parsed = JSON.parse(decodeURIComponent(rawActiveField)) as ActiveFieldInfo;
         setActiveField(parsed);
-        const newKey = `${parsed.name || ''}_${parsed.type || ''}_${parsed.box ? `${parsed.box.x},${parsed.box.y}` : ''}`;
-        if (newKey && newKey !== currentFieldKeyRef.current) {
-          if (currentFieldKeyRef.current) {
-            fieldHistoryRef.current[currentFieldKeyRef.current] = fieldLiveValueRef.current;
-          }
-          currentFieldKeyRef.current = newKey;
-          const nextVal = fieldHistoryRef.current[newKey] ?? parsed.value ?? '';
-          fieldLiveValueRef.current = nextVal;
-          setFieldLiveValue(nextVal);
-          setShowPassword(false);
-        }
-      } catch { /* ignore */ }
+      } catch {
+        setActiveField(null);
+      }
     } else {
       setActiveField(null);
     }
@@ -196,10 +181,6 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     if (!res.ok) { setError('Не удалось очистить сеанс'); return; }
     setPageTitle(''); setPageUrl(''); setImgSrc(null); setInputUrl(landingUrl);
     setActiveField(null); setAuthBarrier(null);
-    fieldHistoryRef.current = {};
-    currentFieldKeyRef.current = '';
-    fieldLiveValueRef.current = '';
-    setFieldLiveValue('');
     setError('Внешний сеанс удалён. Войдите снова, чтобы продолжить.');
   }, [landingUrl]);
 
@@ -238,8 +219,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     const img = imgRef.current;
     if (!img) return;
 
-    // Захватываем фокус для прямого ввода с клавиатуры и в строку ОС
-    liveInputRef.current?.focus({ preventScroll: true });
+    // Фокусируем ввод с клавиатуры для прямого набора в поле удалённого экрана
     kbInputRef.current?.focus({ preventScroll: true });
     setCanvasFocused(true);
 
@@ -270,20 +250,14 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
   const queueCharacters = useCallback((chars: string) => {
     if (!chars) return;
-    const nextVal = fieldLiveValueRef.current + chars;
-    fieldLiveValueRef.current = nextVal;
-    setFieldLiveValue(nextVal);
-    if (currentFieldKeyRef.current) {
-      fieldHistoryRef.current[currentFieldKeyRef.current] = nextVal;
-    }
     typeBufferRef.current += chars;
     if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
     typeTimerRef.current = setTimeout(() => {
       flushTypedBuffer();
-    }, 180);
+    }, 150);
   }, [flushTypedBuffer]);
 
-  const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
       // Let onPaste handle clipboard paste
       return;
@@ -292,12 +266,6 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     if (specialKeys.includes(e.key)) {
       e.preventDefault();
       if (e.key === 'Backspace') {
-        const nextVal = fieldLiveValueRef.current.slice(0, -1);
-        fieldLiveValueRef.current = nextVal;
-        setFieldLiveValue(nextVal);
-        if (currentFieldKeyRef.current) {
-          fieldHistoryRef.current[currentFieldKeyRef.current] = nextVal;
-        }
         if (typeBufferRef.current.length > 0) {
           typeBufferRef.current = typeBufferRef.current.slice(0, -1);
           return;
@@ -310,74 +278,13 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       void enqueueAction({ action: 'key', key: e.key });
       return;
     }
-  }, [enqueueAction, flushTypedBuffer]);
 
-  const handleLiveInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVal = e.target.value;
-    const oldVal = fieldLiveValueRef.current;
-    fieldLiveValueRef.current = newVal;
-    setFieldLiveValue(newVal);
-    if (currentFieldKeyRef.current) {
-      fieldHistoryRef.current[currentFieldKeyRef.current] = newVal;
-    }
-
-    if (newVal.startsWith(oldVal)) {
-      const added = newVal.slice(oldVal.length);
-      typeBufferRef.current += added;
-      if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
-      typeTimerRef.current = setTimeout(() => {
-        flushTypedBuffer();
-      }, 180);
-    } else {
-      flushTypedBuffer();
-      void (async () => {
-        await enqueueAction({ action: 'key', key: 'Control+A' }).catch(() => {});
-        await enqueueAction({ action: 'key', key: 'Backspace' }).catch(() => {});
-        if (newVal) {
-          await enqueueAction({ action: 'type', text: newVal }).catch(() => {});
-        }
-      })();
-    }
-  }, [enqueueAction, flushTypedBuffer]);
-
-  const handleLiveInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    // Если событие пришло на container (div), перехватываем печатный символ
+    if (e.currentTarget === containerRef.current && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      flushTypedBuffer();
-      void enqueueAction({ action: 'key', key: 'Enter' });
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      flushTypedBuffer();
-      void enqueueAction({ action: 'key', key: 'Tab' });
-    } else if (e.key === 'Escape') {
-      liveInputRef.current?.blur();
+      queueCharacters(e.key);
     }
-  }, [enqueueAction, flushTypedBuffer]);
-
-  const handleClearField = useCallback(() => {
-    fieldLiveValueRef.current = '';
-    setFieldLiveValue('');
-    typeBufferRef.current = '';
-    if (currentFieldKeyRef.current) {
-      fieldHistoryRef.current[currentFieldKeyRef.current] = '';
-    }
-    flushTypedBuffer();
-    void (async () => {
-      await enqueueAction({ action: 'key', key: 'Control+A' }).catch(() => {});
-      await enqueueAction({ action: 'key', key: 'Backspace' }).catch(() => {});
-    })();
-    liveInputRef.current?.focus();
-  }, [enqueueAction, flushTypedBuffer]);
-
-  const handleSendTab = useCallback(() => {
-    flushTypedBuffer();
-    void enqueueAction({ action: 'key', key: 'Tab' });
-  }, [enqueueAction, flushTypedBuffer]);
-
-  const handleSendEnter = useCallback(() => {
-    flushTypedBuffer();
-    void enqueueAction({ action: 'key', key: 'Enter' });
-  }, [enqueueAction, flushTypedBuffer]);
+  }, [enqueueAction, flushTypedBuffer, queueCharacters]);
 
   const handleCanvasInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -386,7 +293,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     queueCharacters(val);
   }, [queueCharacters]);
 
-  const handleCanvasPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handleCanvasPaste = useCallback((e: React.ClipboardEvent<HTMLElement>) => {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text');
     if (!pasted) return;
@@ -558,20 +465,23 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       {/* Viewport — реальный скриншот Playwright с прямым вводом мыши и клавиатуры */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden relative bg-[#090b12]"
+        tabIndex={0}
+        role="region"
+        aria-label="Рабочая область браузера"
+        className="flex-1 overflow-hidden relative bg-[#090b12] outline-none"
         style={{ cursor: 'crosshair' }}
-        // Фокус клавиатуры при клике на любое место контейнера
         onClick={() => {
           kbInputRef.current?.focus({ preventScroll: true });
           setCanvasFocused(true);
         }}
+        onKeyDown={handleCanvasKeyDown}
+        onPaste={handleCanvasPaste}
       >
         {/*
-          Скрытый input: перехватывает все нажатия клавиш после клика на
-          скриншот. Пользователь кликает на поле логина/пароля → event
-          handleImageClick отправляет клик в Playwright → браузер фокусирует
-          поле → пользователь просто печатает прямо в контейнере — ввод
-          проксируется через handleCanvasKeyDown / handleCanvasInputChange.
+          Скрытый input: перехватывает ввод с клавиатуры после клика на
+          скриншот. Пользователь кликает на поле логина/пароля → Playwright
+          фокусирует поле в удалённом браузере → ввод направляется напрямую
+          в Playwright через keyboard.type / keyboard.press.
         */}
         <input
           ref={kbInputRef}
@@ -590,7 +500,8 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           onKeyDown={handleCanvasKeyDown}
           onChange={handleCanvasInputChange}
           onPaste={handleCanvasPaste}
-          className="pointer-events-none fixed -left-[9999px] top-0 h-1 w-1 opacity-0"
+          className="absolute left-0 top-0 h-0 w-0 opacity-0 pointer-events-none p-0 m-0 border-0"
+          tabIndex={-1}
         />
 
         {!imgSrc && !error && (
@@ -604,9 +515,6 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           <>
             {/*
               Нативный <img> вместо Next.js <Image>.
-              Причина: Next.js <Image> оборачивает <img> в <span> с
-              overflow:hidden, что поглощает pointer events и делает
-              getBoundingClientRect() неточным для координат клика.
               С нативным <img> click/wheel работают напрямую на пикселях
               скриншота.
             */}
@@ -625,7 +533,6 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
                 display: 'block',
                 userSelect: 'none',
                 cursor: 'crosshair',
-                // pointer-events должны быть enabled (по умолчанию)
               }}
             />
           </>
@@ -646,7 +553,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             <div className="flex min-w-0 items-center gap-2">
               <Lock className="size-3.5 shrink-0 text-amber-300" />
               <span className="truncate">
-                {authBarrier.reason || 'Кликните на поле логина или пароля прямо на экране — курсор превратится в ✚, затем просто начните печатать'}
+                {authBarrier.reason || 'Кликните на поле логина или пароля прямо на экране и введите данные с клавиатуры'}
               </span>
             </div>
             <button
@@ -664,133 +571,16 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           </div>
         )}
 
-        {/* Интерактивная рамка и живой текст прямо над полем удалённой страницы */}
+        {/* Интерактивная рамка подсветки активного поля прямо на скриншоте удалённой страницы */}
         {imgSrc && fieldOverlayStyle && (
           <div
             style={fieldOverlayStyle}
-            className={`pointer-events-none absolute z-20 flex items-center overflow-hidden rounded border-2 px-2 text-xs shadow-lg backdrop-blur-[1px] transition-all ${
+            className={`pointer-events-none absolute z-20 rounded border-2 transition-all ${
               activeField?.isPassword
-                ? 'border-amber-400 bg-amber-950/40 text-amber-100 shadow-amber-500/20'
-                : 'border-sky-400 bg-slate-950/40 text-sky-100 shadow-sky-500/20'
+                ? 'border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)]'
+                : 'border-sky-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)]'
             }`}
-          >
-            <span className="truncate font-mono font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-              {fieldLiveValue
-                ? (activeField?.isPassword
-                    ? (showPassword ? fieldLiveValue : '•'.repeat(fieldLiveValue.length))
-                    : fieldLiveValue)
-                : (
-                  <span className="opacity-40 italic">
-                    {activeField?.placeholder || (activeField?.isPassword ? 'Пароль' : 'Логин')}
-                  </span>
-                )}
-            </span>
-            <span className="ml-1 inline-block h-3.5 w-[2px] animate-pulse bg-sky-300" />
-          </div>
-        )}
-
-        {/* Панель прямого дублирования ввода в ОС (Логин / Пароль / Поля) */}
-        {imgSrc && (activeField?.isEditable || fieldLiveValue || authBarrier?.requiresUserAction) && (
-          <div
-            data-testid="live-input-bar"
-            className="absolute bottom-3 left-3 right-3 z-30 flex flex-wrap items-center gap-2 rounded-xl border border-white/20 bg-[#121526]/95 px-3 py-2 text-xs shadow-2xl backdrop-blur-md"
-          >
-            {/* Иконка и название поля */}
-            <div
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                activeField?.isPassword
-                  ? 'border border-amber-400/40 bg-amber-500/20 text-amber-200'
-                  : 'border border-sky-400/40 bg-sky-500/20 text-sky-200'
-              }`}
-            >
-              {activeField?.isPassword ? (
-                <Lock className="size-3.5 text-amber-300" />
-              ) : (
-                <User className="size-3.5 text-sky-300" />
-              )}
-              <span>
-                {activeField?.isPassword
-                  ? 'Пароль'
-                  : (activeField?.label || activeField?.placeholder || activeField?.name || 'Логин')}
-              </span>
-            </div>
-
-            {/* Поле ввода в ОС: мгновенное дублирование с клавиатуры и прямой ввод */}
-            <div className="relative flex min-w-[200px] flex-1 items-center">
-              <input
-                ref={liveInputRef}
-                type={activeField?.isPassword && !showPassword ? 'password' : 'text'}
-                value={fieldLiveValue}
-                onChange={handleLiveInputChange}
-                onKeyDown={handleLiveInputKeyDown}
-                placeholder={
-                  activeField?.isPassword
-                    ? 'Печатайте пароль — дублируется в ОС…'
-                    : `Печатайте «${activeField?.placeholder || activeField?.name || 'логин'}» — дублируется в ОС…`
-                }
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                aria-label="Прямой ввод в активное поле ОС"
-                className="w-full rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 pr-8 font-mono text-xs text-white placeholder-white/40 outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
-              />
-              {activeField?.isPassword && (
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 text-white/50 hover:text-white"
-                  title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-                  aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-                >
-                  {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                </button>
-              )}
-            </div>
-
-            {/* Счётчик символов для пароля */}
-            {activeField?.isPassword && fieldLiveValue && (
-              <span className="shrink-0 text-[11px] text-amber-300/80 font-mono">
-                {fieldLiveValue.length} симв.
-              </span>
-            )}
-
-            {/* Кнопки действий */}
-            <div className="flex shrink-0 items-center gap-1.5">
-              {fieldLiveValue && (
-                <button
-                  type="button"
-                  onClick={handleClearField}
-                  className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
-                  title="Очистить"
-                  aria-label="Очистить"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleSendTab}
-                className="rounded-lg bg-white/10 px-2 py-1.5 text-[11px] font-medium text-white/80 hover:bg-white/15 hover:text-white"
-                title="Перейти к следующему полю (Tab)"
-              >
-                Tab ⇥
-              </button>
-              <button
-                type="button"
-                onClick={handleSendEnter}
-                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                  activeField?.isPassword
-                    ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
-                    : 'bg-sky-400 text-slate-950 hover:bg-sky-300'
-                }`}
-                title="Отправить (Enter)"
-              >
-                <CornerDownLeft className="size-3" />
-                <span>{activeField?.isPassword ? 'Войти' : 'Ввести'}</span>
-              </button>
-            </div>
-          </div>
+          />
         )}
 
         {isInstalling && (
@@ -837,9 +627,9 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         <span className="text-[10px] text-white/35 truncate">{pageUrl}</span>
         <span className="ml-auto shrink-0 pl-2 text-[10px] text-white/40">
           {canvasFocused
-            ? '⌨ Клавиатура подключена — кликни на поле и печатай прямо здесь'
-            : 'Кликни на поле логина/пароля прямо на экране, затем печатай'}
-          {' · Сессии сохраняются ✓'}
+            ? '⌨ Клавиатура подключена — печатайте прямо на экране (Tab — следующее поле, Enter — ввод)'
+            : 'Кликните на поле логина или пароля на экране и печатайте напрямую'}
+          {' · Сессия сохраняется ✓'}
         </span>
       </div>
     </div>
