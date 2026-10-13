@@ -3,6 +3,8 @@ import type { ClientSession, Db, ObjectId } from "mongodb";
 import { COL, getDb, toObjectId } from "@/lib/mongo";
 import { toPlanRow, type PlanDoc } from "@/lib/plans-repo";
 import type { LessonPlanRow } from "@/lib/types/ksp";
+import { PLAN_VERSION_SECTIONS, type PlanSection } from "@/lib/plan-sections";
+export { PLAN_VERSION_SECTIONS, type PlanSection } from "@/lib/plan-sections";
 
 export const MAX_PLAN_VERSIONS = 30;
 export const MAX_PLAN_BYTES = 256 * 1024;
@@ -54,9 +56,59 @@ async function snapshotAndTrim(db: Db, session: ClientSession, current: PlanDoc 
   if (stale.length) await versions.deleteMany({ ...scope, _id: { $in: stale.map(v => v._id) } }, { session });
 }
 
+function restoredPlanState(current: PlanDoc, snapshot: PlanState, sections?: readonly PlanSection[]): PlanState {
+  const currentState = planState(current);
+  const snapshotState = planState(snapshot);
+  if (!sections) {
+    return { ...snapshotState, visibility: current.visibility, is_draft: current.is_draft ?? false };
+  }
+
+  const selected = new Set(sections);
+  let state = currentState;
+  let content = { ...current.content };
+  if (selected.has("metadata")) {
+    state = {
+      ...state,
+      title: snapshotState.title,
+      subject_id: snapshotState.subject_id,
+      grade: snapshotState.grade,
+      quarter: snapshotState.quarter,
+      section: snapshotState.section,
+      class_id: snapshotState.class_id,
+      language: snapshotState.language,
+    };
+    content = { ...content, schoolProfile: snapshotState.content.schoolProfile, header: snapshotState.content.header };
+  }
+  if (selected.has("objectives")) {
+    content = {
+      ...content,
+      topic: snapshotState.content.topic,
+      learningObjectives: snapshotState.content.learningObjectives,
+      lessonObjectives: snapshotState.content.lessonObjectives,
+      assessmentCriteria: snapshotState.content.assessmentCriteria,
+      languageObjectives: snapshotState.content.languageObjectives,
+    };
+  }
+  if (selected.has("context")) {
+    content = {
+      ...content,
+      values: snapshotState.content.values,
+      crossCurricularLinks: snapshotState.content.crossCurricularLinks,
+      priorKnowledge: snapshotState.content.priorKnowledge,
+    };
+  }
+  for (const stage of ["beginning", "middle", "end"] as const) {
+    if (selected.has(stage)) {
+      content = { ...content, stages: { ...content.stages, [stage]: snapshotState.content.stages[stage] } };
+    }
+  }
+  if (selected.has("evaluation")) content = { ...content, evaluation: snapshotState.content.evaluation };
+  return { ...state, content, visibility: current.visibility, is_draft: current.is_draft ?? false };
+}
+
 /** Caller supplies owner ID from the authenticated server session, never client input. */
 export async function updatePlanWithVersion(id: string, ownerId: string, expected: string | undefined,
-  change: { state: PlanState; reason: "save" | "draft" } | { versionId: string }) {
+  change: { state: PlanState; reason: "save" | "draft" } | { versionId: string; sections?: readonly PlanSection[] }) {
   const oid = toObjectId(id);
   if (!oid) throw new Error("Некорректный id");
   const versionId = "versionId" in change ? toObjectId(change.versionId) : null;
@@ -75,8 +127,8 @@ export async function updatePlanWithVersion(id: string, ownerId: string, expecte
         const version = await db.collection<PlanVersionDoc>(COL.planVersions).findOne(
           { _id: versionId!, plan_id: oid.toHexString(), owner_id: ownerId }, { session });
         if (!version) throw new Error("Версия не найдена");
-        // Restoring content must never change the current publication decision.
-        state = { ...planState(version.snapshot), visibility: current.visibility };
+        // Content can be restored selectively; publication state always stays current.
+        state = restoredPlanState(current, version.snapshot, change.sections);
       } else {
         state = planState(change.state);
         // Автосохранение черновика НЕ имеет права менять решение о публикации.

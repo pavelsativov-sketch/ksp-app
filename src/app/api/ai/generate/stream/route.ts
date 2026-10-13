@@ -5,7 +5,9 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 import { retrieveTextbookContext } from "@/lib/rag/retrieve";
+import { ensureArmanPvTextbookIngested } from "@/lib/rag/armanpv";
 import { log } from "@/lib/logger";
+import { summarizeRagUse } from "@/lib/rag/metadata";
 
 /**
  * Генерация КСП с живым прогрессом (SSE).
@@ -26,7 +28,11 @@ const bodySchema = z.object({
   learningObjectives: z.array(z.string().trim().min(1).max(1_000)).max(30).optional(),
   language: z.enum(["ru", "kz"]).default("ru"),
   schoolProfile: z.enum(["emn", "ogn"]).optional(),
+  section: z.string().trim().max(500).optional(),
+  previousTopic: z.string().trim().max(500).optional(),
+  previousHomework: z.string().trim().max(1_000).optional(),
   textbookId: z.string().regex(/^[0-9a-f]{24}$/i).optional(),
+  armanpvId: z.string().trim().max(200).optional(),
   refine: optionalBooleanFlag,
 });
 
@@ -118,48 +124,39 @@ export async function POST(request: Request) {
         // Учебник — отдельный этап: поиск по базе заметно медленнее генерации,
         // и без своей отметки учитель видел бы «висок» на первых процентах.
         let textbookContext: string | undefined;
-        let ragInfo: {
-          textbookTitle: string | null;
-          chunkCount: number;
-          method: string | null;
-          status: string;
-          warnings: string[];
-        } | null = null;
+        let retrievedContext: Awaited<ReturnType<typeof retrieveTextbookContext>> = null;
+        let resolvedTextbookId = parsed.data.textbookId;
+        const selectedTextbook = Boolean(parsed.data.textbookId || parsed.data.armanpvId);
+        if (!resolvedTextbookId && parsed.data.armanpvId) {
+          stage({ percent: 8, label: "Подключаем учебник издательства Арман-ПВ" });
+          try {
+            const ingested = await ensureArmanPvTextbookIngested({ armanpvId: parsed.data.armanpvId });
+            resolvedTextbookId = ingested.textbook.id;
+          } catch (e) {
+            log.warn("Arman-PV auto-ingest failed", { reason: String(e) });
+          }
+        }
 
-        if (parsed.data.textbookId) {
+        if (resolvedTextbookId) {
           stage({ percent: 10, label: "Ищем нужное в учебнике" });
-          ragInfo = {
-            textbookTitle: null,
-            chunkCount: 0,
-            method: null,
-            status: "unavailable",
-            warnings: ["Контекст учебника недоступен. План создан без опоры на выбранный учебник."],
-          };
-          const query = `${parsed.data.subject}. Тема: ${parsed.data.topic}. Класс ${parsed.data.grade}. ${(
+          const query = `${parsed.data.subject}. Тема: ${parsed.data.topic}. ${parsed.data.section ?? ""} Класс ${parsed.data.grade}. ${(
             parsed.data.learningObjectives ?? []
           ).join(" ")}`;
           try {
-            const ctx = await retrieveTextbookContext({
-              textbookId: parsed.data.textbookId,
+            retrievedContext = await retrieveTextbookContext({
+              textbookId: resolvedTextbookId,
               query,
               k: 6,
               userId: auth.user.id,
             });
-            if (ctx) {
-              textbookContext = ctx.promptBlock || undefined;
-              ragInfo = {
-                textbookTitle: ctx.textbookTitle,
-                chunkCount: ctx.chunks.length,
-                method: ctx.method,
-                status: ctx.status,
-                warnings: ctx.warnings,
-              };
-            }
+            textbookContext = retrievedContext?.promptBlock || undefined;
           } catch (e) {
             log.warn("RAG retrieval failed", { reason: String(e) });
           }
-          stage({ percent: 15, label: "Учебник прочитан" });
+          stage({ percent: 15, label: "Поиск контекста учебника завершён" });
         }
+
+        const ragInfo = summarizeRagUse(selectedTextbook, retrievedContext);
 
         const content = await generateKsp({ ...parsed.data, textbookContext, onStage: stage });
         await reservation.finalize(true);

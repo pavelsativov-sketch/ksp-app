@@ -87,10 +87,13 @@ export interface Issue {
 }
 
 // Analytics functions
-export async function getAttendanceSummary(schoolId: string, dateFrom: string, dateTo: string): Promise<{ _id: string; count: number }[]> {
+export async function getAttendanceSummary(schoolId: string, dateFrom: string, dateTo: string, classNames?: readonly string[]): Promise<{ _id: string; count: number }[]> {
+  if (classNames?.length === 0) return [];
   const db = await getDb();
+  const match: Filter<AttendanceRecord> = { school_id: schoolId, date: { $gte: dateFrom, $lte: dateTo } };
+  if (classNames) match.class_name = { $in: [...classNames] };
   return db.collection(COL.attendance).aggregate<{ _id: string; count: number }>([
-    { $match: { school_id: schoolId, date: { $gte: dateFrom, $lte: dateTo } } },
+    { $match: match },
     { $group: { _id: "$status", count: { $sum: 1 } } }
   ]).toArray();
 }
@@ -126,10 +129,12 @@ export async function getAttendancePerDay(schoolId: string): Promise<{ date: str
   return rows.map((r) => ({ date: r._id, rate: r.total ? r.present / r.total : 0 }));
 }
 
-export async function getQualityMetrics(schoolId: string, quarter?: number): Promise<{ _id: string; average_score: number }[]> {
+export async function getQualityMetrics(schoolId: string, quarter?: number, classNames?: readonly string[]): Promise<{ _id: string; average_score: number }[]> {
+  if (classNames?.length === 0) return [];
   const db = await getDb();
   const match: Filter<GradeRecord> = { school_id: schoolId };
   if (quarter) match.quarter = quarter;
+  if (classNames) match.class_name = { $in: [...classNames] };
 
   // max_score > 0 в $match: голый $divide при max_score = 0 или отсутствии
   // поля даёт NaN, из-за чего весь $group (и весь дашборд) падал.
@@ -141,9 +146,11 @@ export async function getQualityMetrics(schoolId: string, quarter?: number): Pro
   ]).toArray();
 }
 
-export async function getCurriculumProgress(schoolId: string): Promise<CurriculumDoc[]> {
+export async function getCurriculumProgress(schoolId: string, teacherId?: string): Promise<CurriculumDoc[]> {
   const db = await getDb();
-  return db.collection<CurriculumDoc>(COL.curriculum).find({ school_id: schoolId }).toArray();
+  const filter: Filter<CurriculumDoc> = { school_id: schoolId };
+  if (teacherId) filter.teacher_id = teacherId;
+  return db.collection<CurriculumDoc>(COL.curriculum).find(filter).toArray();
 }
 
 /**
@@ -157,9 +164,10 @@ export async function getCurriculumProgress(schoolId: string): Promise<Curriculu
  *
  * Период задаётся как `ГГГГ-ММ` или `ГГГГ-ММ..ГГГГ-ММ`.
  */
-export async function getVskSummary(schoolId: string, period?: string): Promise<VskInspection[]> {
+export async function getVskSummary(schoolId: string, period?: string, teacherId?: string): Promise<VskInspection[]> {
   const db = await getDb();
   const filter: Record<string, unknown> = { school_id: schoolId };
+  if (teacherId) filter.teacher_id = teacherId;
 
   const range = parsePeriodRange(period);
   if (range) {

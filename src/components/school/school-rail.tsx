@@ -5,8 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   MessageSquare, FolderKanban, FolderOpen, Monitor, Bot, Settings, MoreHorizontal,
-  BarChart2, ClipboardCheck, GraduationCap, PenTool, Users, BookOpen,
-  TrendingUp, FileText, Link2,
+  BarChart3, UserCheck, Compass, Users, FileText, Link2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useOsShellStore } from "@/lib/store/os-shell";
@@ -52,16 +51,13 @@ const ITEMS: RailItem[] = [
  * ключи использовал удалённый `app/school/sidebar.tsx`, и казахский учитель
  * видел русские пункты.
  */
-export const MORE_SECTIONS: { key: string; icon: LucideIcon; href: string }[] = [
-  { key: "classes", icon: GraduationCap, href: "/school/classes" },
-  { key: "students", icon: Users, href: "/school/students" },
-  { key: "teachers", icon: PenTool, href: "/school/teachers" },
-  { key: "attendance", icon: ClipboardCheck, href: "/school/attendance" },
-  { key: "curriculum", icon: BookOpen, href: "/school/curriculum" },
-  { key: "quality", icon: TrendingUp, href: "/school/quality" },
-  { key: "reports", icon: BarChart2, href: "/school/reports" },
-  { key: "vsk", icon: FileText, href: "/school/vsk" },
-  { key: "connectors", icon: Link2, href: "/school/connectors" },
+export const MORE_SECTIONS: { key: string; label: string; icon: LucideIcon; href: string }[] = [
+  { key: "sorSoch", label: "Анализ СОР и СОЧ", icon: BarChart3, href: "/school/sor-soch" },
+  { key: "vsk", label: "Справки ВШК", icon: FileText, href: "/school/vsk" },
+  { key: "characteristics", label: "Характеристики", icon: UserCheck, href: "/school/characteristics" },
+  { key: "homeroom", label: "Классное руководство", icon: Users, href: "/school/homeroom" },
+  { key: "iom", label: "Маршруты ИОМ", icon: Compass, href: "/school/iom" },
+  { key: "connectors", label: "Подключения", icon: Link2, href: "/school/connectors" },
 ];
 
 /**
@@ -118,7 +114,7 @@ export function MoreSections() {
           role="menu"
           className="absolute left-full top-0 z-50 ml-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#0b0d13] py-1 shadow-2xl"
         >
-          {MORE_SECTIONS.map(({ key, icon: Icon, href }) => (
+          {MORE_SECTIONS.map(({ key, label, icon: Icon, href }) => (
             <Link
               key={href}
               role="menuitem"
@@ -132,7 +128,7 @@ export function MoreSections() {
               }`}
             >
               <Icon className="size-4 shrink-0 text-slate-400" />
-              {nav[key as keyof typeof nav] ?? key}
+              {nav[key as keyof typeof nav] ?? label}
             </Link>
           ))}
         </div>

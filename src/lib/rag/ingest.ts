@@ -25,6 +25,10 @@ export interface TextbookDoc {
   embedding_error?: string | null;
   embedding_lease_token?: string | null;
   embedding_lease_until?: Date | null;
+  armanpv_id?: string | null;
+  source_url?: string | null;
+  cover_url?: string | null;
+  language?: "ru" | "kz" | "ug" | "uz" | null;
   created_at: Date;
   updated_at: Date;
 }

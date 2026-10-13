@@ -1,10 +1,30 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import Image from 'next/image';
-import { ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut, ExternalLink, Lock, Keyboard, Play } from 'lucide-react';
 
 const BASE = '/api/agents/browser-stream';
+
+// Разрешение удалённого браузера
+const REMOTE_W = 1280;
+const REMOTE_H = 800;
+
+interface ActiveFieldInfo {
+  tag: string;
+  type: string;
+  name: string;
+  placeholder: string;
+  isPassword: boolean;
+  isEditable: boolean;
+  hasValue: boolean;
+}
+
+interface PageAuthBarrier {
+  requiresUserAction: boolean;
+  kind: 'login' | 'captcha' | '2fa' | null;
+  reason: string;
+  domain: string;
+}
 
 export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
@@ -13,12 +33,24 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [inputUrl, setInputUrl] = useState(initialUrl?.trim() || 'https://www.google.com');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [typedText, setTypedText] = useState('');
-  const [hideTypedText, setHideTypedText] = useState(false);
-  const canvasRef = useRef<HTMLImageElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [activeField, setActiveField] = useState<ActiveFieldInfo | null>(null);
+  const [authBarrier, setAuthBarrier] = useState<PageAuthBarrier | null>(null);
+  const [canvasFocused, setCanvasFocused] = useState(false);
+  const [pendingPreview, setPendingPreview] = useState('');
+  const [clickPing, setClickPing] = useState<{ x: number; y: number; id: number } | null>(null);
+  const [handingOver, setHandingOver] = useState(false);
+
+  // Нативный <img> вместо Next.js <Image> — иначе pointer-events теряются на обёртке
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const kbInputRef = useRef<HTMLInputElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const actionPendingRef = useRef(false);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingCountRef = useRef(0);
+  const typeBufferRef = useRef('');
+  const typeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastInitialUrlRef = useRef(initialUrl?.trim() || '');
+
   const landingUrl = initialUrl?.trim() || 'https://www.google.com';
   const dailyQuotaBlocked = /дневн.{0,30}лимит/i.test(error);
   const isInstalling = /устанавливается|запускается.*мин|failed to start/i.test(error);
@@ -36,6 +68,25 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     const url = URL.createObjectURL(blob);
     const title = decodeURIComponent(res.headers.get('X-Page-Title') || '');
     const currentUrl = decodeURIComponent(res.headers.get('X-Page-Url') || '');
+    const rawActiveField = res.headers.get('X-Active-Field');
+    const rawAuthBarrier = res.headers.get('X-Auth-Barrier');
+
+    if (rawActiveField) {
+      try {
+        setActiveField(JSON.parse(decodeURIComponent(rawActiveField)) as ActiveFieldInfo);
+      } catch { /* ignore */ }
+    } else {
+      setActiveField(null);
+    }
+    if (rawAuthBarrier) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(rawAuthBarrier)) as PageAuthBarrier;
+        setAuthBarrier(parsed.requiresUserAction ? parsed : null);
+      } catch { /* ignore */ }
+    } else {
+      setAuthBarrier(null);
+    }
+
     setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
     if (title) setPageTitle(title);
     if (currentUrl) { setPageUrl(currentUrl); setInputUrl(currentUrl); }
@@ -44,6 +95,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   }, []);
 
   const fetchFrame = useCallback(async () => {
+    if (pendingCountRef.current > 0 || typeBufferRef.current) return undefined;
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
     try {
@@ -56,54 +108,82 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     }
   }, [acceptFrame]);
 
-  const doAction = useCallback(async (params: Record<string, string>) => {
-    if (actionPendingRef.current) return;
-    actionPendingRef.current = true;
+  const enqueueAction = useCallback((params: Record<string, string>) => {
+    pendingCountRef.current += 1;
     setLoading(true);
     setError('');
-    try {
-      const actionResult = await fetch(BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), cache: 'no-store' });
-      // POST already returns the resulting frame. A second screenshot request
-      // reopened the same remote site and could discard a login form's focus.
-      await acceptFrame(actionResult);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      actionPendingRef.current = false;
-      setLoading(false);
-    }
+    queueRef.current = queueRef.current
+      .catch(() => {})
+      .then(async () => {
+        try {
+          const actionResult = await fetch(BASE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params),
+            cache: 'no-store',
+          });
+          await acceptFrame(actionResult);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+        } finally {
+          pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
+          if (pendingCountRef.current === 0) setLoading(false);
+        }
+      });
+    return queueRef.current;
   }, [acceptFrame]);
+
+  const flushTypedBuffer = useCallback(() => {
+    if (typeTimerRef.current) {
+      clearTimeout(typeTimerRef.current);
+      typeTimerRef.current = null;
+    }
+    const text = typeBufferRef.current;
+    if (!text) return;
+    typeBufferRef.current = '';
+    setPendingPreview('');
+    void enqueueAction({ action: 'type', text });
+  }, [enqueueAction]);
+
+  const doAction = useCallback((params: Record<string, string>) => {
+    flushTypedBuffer();
+    return enqueueAction(params);
+  }, [enqueueAction, flushTypedBuffer]);
 
   const navigate = useCallback(async (target: string) => {
-    if (!target.trim() || actionPendingRef.current) return;
-    actionPendingRef.current = true;
-    const url = target.startsWith('http') ? target : target.includes('.') ? 'https://' + target : 'https://www.google.com/search?q=' + encodeURIComponent(target);
-    setLoading(true);
+    if (!target.trim()) return;
+    flushTypedBuffer();
+    const url = target.startsWith('http')
+      ? target
+      : target.includes('.')
+        ? 'https://' + target
+        : 'https://www.google.com/search?q=' + encodeURIComponent(target);
     setInputUrl(url);
-    setError('');
-    try {
-      const actionResult = await fetch(BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'navigate', url }), cache: 'no-store' });
-      await acceptFrame(actionResult);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally { actionPendingRef.current = false; setLoading(false); }
-  }, [acceptFrame]);
-
-  const typeIntoPage = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!typedText) return;
-    const text = typedText;
-    setTypedText('');
-    await doAction({ action: 'type', text });
-  }, [doAction, typedText]);
+    await enqueueAction({ action: 'navigate', url });
+  }, [enqueueAction, flushTypedBuffer]);
 
   const clearSession = useCallback(async () => {
     if (!window.confirm('Завершить внешний сеанс и удалить сохранённые данные входа?')) return;
     const res = await fetch(BASE, { method: 'DELETE' });
     if (!res.ok) { setError('Не удалось очистить сеанс'); return; }
     setPageTitle(''); setPageUrl(''); setImgSrc(null); setInputUrl(landingUrl);
+    setActiveField(null); setAuthBarrier(null);
     setError('Внешний сеанс удалён. Войдите снова, чтобы продолжить.');
   }, [landingUrl]);
+
+  const resumeAiControl = useCallback(async () => {
+    flushTypedBuffer();
+    setHandingOver(true);
+    try {
+      await fetch('/api/agents/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ control: 'ai' }),
+      });
+    } finally {
+      setHandingOver(false);
+    }
+  }, [flushTypedBuffer]);
 
   const openExternally = useCallback(() => {
     const target = pageUrl || inputUrl || landingUrl;
@@ -115,50 +195,130 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     window.open(externalUrl, '_blank', 'noopener,noreferrer');
   }, [inputUrl, landingUrl, pageUrl]);
 
-  // Handle clicks on the screenshot image
+  /**
+   * Клик по скриншоту — вычисляем координаты относительно удалённого экрана
+   * (1280×800) с учётом масштабирования object-contain.
+   *
+   * Используем нативный <img> (imgRef) а не Next.js <Image>, чтобы
+   * getBoundingClientRect() возвращал именно элемент изображения без обёртки.
+   */
   const handleImageClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
-    if (!canvasRef.current || !containerRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    // The image is contained inside the viewport. Account for the letterbox
-    // before mapping a local pointer to the remote 1280x800 viewport.
-    const scale = Math.min(rect.width / 1280, rect.height / 800);
-    const renderedWidth = 1280 * scale;
-    const renderedHeight = 800 * scale;
-    const offsetX = (rect.width - renderedWidth) / 2;
-    const offsetY = (rect.height - renderedHeight) / 2;
-    const rawX = (e.clientX - rect.left - offsetX) / scale;
-    const rawY = (e.clientY - rect.top - offsetY) / scale;
-    if (rawX < 0 || rawY < 0 || rawX >= 1280 || rawY >= 800) return;
+    const img = imgRef.current;
+    if (!img) return;
+
+    // Захватываем фокус для прямого ввода с клавиатуры
+    kbInputRef.current?.focus({ preventScroll: true });
+    setCanvasFocused(true);
+
+    // Рассчитываем реальные координаты пикселя в удалённом браузере
+    const rect = img.getBoundingClientRect();
+    // object-contain сохраняет пропорции; вычисляем реальный масштаб
+    const scaleX = REMOTE_W / rect.width;
+    const scaleY = REMOTE_H / rect.height;
+    // Учитываем letterbox (если контейнер шире/выше изображения)
+    const scale = Math.max(scaleX, scaleY);
+    const renderedW = REMOTE_W / scale;
+    const renderedH = REMOTE_H / scale;
+    const offsetX = (rect.width - renderedW) / 2;
+    const offsetY = (rect.height - renderedH) / 2;
+
+    const rawX = (e.clientX - rect.left - offsetX) / (renderedW / REMOTE_W);
+    const rawY = (e.clientY - rect.top - offsetY) / (renderedH / REMOTE_H);
+
+    if (rawX < 0 || rawY < 0 || rawX >= REMOTE_W || rawY >= REMOTE_H) return;
+
     const x = Math.round(rawX);
     const y = Math.round(rawY);
-    doAction({ action: 'click', x: x.toString(), y: y.toString() });
+
+    // Визуальная анимация клика (в координатах контейнера)
+    setClickPing({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: Date.now() });
+    void doAction({ action: 'click', x: x.toString(), y: y.toString() });
   }, [doAction]);
+
+  const queueCharacters = useCallback((chars: string) => {
+    if (!chars) return;
+    typeBufferRef.current += chars;
+    setPendingPreview(typeBufferRef.current);
+    if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
+    typeTimerRef.current = setTimeout(() => {
+      flushTypedBuffer();
+    }, 240);
+  }, [flushTypedBuffer]);
+
+  const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+      // Let onPaste handle clipboard paste
+      return;
+    }
+    const specialKeys = ['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    if (specialKeys.includes(e.key)) {
+      e.preventDefault();
+      if (e.key === 'Backspace' && typeBufferRef.current.length > 0) {
+        typeBufferRef.current = typeBufferRef.current.slice(0, -1);
+        setPendingPreview(typeBufferRef.current);
+        return;
+      }
+      flushTypedBuffer();
+      void enqueueAction({ action: 'key', key: e.key });
+      return;
+    }
+  }, [enqueueAction, flushTypedBuffer]);
+
+  const handleCanvasInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (!val) return;
+    e.target.value = '';
+    queueCharacters(val);
+  }, [queueCharacters]);
+
+  const handleCanvasPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text');
+    if (!pasted) return;
+    flushTypedBuffer();
+    void enqueueAction({ action: 'type', text: pasted });
+  }, [enqueueAction, flushTypedBuffer]);
 
   // Handle scroll on the screenshot
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    doAction({ action: 'scroll', dy: Math.round(e.deltaY).toString() });
+    void doAction({ action: 'scroll', dy: Math.round(e.deltaY).toString() });
   }, [doAction]);
 
-  // Load on mount. Навигация уходит в сетевой запрос, поэтому setState
-  // выполняется уже после await — синхронного обновления в теле эффекта нет.
+  // Load on mount
   const startedRef = useRef(false);
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
     void (async () => {
-      // Reopen the last page (and its authenticated session) before choosing
-      // a landing page. This prevents each window opening from losing BilimClass.
       const restoredUrl = await fetchFrame();
-      if (restoredUrl === 'about:blank') await navigate(landingUrl);
+      if (restoredUrl === 'about:blank' || !restoredUrl) await navigate(landingUrl);
     })();
   }, [fetchFrame, landingUrl, navigate]);
+
+  // Sync when parent passes a new initialUrl (e.g., when AI agent or connector navigates)
+  useEffect(() => {
+    const trimmed = initialUrl?.trim() || '';
+    if (!trimmed || trimmed === lastInitialUrlRef.current) return;
+    lastInitialUrlRef.current = trimmed;
+    void navigate(trimmed);
+  }, [navigate, initialUrl]);
+
+  // Periodic frame sync so live agent actions inside OS Workspace are visible immediately
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible' && pendingCountRef.current === 0 && !typeBufferRef.current) {
+        void fetchFrame();
+      }
+    }, 3500);
+    return () => clearInterval(id);
+  }, [fetchFrame]);
 
   return (
     <div className="flex flex-col h-full bg-[#1e1e2e] select-none">
       {/* Tab Bar */}
       <div className="h-9 bg-[#252536] flex items-end px-2 shrink-0 border-b border-black/30">
-        <div className="h-8 min-w-[160px] max-w-[240px] bg-[#1e1e2e] rounded-t-md px-3 flex items-center gap-2 border-t border-x border-white/[0.06]">
+        <div className="h-8 min-w-[160px] max-w-[260px] bg-[#1e1e2e] rounded-t-md px-3 flex items-center gap-2 border-t border-x border-white/[0.06]">
           {loading ? (
             <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin shrink-0" />
           ) : (
@@ -172,33 +332,33 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
       {/* Navigation Bar */}
       <div className="h-11 bg-[#1e1e2e] border-b border-black/30 flex items-center gap-1.5 px-2 shrink-0">
-        <button onClick={() => doAction({ action: 'back' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+        <button type="button" onClick={() => void doAction({ action: 'back' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Назад">
           <ArrowLeft className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
-        <button onClick={() => doAction({ action: 'forward' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+        <button type="button" onClick={() => void doAction({ action: 'forward' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Вперёд">
           <ArrowRight className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
-        <button onClick={() => doAction({ action: 'reload' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+        <button type="button" onClick={() => void doAction({ action: 'reload' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Обновить">
           <RotateCw className={`w-4 h-4 text-white/50 group-hover:text-white/80 ${loading ? 'animate-spin' : ''}`} />
         </button>
-        <button onClick={() => navigate('https://www.google.com')} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+        <button type="button" onClick={() => void navigate('https://www.google.com')} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Домашняя страница">
           <Home className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
-        <button type="button" onClick={() => void clearSession()} title="Завершить внешние сеансы" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+        <button type="button" onClick={() => void clearSession()} title="Завершить внешние сеансы и очистить сохранённые входы" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
           <LogOut className="w-4 h-4 text-white/50 group-hover:text-rose-300" />
         </button>
 
         {/* URL Bar */}
         <form
           className="flex-1 flex items-center h-8 bg-[#313147] rounded-full px-3 gap-2 border border-transparent focus-within:border-blue-500/50 transition-all"
-          onSubmit={e => { e.preventDefault(); navigate(inputUrl); }}
+          onSubmit={e => { e.preventDefault(); void navigate(inputUrl); }}
         >
           <Shield className="w-3.5 h-3.5 text-green-400 shrink-0" />
           <input
             value={inputUrl}
             onChange={e => setInputUrl(e.target.value)}
             className="flex-1 bg-transparent text-[12px] text-white/80 outline-none"
-            placeholder="Search or enter URL..."
+            placeholder="Введите адрес или поисковый запрос..."
           />
           {inputUrl && (
             <button type="button" onClick={() => { setInputUrl(''); }} className="text-white/20 hover:text-white/50">
@@ -206,47 +366,170 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             </button>
           )}
         </form>
+
+        {/* Открыть в отдельной вкладке браузера */}
+        <button type="button" onClick={openExternally} title="Открыть страницу в новой вкладке" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+          <ExternalLink className="w-4 h-4 text-white/50 group-hover:text-white/80" />
+        </button>
       </div>
 
-      <form onSubmit={typeIntoPage} className="flex shrink-0 items-center gap-2 border-b border-black/20 bg-[#252536] px-2 py-1.5">
-        <input
-          value={typedText}
-          onChange={e => setTypedText(e.target.value)}
-          type={hideTypedText ? 'password' : 'text'}
-          maxLength={500}
-          autoComplete="off"
-          placeholder="Введите текст на странице (логин или пароль)"
-          aria-label="Текст для ввода на странице"
-          className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500/50"
-        />
-        <label className="flex items-center gap-1 text-[10px] text-white/50">
-          <input type="checkbox" checked={hideTypedText} onChange={e => setHideTypedText(e.target.checked)} /> Скрыть
-        </label>
-        <button type="submit" disabled={!typedText || loading} className="rounded-md bg-blue-600 px-2.5 py-1.5 text-[11px] font-medium text-white disabled:opacity-40">Ввести</button>
-      </form>
+      {/* Панель быстрых закладок для учителя */}
+      <div className="h-8 bg-[#181826] border-b border-black/30 flex items-center gap-1.5 px-2.5 shrink-0 text-[11px]">
+        <span className="text-white/40 mr-1">Быстрый переход:</span>
+        <button
+          type="button"
+          onClick={() => void navigate('https://www.bilimclass.kz/2026/frontoffice/dashboard')}
+          className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 border border-sky-500/20 font-medium transition-colors"
+        >
+          BilimClass — Дэшборд учителя
+        </button>
+        <button
+          type="button"
+          onClick={() => void navigate('https://login.kundelik.kz')}
+          className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/20 font-medium transition-colors"
+        >
+          Kundelik.kz
+        </button>
+        <button
+          type="button"
+          onClick={() => void navigate('https://nobd.edu.kz/login')}
+          className="px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 border border-violet-500/20 font-medium transition-colors"
+        >
+          НОБД
+        </button>
+      </div>
 
-      {/* Viewport — real Playwright screenshot */}
-      <div ref={containerRef} className="flex-1 overflow-hidden relative bg-[#090b12] cursor-crosshair">
+      {/* Viewport — реальный скриншот Playwright с прямым вводом мыши и клавиатуры */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden relative bg-[#090b12]"
+        style={{ cursor: 'crosshair' }}
+        // Фокус клавиатуры при клике на любое место контейнера
+        onClick={() => {
+          kbInputRef.current?.focus({ preventScroll: true });
+          setCanvasFocused(true);
+        }}
+      >
+        {/*
+          Скрытый input: перехватывает все нажатия клавиш после клика на
+          скриншот. Пользователь кликает на поле логина/пароля → event
+          handleImageClick отправляет клик в Playwright → браузер фокусирует
+          поле → пользователь просто печатает прямо в контейнере — ввод
+          проксируется через handleCanvasKeyDown / handleCanvasInputChange.
+        */}
+        <input
+          ref={kbInputRef}
+          type="text"
+          defaultValue=""
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          aria-label="Прямой ввод с клавиатуры в рабочую область браузера"
+          onFocus={() => setCanvasFocused(true)}
+          onBlur={() => {
+            setCanvasFocused(false);
+            flushTypedBuffer();
+          }}
+          onKeyDown={handleCanvasKeyDown}
+          onChange={handleCanvasInputChange}
+          onPaste={handleCanvasPaste}
+          className="pointer-events-none fixed -left-[9999px] top-0 h-1 w-1 opacity-0"
+        />
+
         {!imgSrc && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3">
-            <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-10 h-10 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-white/55 text-sm">Загрузка безопасного браузера…</p>
           </div>
         )}
+
         {imgSrc && (
-          <Image
-            src={imgSrc}
-            alt="Browser viewport"
-            width={1280}
-            height={800}
-            unoptimized
-            className="w-full h-full object-contain cursor-default"
-            ref={canvasRef}
-            onClick={handleImageClick}
-            onWheel={handleWheel}
-            draggable={false}
+          <>
+            {/*
+              Нативный <img> вместо Next.js <Image>.
+              Причина: Next.js <Image> оборачивает <img> в <span> с
+              overflow:hidden, что поглощает pointer events и делает
+              getBoundingClientRect() неточным для координат клика.
+              С нативным <img> click/wheel работают напрямую на пикселях
+              скриншота.
+            */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              ref={imgRef}
+              src={imgSrc}
+              alt="Browser viewport"
+              draggable={false}
+              onClick={handleImageClick}
+              onWheel={handleWheel}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                userSelect: 'none',
+                cursor: 'crosshair',
+                // pointer-events должны быть enabled (по умолчанию)
+              }}
+            />
+          </>
+        )}
+
+        {/* Визуальный пинг в месте клика */}
+        {clickPing && (
+          <span
+            key={clickPing.id}
+            style={{ left: clickPing.x - 10, top: clickPing.y - 10 }}
+            className="pointer-events-none absolute h-5 w-5 rounded-full border-2 border-blue-400/80 bg-blue-400/20 animate-ping"
           />
         )}
+
+        {/* Баннер авторизации (Логин / Пароль / CAPTCHA / 2FA) */}
+        {authBarrier?.requiresUserAction && imgSrc && (
+          <div className="absolute left-3 right-3 top-2.5 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-[#141726]/95 px-3.5 py-2 text-xs text-amber-100 shadow-xl backdrop-blur-md">
+            <div className="flex min-w-0 items-center gap-2">
+              <Lock className="size-3.5 shrink-0 text-amber-300" />
+              <span className="truncate">
+                {authBarrier.reason || 'Кликните на поле логина или пароля прямо на экране — курсор превратится в ✚, затем просто начните печатать'}
+              </span>
+            </div>
+            <button
+              type="button"
+              disabled={handingOver}
+              onClick={(e) => {
+                e.stopPropagation();
+                void resumeAiControl();
+              }}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-500/90 px-2.5 py-1 text-[11px] font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+            >
+              <Play className="size-3 fill-current" />
+              {handingOver ? 'Передаю ИИ…' : 'Готово — продолжить с ИИ'}
+            </button>
+          </div>
+        )}
+
+        {/* HUD: активное поле (логин / пароль) + предпросмотр буфера ввода */}
+        {imgSrc && (activeField?.isEditable || pendingPreview) && (
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-[#121521]/90 px-3.5 py-1.5 text-[11px] text-white/85 shadow-lg backdrop-blur-md">
+            {activeField?.isPassword ? (
+              <Lock className="size-3.5 text-amber-300 shrink-0" />
+            ) : (
+              <Keyboard className="size-3.5 text-blue-300 shrink-0" />
+            )}
+            <span>
+              {activeField?.isPassword
+                ? 'Поле пароля — просто печатайте, ввод отправляется напрямую'
+                : `Поле «${activeField?.placeholder || activeField?.name || 'ввода'}» активно — печатайте с клавиатуры`}
+            </span>
+            {pendingPreview && (
+              <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-blue-200">
+                {activeField?.isPassword ? '•'.repeat(Math.min(16, pendingPreview.length)) : pendingPreview}
+              </span>
+            )}
+            <span className="text-[10px] text-white/45">(Enter — отправить, Tab — след. поле)</span>
+          </div>
+        )}
+
         {isInstalling && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#090b12] gap-4 px-8 text-center z-10">
             <div className="relative w-14 h-14">
@@ -275,22 +558,25 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
                   <span className="shrink-0 text-xs text-amber-200/70">Сброс в 00:00 UTC</span>
                 </>
               ) : (
-                <button type="button" onClick={() => navigate(pageUrl || landingUrl)} className="shrink-0 text-sm text-blue-300 underline underline-offset-2">Повторить</button>
+                <button type="button" onClick={() => void navigate(pageUrl || landingUrl)} className="shrink-0 text-sm text-blue-300 underline underline-offset-2">Повторить</button>
               )}
               <button type="button" onClick={() => setError('')} aria-label="Скрыть сообщение" className="shrink-0 text-white/50 hover:text-white"><X className="size-4" /></button>
             </div>
           </div>
         )}
         {loading && (
-          <div className="absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
+          <div className="absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin z-20" />
         )}
       </div>
 
       {/* Status bar */}
-      <div className="h-5 bg-[#252536] border-t border-black/20 flex items-center px-3 shrink-0">
-        <span className="text-[10px] text-white/25 truncate">{pageUrl}</span>
-        <span className="ml-auto shrink-0 pl-2 text-[10px] text-white/30" title="Лимит бесплатного Cloudflare Browser Run">
-          Ручной просмотр: 10 мин/день · Агент: без лимита ✓
+      <div className="h-6 bg-[#252536] border-t border-black/20 flex items-center px-3 shrink-0 gap-2">
+        <span className="text-[10px] text-white/35 truncate">{pageUrl}</span>
+        <span className="ml-auto shrink-0 pl-2 text-[10px] text-white/40">
+          {canvasFocused
+            ? '⌨ Клавиатура подключена — кликни на поле и печатай прямо здесь'
+            : 'Кликни на поле логина/пароля прямо на экране, затем печатай'}
+          {' · Сессии сохраняются ✓'}
         </span>
       </div>
     </div>

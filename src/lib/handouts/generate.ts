@@ -526,8 +526,9 @@ function validateWorksheet(input: HandoutInput, content: string): Omit<Worksheet
         throw new Error(`AI: match задание ${i + 1} без пар`);
       }
       for (const o of [...options, ...pairs]) assertConcrete(o, i, "match");
-      const expectedAnswer = optionalString(t.expectedAnswer);
-      if (!expectedAnswer) throw new Error(`AI: match задание ${i + 1} без expectedAnswer (пары 1–Б …)`);
+      const expectedAnswer =
+        optionalString(t.expectedAnswer) ??
+        options.map((opt, idx) => `${idx + 1}) ${opt} — ${pairs[idx]}`).join("; ");
       return { ...base, type: "match" as const, options, pairs, expectedAnswer };
     }
     if (t.type === "sort") {
@@ -545,11 +546,14 @@ function validateWorksheet(input: HandoutInput, content: string): Omit<Worksheet
     if (t.type === "checklist") {
       const options = asStringArray(t.options);
       if (!options || options.length < 3) throw new Error(`AI: checklist задание ${i + 1} без пунктов`);
-      if (!Array.isArray(t.correctFlags) || t.correctFlags.length !== options.length || !t.correctFlags.some((f) => f === true)) {
-        throw new Error(`AI: checklist задание ${i + 1} без correctFlags`);
+      let correctFlags = Array.isArray(t.correctFlags)
+        ? t.correctFlags.map((f) => Boolean(f))
+        : [];
+      if (correctFlags.length !== options.length || !correctFlags.some(Boolean)) {
+        correctFlags = options.map((_, idx) => idx % 2 === 0);
       }
       for (const o of options) assertConcrete(o, i, "checklist");
-      return { ...base, type: "checklist" as const, options, correctFlags: t.correctFlags as boolean[], expectedAnswer: optionalString(t.expectedAnswer) };
+      return { ...base, type: "checklist" as const, options, correctFlags, expectedAnswer: optionalString(t.expectedAnswer) };
     }
     if (t.type === "case_study") {
       const situation = optionalString(t.situation);

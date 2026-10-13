@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronRight, Share2, ChevronsUpDown } from "lucide-react";
+import { ChevronRight, Share2, ChevronsUpDown, Home } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast";
 
@@ -18,7 +18,11 @@ const TITLES: Record<string, string> = {
   "/school/attendance": "Посещаемость",
   "/school/quality": "Качество знаний",
   "/school/curriculum": "КТП",
-  "/school/vsk": "ВШК",
+  "/school/sor-soch": "Анализ СОР и СОЧ",
+  "/school/vsk": "Справки ВШК",
+  "/school/characteristics": "Характеристики",
+  "/school/homeroom": "Классное руководство",
+  "/school/iom": "Маршруты ИОМ",
   "/school/reports": "Отчёты",
   "/school/connectors": "Подключения",
   "/school/workspace": "Рабочий стол",
@@ -35,8 +39,12 @@ function titleFor(pathname: string): string {
 }
 
 /**
- * Верхний бар рабочей области: бренд, крошки «Школа / раздел», «Поделиться»
- * (копирует ссылку или отдаёт её в системное меню) и аватар пользователя.
+ * Верхний бар рабочей области школы.
+ *
+ * Изменения:
+ *  - Кнопка «Главная» (Home) — выход из раздела /school на лендинг.
+ *  - Переключатель школы показывается даже при одной школе (для наглядности
+ *    и будущего расширения).
  */
 export function SchoolTopbar({ userName, userEmail }: { userName: string; userEmail: string }) {
   const pathname = usePathname() ?? "/school";
@@ -109,7 +117,38 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
       </nav>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        {schools.length > 1 && <label className="flex max-w-40 items-center gap-1 rounded-lg border border-white/15 px-2 text-xs text-slate-300"><ChevronsUpDown className="size-3 shrink-0" /><span className="sr-only">Активная школа</span><select aria-label="Активная школа" disabled={switching} value={activeSchoolId} onChange={(event) => void selectSchool(event.target.value)} className="min-w-0 bg-transparent py-1.5 outline-none"><option className="bg-slate-900" value="">Школа</option>{schools.map((school) => <option className="bg-slate-900" key={school.id} value={school.id}>{school.name}</option>)}</select></label>}
+        {/* Переключатель между школами — показывается при наличии хотя бы одной */}
+        {schools.length > 0 && (
+          <label className="flex max-w-48 items-center gap-1 rounded-lg border border-white/15 px-2 text-xs text-slate-300">
+            <ChevronsUpDown className="size-3 shrink-0" />
+            <span className="sr-only">Активная школа</span>
+            <select
+              aria-label="Активная школа"
+              disabled={switching}
+              value={activeSchoolId}
+              onChange={(event) => void selectSchool(event.target.value)}
+              className="min-w-0 max-w-[120px] bg-transparent py-1.5 outline-none"
+            >
+              <option className="bg-slate-900" value="">Школа</option>
+              {schools.map((school) => (
+                <option className="bg-slate-900" key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {/* ← Главная: выход из рабочей области школы на главное меню сайта */}
+        <Link
+          href="/"
+          title="На главную страницу"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <Home className="size-3.5" />
+          <span className="hidden sm:inline">Главная</span>
+        </Link>
+
         <button
           type="button"
           onClick={() => void share()}

@@ -31,7 +31,7 @@ export default async function PlanHistoryPage({
         <p className="mt-3 text-sm text-[#5f5751]">
           Последние 30 снимков плана. Восстановленная версия не меняет видимость плана.
         </p>
-        <p className="mt-1 text-xs text-[#745329]">Время снимков указано в UTC.</p>
+        <p className="mt-1 text-xs text-[#745329]">Время снимков отображается в часовом поясе устройства.</p>
         <p className="mt-3">
           <Link href={`/plans/${history.current.id}`} className="text-sm underline underline-offset-4">
             ← Вернуться к плану
@@ -41,6 +41,7 @@ export default async function PlanHistoryPage({
       <PlanHistory
         planId={history.current.id}
         currentUpdatedAt={history.current.updated_at}
+        currentPlan={history.current}
         versions={history.versions}
       />
     </div>

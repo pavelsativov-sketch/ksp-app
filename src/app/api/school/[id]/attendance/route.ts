@@ -5,6 +5,8 @@ import { getAttendanceSummary, getAttendanceByClass } from '@/lib/school-analyti
 import { getDb, COL } from '@/lib/mongo';
 import { getSchoolStudents } from '@/lib/school';
 import type { AttendanceRecord } from '@/lib/school-analytics';
+import { getAssignedSchoolClassNames, requireSchoolClassAccess } from '@/lib/school-permissions';
+import { hasSchoolPermission } from '@/lib/school/role-matrix';
 import { z } from 'zod';
 
 const attendanceSchema = z.object({
@@ -20,7 +22,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const user = authResult.user;
     const { id } = await ctx.params;
     
-    await requireSchoolAccess(user.id, id);
+    const member = await requireSchoolAccess(user.id, id);
+    const canReadAll = hasSchoolPermission(member.role, member.granted_permissions, 'school:students:read_all');
+    const allowedClasses = canReadAll ? undefined : hasSchoolPermission(member.role, member.granted_permissions, 'school:students:read_assigned')
+      ? await getAssignedSchoolClassNames(id, user.id)
+      : [];
     const url = new URL(req.url);
     const today = new Date().toISOString().slice(0, 10);
     const from = url.searchParams.get('from') || `${today.slice(0, 7)}-01`;
@@ -28,11 +34,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const className = url.searchParams.get('class');
     
     if (className) {
+      if (!canReadAll && !allowedClasses?.includes(className)) {
+        return NextResponse.json({ error: 'Access denied: class is not assigned' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+      }
+      await requireSchoolClassAccess(user.id, id, className, 'read');
       const attendance = await getAttendanceByClass(id, className, from, to);
-      return NextResponse.json({ attendance });
+      return NextResponse.json({ attendance }, { headers: { 'Cache-Control': 'private, no-store' } });
     } else {
-      const summary = await getAttendanceSummary(id, from, to);
-      return NextResponse.json({ summary });
+      const summary = await getAttendanceSummary(id, from, to, allowedClasses);
+      return NextResponse.json({ summary }, { headers: { 'Cache-Control': 'private, no-store' } });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
@@ -45,10 +55,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (auth.response) return auth.response;
   const { id } = await ctx.params;
   try {
-    await requireSchoolAccess(auth.user.id, id, 'teacher');
     const input = attendanceSchema.safeParse(await req.json());
     if (!input.success) return NextResponse.json({ error: 'Проверьте дату, класс и отметки учащихся.' }, { status: 400 });
     const { date, className, marks } = input.data;
+    await requireSchoolClassAccess(auth.user.id, id, className, 'write');
     const dateValue = new Date(`${date}T00:00:00.000Z`);
     if (Number.isNaN(dateValue.getTime()) || dateValue.toISOString().slice(0, 10) !== date) {
       return NextResponse.json({ error: 'Некорректная дата.' }, { status: 400 });

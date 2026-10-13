@@ -207,6 +207,19 @@ describe("interactiveTaskSchema (AI-flat input)", () => {
       expect(parsed.data.objectiveCode).toBeUndefined();
     }
   });
+  it("preserves criterion links and teacher-only AI review flags", () => {
+    const parsed = interactiveTaskSchema.safeParse({
+      id: "t_review", type: "MCQ", question: "2+2?", points: 2,
+      options: ["3", "4"], correctIndex: 1,
+      criterionTexts: ["Объясняет вычисление"], aiGenerated: true, aiReviewed: false,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.criterionTexts).toEqual(["Объясняет вычисление"]);
+      expect(parsed.data.aiGenerated).toBe(true);
+      expect(parsed.data.aiReviewed).toBe(false);
+    }
+  });
   it("accepts AI MATCHING with shuffled right column and full pair coverage", () => {
     const parsed = interactiveTaskSchema.safeParse({
       id: "t_2", type: "MATCHING", question: "Соедини", points: 2,

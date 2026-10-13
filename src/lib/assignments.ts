@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
-import { randomInt } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { COL, getDb, toObjectId } from "@/lib/mongo";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import {
@@ -27,8 +27,9 @@ export interface AssignmentDoc {
   subject: string | null;
   grade: number | null;
   tasks: InteractiveTask[];
+  feedbackMode?: "none" | "correct_only";
   /** Откуда собрано: план или повтор прошлой выдачи (для «повтора»). */
-  source: { planId?: string; assignmentId?: string };
+  source: { planId?: string; assignmentId?: string; taskRefs?: string[] };
   status: "open" | "closed";
   attempts_count: number;
   created_at: Date;
@@ -48,8 +49,13 @@ export interface AttemptDoc {
   answers: TaskAnswer[];
   score: number;
   max_score: number;
-  per_task: Array<{ correct: boolean; score: number }>;
+  per_task: Array<{ correct: boolean; score: number; omitted?: boolean }>;
   attempts: number; // какая по счёту попытка
+  last_score?: number;
+  last_max_score?: number;
+  last_per_task?: Array<{ correct: boolean; score: number; omitted?: boolean }>;
+  last_submitted_at?: Date;
+  creation_token?: string;
   created_at: Date;
 }
 
@@ -72,8 +78,30 @@ const createSchema = z.object({
   grade: z.coerce.number().int().min(1).max(11).nullable().optional(),
   taskIds: z.array(z.string().regex(/^[a-f\d]{24}:\d+$/i)).min(1).max(20),
   planId: z.string().regex(/^[a-f\d]{24}$/i).nullable().optional(),
+  previewFingerprint: z.string().regex(/^[a-f\d]{64}$/i),
+  feedbackMode: z.enum(["none", "correct_only"]).default("correct_only"),
   daysValid: z.coerce.number().int().min(1).max(60).default(14),
 });
+
+const previewSchema = z.object({
+  taskIds: z.array(z.string().regex(/^[a-f\d]{24}:\d+$/i)).min(1).max(20),
+});
+
+const editedReissueSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  daysValid: z.coerce.number().int().min(1).max(60).default(14),
+  feedbackMode: z.enum(["none", "correct_only"]),
+  sourceFingerprint: z.string().regex(/^[a-f\d]{64}$/i),
+  tasks: z.array(z.object({
+    id: z.string().trim().min(1).max(100),
+    question: z.string().trim().min(1).max(5000),
+    hint: z.string().trim().max(2000).nullable().optional(),
+  })).min(1).max(20),
+});
+
+function taskFingerprint(tasks: InteractiveTask[]): string {
+  return createHash("sha256").update(JSON.stringify(tasks)).digest("hex");
+}
 
 /**
  * Публичный код выдачи: 6 цифр из CSPRNG.
@@ -121,15 +149,36 @@ async function resolveTasks(
   return out;
 }
 
+/** Возвращает владельцу student-safe preview выбранных собственных заданий. */
+export async function previewAssignmentTasks(ownerId: string, input: unknown): Promise<{ tasks: PublicTask[]; fingerprint: string }> {
+  const parsed = previewSchema.safeParse(input);
+  if (!parsed.success) throw new Error("Некорректный список заданий");
+  const db = await getDb();
+  const tasks = await resolveTasks(db, ownerId, parsed.data.taskIds);
+  if (tasks.length !== parsed.data.taskIds.length) {
+    throw new Error("Некоторые задания больше недоступны");
+  }
+  const checked = z.array(interactiveTaskSchema).safeParse(tasks);
+  if (!checked.success) throw new Error("Задания не прошли проверку");
+  return {
+    tasks: checked.data.map(toPublicTask),
+    fingerprint: taskFingerprint(checked.data),
+  };
+}
+
 export async function createAssignment(ownerId: string, input: unknown) {
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) throw new Error("Некорректные данные выдачи");
   const db = await getDb();
   const tasks = await resolveTasks(db, ownerId, parsed.data.taskIds);
   if (tasks.length === 0) throw new Error("Не выбрано ни одного доступного задания");
+  if (tasks.length !== parsed.data.taskIds.length) throw new Error("Некоторые задания больше недоступны");
   // Валидируем снапшот той же схемой, что и КСП.
   const checked = z.array(interactiveTaskSchema).safeParse(tasks);
   if (!checked.success) throw new Error("Задания повреждены и не прошли проверку");
+  if (taskFingerprint(checked.data) !== parsed.data.previewFingerprint) {
+    throw new Error("Задания изменились после предпросмотра. Проверьте предпросмотр ещё раз.");
+  }
   const now = new Date();
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -141,7 +190,11 @@ export async function createAssignment(ownerId: string, input: unknown) {
         subject: parsed.data.subject || null,
         grade: parsed.data.grade ?? null,
         tasks: checked.data as InteractiveTask[],
-        source: parsed.data.planId ? { planId: parsed.data.planId } : {},
+        feedbackMode: parsed.data.feedbackMode,
+        source: {
+          ...(parsed.data.planId ? { planId: parsed.data.planId } : {}),
+          taskRefs: parsed.data.taskIds,
+        },
         status: "open",
         attempts_count: 0,
         created_at: now,
@@ -162,6 +215,7 @@ export interface PublicAssignment {
   subject: string | null;
   grade: number | null;
   tasks: PublicTask[];
+  feedbackMode: "none" | "correct_only";
   total: number;
   closed: boolean;
 }
@@ -172,13 +226,14 @@ export async function getPublicAssignment(code: string): Promise<PublicAssignmen
   const db = await getDb();
   const doc = await db.collection<AssignmentDoc>(COL.assignments).findOne({ code });
   if (!doc) return null;
-  const closed = doc.status !== "open" || doc.expires_at.getTime() < Date.now();
+  const closed = doc.status !== "open" || doc.expires_at.getTime() <= Date.now();
   return {
     code: doc.code,
     title: doc.title,
     subject: doc.subject,
     grade: doc.grade,
     tasks: doc.tasks.map(toPublicTask),
+    feedbackMode: doc.feedbackMode ?? "correct_only",
     total: doc.tasks.length,
     closed,
   };
@@ -189,6 +244,19 @@ const submitSchema = z.object({
   answers: z.array(taskAnswerSchema).min(1).max(20),
 });
 
+function isOmittedAnswer(answer: TaskAnswer | undefined): boolean {
+  if (!answer) return true;
+  switch (answer.type) {
+    case "MCQ": return answer.selectedIndex === null;
+    case "TRUE_FALSE": return answer.selected === null;
+    case "SHORT_ANSWER": return answer.text.trim().length === 0;
+    case "FILL_BLANK": return answer.fillers.length === 0 || answer.fillers.some((value) => value.trim().length === 0);
+    case "MATCHING": return answer.pairs.length === 0;
+    case "ORDERING": return answer.order.length === 0;
+    case "NUMERIC": return answer.value === null;
+  }
+}
+
 /** Сдача: серверная проверка, сохраняется лучший результат ученика. */
 export async function submitAttempt(code: string, input: unknown) {
   const parsed = submitSchema.safeParse(input);
@@ -196,17 +264,17 @@ export async function submitAttempt(code: string, input: unknown) {
   const db = await getDb();
   const doc = await db.collection<AssignmentDoc>(COL.assignments).findOne({ code });
   if (!doc) throw new Error("Выдача не найдена");
-  if (doc.status !== "open" || doc.expires_at.getTime() < Date.now()) {
+  if (doc.status !== "open" || doc.expires_at.getTime() <= Date.now()) {
     throw new Error("Приём ответов завершён");
   }
   const student = parsed.data.name;
   const perTask = doc.tasks.map((task, i) => {
     const answer = parsed.data.answers[i];
     if (!answer || answer.type !== task.type) {
-      return { correct: false, score: 0, max: Math.max(1, task.points) };
+      return { correct: false, score: 0, max: Math.max(1, task.points), omitted: true };
     }
     const r = evaluateTask(task, answer);
-    return { correct: r.isCorrect, score: r.score, max: r.maxScore };
+    return { correct: r.isCorrect, score: r.score, max: r.maxScore, omitted: isOmittedAnswer(answer) };
   });
   const score = perTask.reduce((s, t) => s + t.score, 0);
   const maxScore = perTask.reduce((s, t) => s + t.max, 0);
@@ -220,11 +288,11 @@ export async function submitAttempt(code: string, input: unknown) {
   // их результат — лучший.
   //
   // Теперь номер попытки увеличивается атомарно ($inc), лучший результат
-  // берётся через $max (то есть худший не затирает лучший), а счётчик
-  // attempts_count растёт только при фактическом создании документа —
-  // в upsert-операции это однозначно определяется по upsertedId.
+  // обновляется условным серверным сравнением, а счётчик участников растёт
+  // только на первом upsert, помеченном одноразовым creation token.
   const attemptsCol = db.collection<AttemptDoc>(COL.assignmentAttempts);
   const filter = { assignment_id: doc._id.toHexString(), student_name: key };
+  const creationToken = randomUUID();
 
   // Шаг 1 — атомарно увеличиваем счётчик попыток и создаём документ, если
   // его ещё нет. $inc не читает и не пишет «prev.attempts + 1» в JS, поэтому
@@ -241,15 +309,31 @@ export async function submitAttempt(code: string, input: unknown) {
       $inc: { attempts: 1 },
       // score всегда существует, чтобы сравнение «лучше ли новая попытка»
       // не получало undefined на первой отправке.
-      $setOnInsert: { score: 0, created_at: new Date() },
+      $setOnInsert: { score: 0, created_at: new Date(), creation_token: creationToken },
     },
     { upsert: true, returnDocument: "after" },
   );
 
-  const stored = after as { score?: number; attempts?: number } | null;
+  const stored = after as { score?: number; attempts?: number; creation_token?: string } | null;
   const attemptNo = stored?.attempts ?? 1;
   const previousBest = stored?.score ?? 0;
   const isBest = score >= previousBest;
+
+  // Сохраняем последнюю попытку отдельно; номер не даёт старому параллельному
+  // запросу перезаписать результат новой попытки.
+  if (after) {
+    await attemptsCol.updateOne(
+      { ...filter, attempts: attemptNo },
+      {
+        $set: {
+          last_score: score,
+          last_max_score: maxScore,
+          last_per_task: perTask.map(({ correct, score: s, omitted }) => ({ correct, score: s, omitted })),
+          last_submitted_at: new Date(),
+        },
+      },
+    );
+  }
 
   // Шаг 2 — ответы и балл пишем только если попытка не хуже уже сохранённой.
   // Фильтр с $expr делает проверку на стороне сервера, поэтому даже при гонке
@@ -262,16 +346,20 @@ export async function submitAttempt(code: string, input: unknown) {
           answers: parsed.data.answers,
           score,
           max_score: maxScore,
-          per_task: perTask.map(({ correct, score: s }) => ({ correct, score: s })),
+          per_task: perTask.map(({ correct, score: s, omitted }) => ({ correct, score: s, omitted })),
           updated_at: new Date(),
         },
       },
     );
   }
 
-  // Счётчик попыток на выдаче отражает число УЧЕНИКОВ, а не число отправок:
-  // он растёт только при фактическом создании записи (upsertedId !== null).
-  if (after && "upsertedId" in after && after.upsertedId) {
+  // Счётчик attempts_count отражает число участников (по введённому имени),
+  // а не число отправок; token надёжно отличает новый документ и удаляется.
+  if (stored?.creation_token === creationToken) {
+    await attemptsCol.updateOne(
+      { ...filter, creation_token: creationToken },
+      { $unset: { creation_token: "" } },
+    );
     await db
       .collection<AssignmentDoc>(COL.assignments)
       .updateOne({ _id: doc._id }, { $inc: { attempts_count: 1 } });
@@ -286,7 +374,7 @@ export async function submitAttempt(code: string, input: unknown) {
       correct: perTask[i].correct,
       // Разбор правильного ответа — только за верный ответ. Иначе ученик,
       // отправив один случайный ответ, получал эталон ко всем заданиям.
-      summary: perTask[i].correct ? correctSummary(task) : null,
+      summary: doc.feedbackMode !== "none" && perTask[i].correct ? correctSummary(task) : null,
     })),
   };
 }
@@ -316,7 +404,7 @@ export async function listTeacherAssignments(ownerId: string, limit = 50): Promi
     title: d.title,
     tasksCount: d.tasks.length,
     attemptsCount: d.attempts_count,
-    status: d.status !== "open" || d.expires_at.getTime() < now ? "closed" : "open",
+    status: d.status !== "open" || d.expires_at.getTime() <= now ? "closed" : "open",
     createdAt: d.created_at.toISOString(),
     expiresAt: d.expires_at.toISOString(),
   }));
@@ -326,9 +414,47 @@ export interface AssignmentResults {
   id: string;
   code: string;
   title: string;
-  status: "open" | "closed";
+  subject: string | null;
+  grade: number | null;
+  feedbackMode: "none" | "correct_only";
+  editableTasks: PublicTask[];
+  editFingerprint: string;
+  sourceAssignmentId: string | null;
+  status: "open" | "closed" | "expired";
   maxScore: number;
-  rows: Array<{ name: string; score: number; attempts: number; createdAt: string }>;
+  studentCount: number;
+  averageScore: number | null;
+  rowsTruncated: boolean;
+  rows: Array<{ name: string; score: number; lastScore: number | null; lastMaxScore: number | null; attempts: number; createdAt: string }>;
+  analytics: {
+    hasData: boolean;
+    minimumGroupSize: number;
+    overallParticipants: number | null;
+    tasks: Array<{
+      taskIndex: number;
+      question: string;
+      objectiveCode: string | null;
+      suppressed: boolean;
+      participants: number | null;
+      responseCount: number | null;
+      correctCount: number | null;
+      incorrectCount: number | null;
+      accuracyPercent: number | null;
+      attemptCount: number | null;
+      omittedCount: number | null;
+    }>;
+    objectives: Array<{
+      objectiveCode: string | null;
+      suppressed: boolean;
+      participants: number | null;
+      responseCount: number | null;
+      correctCount: number | null;
+      incorrectCount: number | null;
+      accuracyPercent: number | null;
+      attemptCount: number | null;
+      omittedCount: number | null;
+    }>;
+  };
 }
 
 export async function getAssignmentResults(ownerId: string, id: string): Promise<AssignmentResults | null> {
@@ -337,24 +463,184 @@ export async function getAssignmentResults(ownerId: string, id: string): Promise
   const db = await getDb();
   const doc = await db.collection<AssignmentDoc>(COL.assignments).findOne({ _id: oid, owner_id: ownerId });
   if (!doc) return null;
-  const attempts = await db.collection<AttemptDoc>(COL.assignmentAttempts)
-    .find({ assignment_id: id })
-    .sort({ score: -1 })
-    .limit(500)
-    .toArray();
+  const attemptsCol = db.collection<AttemptDoc>(COL.assignmentAttempts);
+  const objectiveCodes = doc.tasks.map((task) => task.objectiveCode?.trim() || null);
+  const [attempts, totalParticipants, taskAgg, objectiveAgg, scoreAgg] = await Promise.all([
+    attemptsCol.find({ assignment_id: id, owner_id: ownerId }).sort({ score: -1 }).limit(500).toArray(),
+    attemptsCol.countDocuments({ assignment_id: id, owner_id: ownerId }),
+    attemptsCol.aggregate<{
+      _id: number;
+      participants: number;
+      correctCount: number;
+      attemptCount: number;
+      omittedCount: number;
+      omissionKnownCount: number;
+    }>([
+      { $match: { assignment_id: id, owner_id: ownerId } },
+      { $unwind: { path: "$per_task", includeArrayIndex: "taskIndex" } },
+      {
+        $group: {
+          _id: "$taskIndex",
+          participants: { $sum: 1 },
+          correctCount: { $sum: { $cond: [{ $eq: ["$per_task.correct", true] }, 1, 0] } },
+          attemptCount: { $sum: { $ifNull: ["$attempts", 1] } },
+          omittedCount: { $sum: { $cond: [{ $eq: ["$per_task.omitted", true] }, 1, 0] } },
+          omissionKnownCount: { $sum: { $cond: [{ $eq: [{ $type: "$per_task.omitted" }, "bool"] }, 1, 0] } },
+        },
+      },
+    ]).toArray(),
+    attemptsCol.aggregate<{
+      _id: string | null;
+      participants: number;
+      responseCount: number;
+      correctCount: number;
+      attemptCount: number;
+      omittedCount: number;
+      omissionKnownCount: number;
+    }>([
+      { $match: { assignment_id: id, owner_id: ownerId } },
+      { $unwind: { path: "$per_task", includeArrayIndex: "taskIndex" } },
+      { $addFields: { objectiveCode: { $arrayElemAt: [objectiveCodes, "$taskIndex"] } } },
+      {
+        $group: {
+          _id: { student: "$student_name", objectiveCode: "$objectiveCode" },
+          responseCount: { $sum: 1 },
+          correctCount: { $sum: { $cond: [{ $eq: ["$per_task.correct", true] }, 1, 0] } },
+          attemptCount: { $sum: { $ifNull: ["$attempts", 1] } },
+          omittedCount: { $sum: { $cond: [{ $eq: ["$per_task.omitted", true] }, 1, 0] } },
+          omissionKnownCount: { $sum: { $cond: [{ $eq: [{ $type: "$per_task.omitted" }, "bool"] }, 1, 0] } },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.objectiveCode",
+          participants: { $sum: 1 },
+          responseCount: { $sum: "$responseCount" },
+          correctCount: { $sum: "$correctCount" },
+          attemptCount: { $sum: "$attemptCount" },
+          omittedCount: { $sum: "$omittedCount" },
+          omissionKnownCount: { $sum: "$omissionKnownCount" },
+        },
+      },
+    ]).toArray(),
+    attemptsCol.aggregate<{ _id: null; averageScore: number }>([
+      { $match: { assignment_id: id, owner_id: ownerId } },
+      { $group: { _id: null, averageScore: { $avg: "$score" } } },
+    ]).toArray(),
+  ]);
+  const minimumGroupSize = 5;
+  const taskByIndex = new Map(taskAgg.map((row) => [Number(row._id), row]));
+  const makeStats = (
+    participants: number,
+    responseCount: number,
+    correctCount: number,
+    attemptCount: number,
+    omittedCount: number,
+    omissionKnownCount: number,
+  ) => {
+    const suppressed = participants < minimumGroupSize;
+    const incorrectCount = responseCount - correctCount;
+    return {
+      suppressed,
+      participants: suppressed ? null : participants,
+      responseCount: suppressed ? null : responseCount,
+      correctCount: suppressed ? null : correctCount,
+      incorrectCount: suppressed ? null : incorrectCount,
+      accuracyPercent: suppressed || responseCount === 0 ? null : Math.round((correctCount / responseCount) * 100),
+      attemptCount: suppressed ? null : attemptCount,
+      omittedCount: suppressed || omissionKnownCount !== responseCount ? null : omittedCount,
+    };
+  };
+  const analyticsTasks = doc.tasks.map((task, taskIndex) => {
+    const aggregate = taskByIndex.get(taskIndex);
+    const participants = aggregate?.participants ?? 0;
+    const correctCount = aggregate?.correctCount ?? 0;
+    return {
+      taskIndex,
+      question: task.question,
+      objectiveCode: task.objectiveCode?.trim() || null,
+      ...makeStats(participants, participants, correctCount, aggregate?.attemptCount ?? 0, aggregate?.omittedCount ?? 0, aggregate?.omissionKnownCount ?? 0),
+    };
+  });
+  const analyticsObjectives = objectiveAgg.map((row) => ({
+    objectiveCode: row._id,
+    ...makeStats(row.participants, row.responseCount, row.correctCount, row.attemptCount, row.omittedCount, row.omissionKnownCount),
+  }));
   return {
     id,
     code: doc.code,
     title: doc.title,
-    status: doc.status,
+    subject: doc.subject,
+    grade: doc.grade,
+    feedbackMode: doc.feedbackMode ?? "correct_only",
+    editableTasks: doc.tasks.map(toPublicTask),
+    editFingerprint: taskFingerprint(doc.tasks),
+    sourceAssignmentId: doc.source.assignmentId ?? null,
+    status: doc.status !== "open" ? "closed" : doc.expires_at.getTime() <= Date.now() ? "expired" : "open",
     maxScore: doc.tasks.reduce((s, t) => s + Math.max(1, t.points), 0),
+    studentCount: totalParticipants,
+    averageScore: scoreAgg[0]?.averageScore ?? null,
+    rowsTruncated: totalParticipants > attempts.length,
     rows: attempts.map((a) => ({
       name: (a as { display_name?: string }).display_name ?? a.student_name,
       score: a.score,
+      lastScore: typeof a.last_score === "number" ? a.last_score : null,
+      lastMaxScore: typeof a.last_max_score === "number" ? a.last_max_score : null,
       attempts: a.attempts,
-      createdAt: a.created_at.toISOString(),
+      createdAt: (a.last_submitted_at ?? a.created_at).toISOString(),
     })),
+    analytics: {
+      hasData: totalParticipants > 0 && (taskAgg.length > 0 || objectiveAgg.length > 0),
+      minimumGroupSize,
+      overallParticipants: totalParticipants >= minimumGroupSize ? totalParticipants : null,
+      tasks: analyticsTasks,
+      objectives: analyticsObjectives,
+    },
   };
+}
+
+/** Новый snapshot после ручной правки текста; исходная выдача и её попытки не меняются. */
+export async function createEditedReissue(ownerId: string, id: string, input: unknown) {
+  const parsed = editedReissueSchema.safeParse(input);
+  const oid = toObjectId(id);
+  if (!parsed.success || !oid) throw new Error("Некорректные данные повторной выдачи");
+  const db = await getDb();
+  const source = await db.collection<AssignmentDoc>(COL.assignments).findOne({ _id: oid, owner_id: ownerId });
+  if (!source || source.tasks.length !== parsed.data.tasks.length) throw new Error("Исходная выдача не найдена");
+  if (taskFingerprint(source.tasks) !== parsed.data.sourceFingerprint) {
+    throw new Error("Исходная выдача изменилась; обновите страницу и проверьте новый предпросмотр");
+  }
+  const edited = source.tasks.map((task, index) => {
+    const change = parsed.data.tasks[index];
+    if (task.id !== change.id) throw new Error("Состав заданий изменился; обновите страницу и проверьте выдачу ещё раз");
+    return { ...task, question: change.question, hint: change.hint?.trim() || undefined };
+  });
+  const checked = z.array(interactiveTaskSchema).safeParse(edited);
+  if (!checked.success) throw new Error("Изменённые задания не прошли проверку");
+  const now = new Date();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const code = randomCode();
+      const result = await db.collection<AssignmentDoc>(COL.assignments).insertOne({
+        code,
+        owner_id: ownerId,
+        title: parsed.data.title,
+        subject: source.subject,
+        grade: source.grade,
+        tasks: checked.data as InteractiveTask[],
+        feedbackMode: parsed.data.feedbackMode,
+        source: { assignmentId: id },
+        status: "open",
+        attempts_count: 0,
+        created_at: now,
+        expires_at: new Date(now.getTime() + parsed.data.daysValid * 86400_000),
+      });
+      return { id: result.insertedId.toHexString(), code };
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+    }
+  }
+  throw new Error("Не удалось создать новую выдачу");
 }
 
 /** Повтор прошлой выдачи: те же задания, новый код и срок. */
@@ -375,6 +661,7 @@ export async function repeatAssignment(ownerId: string, id: string, daysValid = 
         subject: src.subject,
         grade: src.grade,
         tasks: src.tasks,
+        feedbackMode: src.feedbackMode ?? "correct_only",
         source: { assignmentId: id },
         status: "open",
         attempts_count: 0,

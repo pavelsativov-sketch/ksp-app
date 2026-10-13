@@ -102,6 +102,10 @@ export const COL = {
   // School Management
   schools: "schools",
   schoolMembers: "school_members",
+  schoolClassAssignments: "school_class_assignments",
+  schoolAuditEvents: "school_audit_events",
+  schoolPlanApprovals: "school_plan_approval_cycles",
+  notifications: "app_notifications",
   students: "students",
   attendance: "attendance",
   schoolGrades: "school_grades",
@@ -193,6 +197,22 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     ),
     // Удаление аккаунта и выгрузка данных идут по владельцу выдачи.
     db.collection(COL.assignmentAttempts).createIndex({ owner_id: 1 }, { name: "attempts_owner" }),
+    db.collection(COL.schoolClassAssignments).createIndex(
+      { school_id: 1, teacher_id: 1, class_name: 1 },
+      { unique: true, name: "school_class_assignment_unique" },
+    ),
+    db.collection(COL.schoolClassAssignments).createIndex({ school_id: 1, teacher_id: 1, active: 1 }, { name: "school_class_assignment_teacher_active" }),
+    db.collection(COL.schoolClassAssignments).createIndex({ school_id: 1, class_name: 1, active: 1 }, { name: "school_class_assignment_class_active" }),
+    db.collection(COL.schoolAuditEvents).createIndex({ school_id: 1, created_at: -1 }, { name: "school_audit_school_created" }),
+    db.collection(COL.schoolPlanApprovals).createIndex({ school_id: 1, plan_id: 1, cycle: 1 }, { unique: true, name: "school_plan_approval_cycle_unique" }),
+    db.collection(COL.schoolPlanApprovals).createIndex({ school_id: 1, status: 1, submitted_at: 1 }, { name: "school_plan_approval_queue" }),
+    db.collection(COL.schoolPlanApprovals).createIndex({ school_id: 1, status: 1, "snapshot.school_class_name": 1, submitted_at: 1 }, { name: "school_plan_approval_queue_by_class" }),
+    db.collection(COL.schoolPlanApprovals).createIndex({ school_id: 1, owner_id: 1, plan_id: 1, cycle: -1 }, { name: "school_plan_approval_owner_history" }),
+    db.collection(COL.notifications).createIndex({ user_id: 1, dedupe_key: 1 }, { unique: true, name: "notifications_user_dedupe_unique" }),
+    db.collection(COL.notifications).createIndex({ user_id: 1, created_at: -1 }, { name: "notifications_user_created" }),
+    db.collection(COL.notifications).createIndex({ created_at: 1 }, { expireAfterSeconds: 180 * 24 * 3600, name: "notifications_ttl" }),
+    db.collection(COL.schoolMembers).createIndex({ school_id: 1, user_id: 1 }, { unique: true, name: "school_members_unique" }),
+    db.collection(COL.schoolMembers).createIndex({ school_id: 1, role: 1 }, { name: "school_members_role" }),
     // Классы учителя: уникальность названия в пределах владельца,
     // чтобы «5-А» нельзя было завести дважды.
     db.collection(COL.classes).createIndex({ owner_id: 1, name: 1 }, { unique: true, name: "classes_owner_name_unique" }),

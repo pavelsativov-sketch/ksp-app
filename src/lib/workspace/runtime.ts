@@ -207,7 +207,7 @@ async function ownedFiles(userId: string) {
  * Возвращает null если Vercel Sandbox не настроен (локальная разработка,
  * Cloudflare Workers или другие среды).
  */
-export async function getVercelSandbox(userId: string): Promise<unknown> {
+export async function getVercelSandbox(userId: string): Promise<Sandbox | null> {
   if (!usesVercelSandbox()) return null;
   return getAccountSandbox(userId);
 }

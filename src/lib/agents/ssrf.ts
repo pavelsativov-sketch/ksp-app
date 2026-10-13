@@ -1,5 +1,5 @@
 import net from "net";
-import { resolve4, resolve6 } from "node:dns/promises";
+import { lookup, resolve4, resolve6 } from "node:dns/promises";
 
 /**
  * Защита браузерного агента от SSRF.
@@ -127,22 +127,22 @@ export async function checkPublicUrl(raw: string): Promise<UrlCheck> {
     return { ok: false, error: "Запрос во внутреннюю сеть запрещён", status: 403 };
   }
 
-  const resolved = await Promise.allSettled([resolve4(host), resolve6(host)]);
-  const records = resolved.flatMap((result) =>
-    result.status === "fulfilled" ? result.value : [],
-  );
-  const unresolved = resolved.filter((result) => result.status === "rejected");
-  const onlyMissingAddressFamily = unresolved.every(
-    (result) => getDnsErrorCode(result.reason) === "ENODATA",
-  );
+  let addresses: string[] = [];
+  try {
+    const lookedUp = await lookup(host, { all: true });
+    addresses = lookedUp.map((r) => r.address);
+  } catch {
+    const resolved = await Promise.allSettled([resolve4(host), resolve6(host)]);
+    addresses = resolved.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    );
+  }
 
-  // One address family may legitimately have no records. Any other resolver
-  // failure is treated as an error, even if the other family resolved.
-  if (records.length === 0 || (unresolved.length > 0 && !onlyMissingAddressFamily)) {
+  if (addresses.length === 0) {
     return { ok: false, error: "Не удалось разрешить хост", status: 400 };
   }
 
-  if (records.some((address) => isBlockedAddress(address))) {
+  if (addresses.some((address) => isBlockedAddress(address))) {
     return { ok: false, error: "Запрос во внутреннюю сеть запрещён", status: 403 };
   }
 

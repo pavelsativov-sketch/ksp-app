@@ -22,6 +22,7 @@ interface Props {
   selectedCodes: string[];
   onAdd: (objectives: Array<{ code: string; text: string }>) => void;
   schoolProfile?: SchoolProfile;
+  language?: "ru" | "kz";
 }
 
 export function ObjectivesPicker({
@@ -31,6 +32,7 @@ export function ObjectivesPicker({
   selectedCodes,
   onAdd,
   schoolProfile,
+  language = "ru",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -93,6 +95,7 @@ export function ObjectivesPicker({
       (o) =>
         o.code.toLowerCase().includes(q) ||
         o.text_ru.toLowerCase().includes(q) ||
+        (o.text_kz?.toLowerCase().includes(q) ?? false) ||
         (o.section?.toLowerCase().includes(q) ?? false),
     );
   }, [items, search]);
@@ -120,7 +123,10 @@ export function ObjectivesPicker({
   function addSelected() {
     const rows = items
       .filter((o) => checked.has(o.id))
-      .map((o) => ({ code: o.code, text: o.text_ru }));
+      .map((o) => ({
+        code: o.code,
+        text: language === "kz" && o.text_kz ? o.text_kz : o.text_ru,
+      }));
     if (rows.length > 0) onAdd(rows);
     setChecked(new Set());
     setOpen(false);
@@ -211,7 +217,7 @@ export function ObjectivesPicker({
                   />
                   <div className="flex-1 text-sm">
                     <span className="font-mono text-slate-700 mr-2">{o.code}</span>
-                    <span>{o.text_ru}</span>
+                    <span>{language === "kz" && o.text_kz ? o.text_kz : o.text_ru}</span>
                     {already && (
                       <span className="text-xs text-slate-400 ml-2">
                         (уже добавлена)

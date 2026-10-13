@@ -50,10 +50,14 @@ describe("live-quiz helpers", () => {
       points: 1,
       options: ["a", "b", "c"],
       correctIndex: 2,
+      aiGenerated: true,
+      aiReviewed: false,
     };
     const pub = toPublicTask(task) as Extract<ReturnType<typeof toPublicTask>, { type: "MCQ" }>;
     expect(pub.options).toEqual(["a", "b", "c"]);
     expect("correctIndex" in pub).toBe(false);
+    expect("aiGenerated" in pub).toBe(false);
+    expect("aiReviewed" in pub).toBe(false);
   });
 
   it("toPublicTask strips secret fields from MATCHING and ORDERING", () => {

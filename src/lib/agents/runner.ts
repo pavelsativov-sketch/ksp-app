@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { executeWithFallback } from '@/lib/ai/providers';
 import { getControlOwner, waitForControl } from './session';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
+import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
 
 const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekty (сервис для учителей Казахстана).
 Файлы пользователя сохраняются в отдельной рабочей области аккаунта. Не пытайся обращаться
@@ -14,7 +15,9 @@ const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekt
 Доступные инструменты:
 - runCommand — выполнить ограниченную по времени команду в отдельной Linux-песочнице пользователя;
 - writeFile / readFile / listFiles — файлы в той же рабочей папке пользователя;
-- browserNavigate — открыть публичную страницу в облачном браузере и получить её текст;
+- browserNavigate — открыть публичную страницу в облачном браузере и получить её текст + список кликабельных элементов с координатами (x, y);
+- browserClick — кликнуть в облачном браузере по координатам (x, y) из списка interactables;
+- browserType — ввести текст в поле на странице в облачном браузере (с опциональными координатами x, y поля и нажатием Enter);
 - finishTask — завершить задачу с итоговым summary.
 Правила: делай шаги по одному, после каждого инструмента анализируй результат.
 Никогда не выдумывай результаты инструментов — они приходят в следующих сообщениях.
@@ -30,7 +33,9 @@ const TOOL_SCHEMAS = [
   { type: 'function' as const, function: { name: 'writeFile', description: 'Создать/перезаписать файл в песочнице', parameters: { type: 'object', properties: { filename: { type: 'string' }, content: { type: 'string' } }, required: ['filename', 'content'] } } },
   { type: 'function' as const, function: { name: 'readFile', description: 'Прочитать файл из песочницы', parameters: { type: 'object', properties: { filename: { type: 'string' } }, required: ['filename'] } } },
   { type: 'function' as const, function: { name: 'listFiles', description: 'Список файлов песочницы', parameters: { type: 'object', properties: {}, required: [] } } },
-  { type: 'function' as const, function: { name: 'browserNavigate', description: 'Открыть URL в headless-браузере, вернуть заголовок и текст страницы', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } },
+  { type: 'function' as const, function: { name: 'browserNavigate', description: 'Открыть URL в браузере, вернуть заголовок, видимый текст и список кликабельных элементов interactables с координатами (x, y)', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } },
+  { type: 'function' as const, function: { name: 'browserClick', description: 'Кликнуть в браузере по координатам (x, y) из списка interactables текущей страницы и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, intent: { type: 'string', description: 'Краткое пояснение, на какую кнопку нажимаем' } }, required: ['x', 'y'] } } },
+  { type: 'function' as const, function: { name: 'browserType', description: 'Ввести текст в поле на странице браузера (опционально кликнув по координатам x, y из interactables) и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, text: { type: 'string' }, pressEnter: { type: 'boolean' } }, required: ['text'] } } },
   { type: 'function' as const, function: { name: 'finishTask', description: 'Завершить задачу с итогом', parameters: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } } },
 ];
 
@@ -69,9 +74,12 @@ export async function runAgentTask(
     const activeToolSchemas = shellAvailable
       ? TOOL_SCHEMAS
       : TOOL_SCHEMAS.filter((tool) => tool.function.name !== 'runCommand');
-    const systemPrompt = shellAvailable
+    const baseSystemPrompt = shellAvailable
       ? SYSTEM_PROMPT
       : `${SYSTEM_PROMPT}\nВ этой рабочей области доступны браузер и файлы, но Linux-среда выполнения сейчас недоступна. Не вызывай команды и не утверждай, что скрипты запускались. Если задаче необходимо выполнить программу или системную команду, заверши её как заблокированную и объясни, что среда выполнения не настроена.`;
+    const systemPrompt = isBilimClassContext(prompt, '')
+      ? `${baseSystemPrompt}\n\n${bilimClassInstructions()}`
+      : baseSystemPrompt;
     const deadline = Date.now() + TIME_BUDGET_MS;
     // Сообщение о жёстком ограничении браузера (дневной лимит, 429):
     // только такие ошибки прерывают весь цикл. Мягкие ошибки (таймаут
@@ -143,19 +151,47 @@ export async function runAgentTask(
             return 'Остановлено пользователем';
           }
           await log({ type: 'RESUMED', message: 'Управление возвращено агенту. Продолжаю.' });
-          // После паузы агент не знает, что пользователь сделал в браузере.
-          // Вставляем текущий URL в историю — модель поймёт контекст и не
-          // завершит задачу «вслепую» после возобновления.
+          // После паузы агент должен увидеть актуальный URL и содержимое страницы,
+          // на которой учитель ввёл логин/пароль в рабочей области ОС.
           try {
-            const { getAgentBrowserSession } = await import('@/lib/agents/browser-session');
-            const browserSess = await getAgentBrowserSession(userId).catch(() => null);
-            if (browserSess) {
-              const currentUrl = browserSess.page.url();
+            const { getVercelSandbox } = await import('@/lib/workspace/runtime');
+            const { startSandboxBrowser, getSandboxBrowserState } = await import('@/lib/agents/browser-sandbox');
+            const { persistSandboxBrowserState, readStoredBrowserState, getAgentBrowserSession } = await import('@/lib/agents/browser-session');
+            const { readInteractables } = await import('@/lib/agents/computer/screen');
+            const sandbox = await getVercelSandbox(userId).catch(() => null);
+            if (sandbox) {
+              const stored = await readStoredBrowserState(userId).catch(() => null);
+              const page = await startSandboxBrowser(sandbox, {
+                storageState: stored?.storageState,
+                currentUrl: stored?.currentUrl,
+              });
+              const currentUrl = page.url();
+              const title = await page.title().catch(() => '');
+              const content = (await page.evaluate(() => {
+                const doc = window.document.cloneNode(true) as Document;
+                doc.querySelectorAll('script, style, nav, footer, iframe').forEach((el) => el.remove());
+                return (doc.body?.innerText ?? '').slice(0, 1500);
+              }).catch(() => '')) as string;
+              const interactables = await readInteractables(page as never);
+              const st = await getSandboxBrowserState(sandbox);
+              await persistSandboxBrowserState(userId, st.storageState, st.currentUrl).catch(() => {});
               if (currentUrl && /^https?:\/\//i.test(currentUrl)) {
                 messages.push({
                   role: 'user',
-                  content: `Управление возвращено агенту. Пока вы работали вручную, текущая страница: ${currentUrl}. Продолжай выполнять исходную задачу с этой точки.`,
+                  content: `Управление возвращено агенту после действий учителя в рабочей области ОС. Текущая страница: ${currentUrl}${title ? ` («${title}»)` : ''}.\nВидимый текст:\n${content}\nКликабельные элементы (interactables):\n${interactables}\nПродолжай выполнять исходную задачу с этой точки (используй browserClick или browserNavigate).`,
                 });
+              }
+            } else {
+              const browserSess = await getAgentBrowserSession(userId).catch(() => null);
+              if (browserSess) {
+                const currentUrl = browserSess.page.url();
+                const interactables = await readInteractables(browserSess.page as never);
+                if (currentUrl && /^https?:\/\//i.test(currentUrl)) {
+                  messages.push({
+                    role: 'user',
+                    content: `Управление возвращено агенту. Пока вы работали вручную, текущая страница: ${currentUrl}.\nКликабельные элементы (interactables):\n${interactables}\nПродолжай выполнять исходную задачу с этой точки (используй browserClick или browserNavigate).`,
+                  });
+                }
               }
             }
           } catch { /* браузер мог ещё не открыться — некритично */ }
@@ -233,16 +269,16 @@ export async function runAgentTask(
             }
           }
           await log({ type: 'TOOL_RESULT', message: humanToolResult(name, resultStr), data: { tool: name, result: resultStr } });
-          if (name === 'browserNavigate') {
+          if (name === 'browserNavigate' || name === 'browserClick' || name === 'browserType') {
             try {
-              const browserResult = JSON.parse(resultStr) as { success?: boolean; error?: string };
+              const browserResult = JSON.parse(resultStr) as {
+                success?: boolean;
+                error?: string;
+                url?: string;
+                authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string; domain?: string };
+              };
               if (browserResult.success === false) {
-                const errMsg = browserResult.error ?? 'Браузер не смог открыть страницу';
-                // Жёсткий лимит (дневная квота Cloudflare, 429) — прерываем всё.
-                // Мягкие ошибки (таймаут, недоступная страница) передаём модели:
-                // она получает resultStr с {success:false, error:...} и сама
-                // решает — повторить навигацию, попробовать другой URL или
-                // завершить задачу с объяснением.
+                const errMsg = browserResult.error ?? 'Браузер не смог выполнить действие';
                 const isHardLimit = /daily.{0,30}limit|time limit exceeded|10 minutes per day|достигнут дневной лимит/i.test(errMsg);
                 if (isHardLimit) {
                   hardBrowserFailure = errMsg;
@@ -251,6 +287,17 @@ export async function runAgentTask(
                 } else {
                   await log({ type: 'WARNING', message: `Браузер вернул ошибку: ${errMsg}. Агент продолжает.` });
                 }
+              } else if (
+                browserResult.authBarrier?.requiresUserAction &&
+                /(войди|авторизуй|отметь|заполни|выстави|расписан|журнал|оценк|домашн|дз\b|отчет|отчёт|логин|парол|дэшборд|дешборд|провед|ктп|урок)/i.test(prompt)
+              ) {
+                const { setControlOwner } = await import('@/lib/agents/session');
+                await setControlOwner(userId, 'user');
+                await log({
+                  type: 'PAUSED',
+                  message: browserResult.authBarrier.reason || 'Требуется вход: введите логин и пароль прямо на экране в рабочей области ОС («Браузер»), затем нажмите «Продолжить с ИИ».',
+                  data: { url: browserResult.url, authBarrier: browserResult.authBarrier },
+                });
               }
             } catch {
               // Не-JSON результат уходит модели без изменений.
@@ -296,6 +343,8 @@ function humanToolCall(name: string, args: Record<string, unknown>): string {
     case 'readFile': return `Читаю файл ${String(args.filename ?? '')}`;
     case 'listFiles': return 'Смотрю файлы рабочей области';
     case 'browserNavigate': return `Открываю страницу ${String(args.url ?? '')}`.slice(0, 300);
+    case 'browserClick': return `Нажимаю (${String(args.x ?? '?')}, ${String(args.y ?? '?')})${args.intent ? ` — ${String(args.intent)}` : ''}`.slice(0, 300);
+    case 'browserType': return `Ввожу текст «${String(args.text ?? '').slice(0, 80)}»`.slice(0, 300);
     case 'finishTask': return 'Завершаю задачу';
     default: return `Вызов ${name}`;
   }
@@ -303,8 +352,10 @@ function humanToolCall(name: string, args: Record<string, unknown>): string {
 
 function humanToolResult(name: string, resultStr: string): string {
   try {
-    const parsed = JSON.parse(resultStr) as { success?: boolean; output?: string; error?: string; title?: string; content?: string; files?: string[]; message?: string; exitCode?: number; stdout?: string; stderr?: string };
+    const parsed = JSON.parse(resultStr) as { success?: boolean; output?: string; error?: string; title?: string; content?: string; files?: string[]; message?: string; exitCode?: number; stdout?: string; stderr?: string; clicked?: string; typed?: string; url?: string };
     if (name === 'browserNavigate') return parsed.title ? `Страница: ${parsed.title}` : parsed.error ?? '';
+    if (name === 'browserClick') return parsed.clicked ? `Нажато: ${parsed.clicked} → ${parsed.title || parsed.url || ''}` : parsed.error ?? '';
+    if (name === 'browserType') return parsed.typed ? `Введено: «${parsed.typed}»` : parsed.error ?? '';
     if (name === 'runCommand') return parsed.error ?? `Код завершения ${String(parsed.exitCode ?? '?')}: ${String(parsed.stdout ?? parsed.stderr ?? '').slice(0, 250)}`;
     if (name === 'listFiles') return parsed.files?.length ? parsed.files.join(', ') : '(песочница пуста)';
     return parsed.message ?? parsed.error ?? parsed.output?.slice(0, 200) ?? 'готово';

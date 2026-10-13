@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Bot, ChevronDown, Loader2, Maximize2, Minimize2, Play, Plus, Square, X,
+  Bot, ChevronDown, ChevronRight, Loader2, Maximize2, Minimize2, Play, Plus, Sparkles, Square, X,
   FolderOpen, Globe, LayoutGrid, ScrollText, TerminalSquare, FileCode, Archive, Undo2,
 } from "lucide-react";
 import { AgentComposer } from "@/components/agents/agent-composer";
@@ -44,7 +44,18 @@ const EXTRA_TABS: TabDef[] = [{ id: "log", label: "Задача", icon: ScrollTe
  * план-чеклист, прогресс, отмена задачи), справа — рабочий стол с вкладками
  * приложений, режимом ручного управления и отдельными действиями задачи.
  */
-export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?: string; initialTab?: OsTab }) {
+export function SchoolWorkspace({
+  sysInfo = "",
+  initialTab = "os",
+  openComputerUse = false,
+  initialUrl,
+}: {
+  sysInfo?: string;
+  initialTab?: OsTab;
+  openComputerUse?: boolean;
+  /** Deep-link URL to open immediately in the browser tab (e.g., from connectors page). */
+  initialUrl?: string;
+}) {
   const router = useRouter();
   const task = useActiveAgentTask();
   const tab = useOsShellStore((s) => s.tab);
@@ -60,7 +71,18 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
   const [control, setControlState] = useState<"user" | "ai">("user");
   const [controlLoaded, setControlLoaded] = useState(false);
   const [editorFile, setEditorFile] = useState<string | null>(null);
+  const [browserUrl, setBrowserUrl] = useState<string | undefined>(initialUrl);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Фоновый прогрев песочницы и браузера при входе в рабочую область, чтобы
+  // первый запрос учителя не ждал холодного старта.
+  useEffect(() => {
+    void fetch("/api/agents/browser-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "warmup" }),
+    }).catch(() => {});
+  }, []);
 
   // «В редактор» из файл-менеджера: в двухпанельной раскладке редактор — это
   // вкладка, а не окно, поэтому переключаем вкладку. Реагируем на хранилище
@@ -90,7 +112,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
           setControlLoaded(true);
         }
       } catch { /* некритично */ }
-      if (alive) timer = setTimeout(() => void poll(), 15000);
+      if (alive) timer = setTimeout(() => void poll(), 4000);
     };
     void poll();
     return () => { alive = false; if (timer) clearTimeout(timer); };
@@ -131,11 +153,14 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
     return () => { alive = false; };
   }, [task]);
 
-  // Deep-link `?os=files` из серверной страницы переключает вкладку один раз
-  // при открытии и не спорит с выбором пользователя.
+  // Deep-link `?os=files` или `?os=computer-use` из серверной страницы
   useEffect(() => {
     if (initialTab) setTab(initialTab);
-  }, [initialTab, setTab]);
+    if (openComputerUse) {
+      setTab("os");
+      useWorkspaceStore.getState().openWindow("computer-use", "Работа с компьютером", "computer-use");
+    }
+  }, [initialTab, openComputerUse, setTab]);
 
   const visibleTabs = [
     ...BASE_TABS,
@@ -177,7 +202,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
       {/* ── Левая колонка: чат ── */}
       <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#0b0d13] lg:flex lg:w-[420px]`}>
         <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5">
-          <h1 className="text-sm font-bold text-slate-100">Новый чат</h1>
+          <h1 className="text-sm font-bold text-slate-100">Педагогический ассистент</h1>
           <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] font-semibold text-sky-200 lg:hidden">
             <LayoutGrid className="size-3.5" /> Открыть ОС
           </button>
@@ -227,7 +252,20 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
                   <StatusDot status={status} />
                 </div>
                 <PermissionCard active={status === "running"} />
-                <AgentSession taskId={task.id} variant="chat" onStatus={setStatus} />
+                <AgentSession
+                  taskId={task.id}
+                  variant="chat"
+                  onStatus={setStatus}
+                  onBrowserActivity={({ url, requiresUserAction, reason }) => {
+                    if (url) setBrowserUrl(url);
+                    setTab("browser");
+                    if (requiresUserAction) {
+                      setControlState("user");
+                      setMobileWorkspaceOpen(true);
+                      if (reason) setNotice(reason);
+                    }
+                  }}
+                />
               </div>
               {(status === "running" || status === "connecting") && (
                 <button
@@ -242,15 +280,99 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
             </>
           ) : (
             <div className="space-y-3 pt-2">
-              <p className="rounded-2xl bg-white/5 px-3.5 py-2.5 text-sm leading-6 text-slate-300">
-                Опишите задачу внизу — агент выполнит её по-настоящему: команды в песочнице, файлы, страницы.
-              </p>
-              <p className="px-1 text-sm leading-6 text-white/40">
-                Здесь появится план и пошаговый ход работы: команды, файлы, страницы.
-              </p>
-              <Link href="/school/agents" className="inline-block px-1 text-xs text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline">
-                История задач →
-              </Link>
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3.5">
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                  <Sparkles className="size-4 shrink-0" />
+                  <span>Автоматизация школьной документации</span>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+                  Выберите готовый конструктор отчётов или сформулируйте задачу внизу — ИИ составит документ по стандартам МП РК. Здесь появится план и пошаговый ход работы после запуска задачи.
+                </p>
+              </div>
+
+              <div>
+                <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Готовые ИИ-конструкторы
+                </p>
+                <div className="mt-2 grid grid-cols-1 gap-1.5">
+                  <Link
+                    href="/school/sor-soch"
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-base">📊</span>
+                      <span>
+                        <strong className="block font-semibold text-slate-100">Анализ СОР и СОЧ</strong>
+                        <span className="text-[11px] text-slate-400">Ввод баллов списком → расчёт качества и отчёт завучу</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
+                  </Link>
+
+                  <Link
+                    href="/school/vsk"
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-base">📋</span>
+                      <span>
+                        <strong className="block font-semibold text-slate-100">Справки ВШК</strong>
+                        <span className="text-[11px] text-slate-400">Конструктор аналитических справок по урокам и проверкам</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
+                  </Link>
+
+                  <Link
+                    href="/school/characteristics"
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-base">👤</span>
+                      <span>
+                        <strong className="block font-semibold text-slate-100">Характеристики</strong>
+                        <span className="text-[11px] text-slate-400">На ученика, класс, для ПМПК и органов опеки</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
+                  </Link>
+
+                  <Link
+                    href="/school/homeroom"
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-base">👨‍👩‍👧</span>
+                      <span>
+                        <strong className="block font-semibold text-slate-100">Классное руководство</strong>
+                        <span className="text-[11px] text-slate-400">Родительские собрания: повестка, доклад, протокол</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
+                  </Link>
+
+                  <Link
+                    href="/school/iom"
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-base">🎯</span>
+                      <span>
+                        <strong className="block font-semibold text-slate-100">Маршруты ИОМ</strong>
+                        <span className="text-[11px] text-slate-400">Индивидуальный план ликвидации пробелов знаний</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
+                  </Link>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between px-1 pt-1 text-xs text-slate-400">
+                <span>Либо опишите задачу ниже:</span>
+                <Link href="/school/agents" className="underline-offset-2 hover:text-slate-200 hover:underline">
+                  История задач →
+                </Link>
+              </div>
             </div>
           )}
         </div>
@@ -415,7 +537,7 @@ export function SchoolWorkspace({ sysInfo = "", initialTab = "os" }: { sysInfo?:
             большую пустую полосу внизу рабочей области. */}
         <div className="relative flex min-h-0 flex-1 flex-col">
           {tab === "os" && <WorkspaceSurface />}
-          {tab === "browser" && <BrowserApp />}
+          {tab === "browser" && <BrowserApp initialUrl={browserUrl} />}
           {tab === "files" && <FileManagerApp />}
           {tab === "terminal" && <TerminalApp />}
           {tab === "editor" && <CodeEditorApp requestedFile={editorFile} />}

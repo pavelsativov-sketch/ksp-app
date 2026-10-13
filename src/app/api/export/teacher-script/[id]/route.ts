@@ -14,16 +14,15 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // Лимит по IP общий для всех экспортов (см. export/docx).
-  const rl = await checkRateLimitAsync(`export:${clientIp(request)}`, 30, 60_000);
+  if (!isMongoConfigured()) return NextResponse.json({ error: "Сервер не настроен" }, { status: 500 });
+  const user = await getCurrentUser();
+  const rl = await checkRateLimitAsync(`export:${user?.id || clientIp(request)}`, 30, 60_000);
   if (!rl.ok) {
     return NextResponse.json(
       { error: "Слишком много скачиваний. Повторите через минуту." },
       { status: 429, headers: { "Retry-After": "60" } },
     );
   }
-  if (!isMongoConfigured()) return NextResponse.json({ error: "Сервер не настроен" }, { status: 500 });
-  const user = await getCurrentUser();
   const plan = await getAccessiblePlan(id, user?.id ?? null);
   if (!plan) return NextResponse.json({ error: "План не найден" }, { status: 404 });
 

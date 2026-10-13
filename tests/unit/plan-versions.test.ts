@@ -11,7 +11,7 @@ vi.mock("next/cache", () => ({ revalidatePath: mock.refresh }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`NEXT_REDIRECT:${url}`); } }));
 import { COL } from "@/lib/mongo";
 import { deletePlanWithVersions, getPlanHistory, PLAN_CONFLICT, updatePlanWithVersion, planState } from "@/lib/plan-versions";
-import { duplicatePlanAction, restorePlanVersionAction, saveDraftAction, savePlanAction } from "@/app/actions/plans";
+import { duplicatePlanAction, getPlanConflictSnapshotAction, restorePlanVersionAction, saveDraftAction, savePlanAction } from "@/app/actions/plans";
 
 const id = "111111111111111111111111";
 const other = "222222222222222222222222";
@@ -111,13 +111,54 @@ describe("transactional plan history (mock Mongo only)", () => {
     expect((await getPlanHistory(id, owner))?.versions).toHaveLength(0);
     expect(plans[0].title).toBe("Original");
   });
-  it("restores fields/draft flag, preserves current visibility and snapshots current state", async () => {
+  it("returns a structured conflict code for a stale editor save", async () => {
+    const result = await savePlanAction({
+      ...planState(plan()),
+      title: "Stale edit",
+      id,
+      expected_updated_at: "2026-09-17T11:00:00.000Z",
+    });
+    expect(result).toEqual({ error: PLAN_CONFLICT, code: "conflict" });
+  });
+  it("loads a conflict snapshot only for the plan owner", async () => {
+    const snapshot = await getPlanConflictSnapshotAction(id);
+    expect(snapshot).toMatchObject({
+      id,
+      title: "Original",
+      content: { topic: "Fractions" },
+      updated_at: time.toISOString(),
+    });
+    mock.auth.mockResolvedValue({ id: "stranger" });
+    expect(await getPlanConflictSnapshotAction(id)).toEqual({ error: "План не найден" });
+    mock.auth.mockResolvedValue(null);
+    expect(await getPlanConflictSnapshotAction(id)).toEqual({ error: "Требуется вход" });
+  });
+  it("restores fields while preserving current visibility/draft state and snapshots current state", async () => {
     const v = addVersion();
     const res = await restorePlanVersionAction({ plan_id: id, version_id: String(v._id), expected_updated_at: time.toISOString() });
     expect(res).toHaveProperty("id", id);
-    expect(plans[0]).toMatchObject({ title: "Old", is_draft: true, visibility: "private", owner_id: owner, created_at: time });
+    expect(plans[0]).toMatchObject({ title: "Old", is_draft: false, visibility: "private", owner_id: owner, created_at: time });
     expect(versions[1]).toMatchObject({ reason: "restore", snapshot: { title: "Original", visibility: "private" } });
     expect(plans[0].updated_at > time).toBe(true);
+  });
+  it("restores only selected sections and rejects an empty section selection", async () => {
+    plans[0].content = { ...plans[0].content, values: "Current context" };
+    const v = addVersion({ snapshot: {
+      ...planState(plan()),
+      title: "Old title",
+      content: { ...emptyKsp(), topic: "Old topic", values: "Old context" },
+      is_draft: true,
+      updated_at: time,
+    } });
+    const rejected = await restorePlanVersionAction({ plan_id: id, version_id: String(v._id), expected_updated_at: time.toISOString(), sections: [] });
+    expect(rejected).toEqual({ error: "Выберите один или несколько допустимых разделов для восстановления" });
+    expect(versions).toHaveLength(1);
+
+    const restored = await restorePlanVersionAction({ plan_id: id, version_id: String(v._id), expected_updated_at: time.toISOString(), sections: ["objectives"] });
+    expect(restored).toHaveProperty("id", id);
+    expect(plans[0]).toMatchObject({ title: "Original", visibility: "private", is_draft: false });
+    expect(plans[0].content.topic).toBe("Old topic");
+    expect(plans[0].content.values).toBe("Current context");
   });
   it.each([undefined, "bad", "2026-09-17", "2026-09-17T11:00:00.000Z"])("rejects missing, malformed or stale revision %s", async revision => {
     await expect(updatePlanWithVersion(id, owner, revision, { state: planState(plan()), reason: "save" })).rejects.toThrow(PLAN_CONFLICT);

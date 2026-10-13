@@ -1,6 +1,4 @@
 import type { NextConfig } from "next";
-import path from "node:path";
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -22,8 +20,7 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   // HSTS: браузер запоминает, что на этот домен ходят только по HTTPS.
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
-  // connect-src ограничен конкретными доменами: с 'https:' данные можно было бы
-  // увести на любой внешний хост.
+  // connect-src
   {
     key: "Content-Security-Policy",
     value: [
@@ -41,36 +38,16 @@ const securityHeaders = [
   },
 ];
 
-type WorkersEnvRequest = { request?: string };
-type WorkersEnvFactory = {
-  hooks: { beforeResolve: { tap: (name: string, callback: (request: WorkersEnvRequest) => void) => void } };
-};
-type WorkersEnvCompiler = {
-  hooks: { normalModuleFactory: { tap: (name: string, callback: (factory: WorkersEnvFactory) => void) => void } };
-};
-
 const nextConfig: NextConfig = {
-  webpack(config) {
-    // Browser Run launch receives the binding object explicitly. This shim
-    // replaces the Workers-only ambient import used by optional convenience
-    // helpers inside @cloudflare/playwright in the shared Next server bundle.
-    const workersEnvShim = path.resolve(process.cwd(), "src/lib/cloudflare-workers-env-shim.ts");
-    config.plugins.push({
-      apply(compiler: unknown) {
-        (compiler as WorkersEnvCompiler).hooks.normalModuleFactory.tap("MektyWorkersEnvShim", (factory) => {
-          factory.hooks.beforeResolve.tap("MektyWorkersEnvShim", (request) => {
-            if (request?.request === "cloudflare:workers") request.request = workersEnvShim;
-          });
-        });
-      },
-    });
-    return config;
-  },
+  serverExternalPackages: [
+    "pdf-parse",
+    "pdfjs-dist",
+    "playwright",
+    "playwright-core",
+  ],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
 };
-
-if (process.env.NODE_ENV !== "production") initOpenNextCloudflareForDev();
 
 export default nextConfig;

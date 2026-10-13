@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { saveKit } from "@/lib/kits";
-import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import type { Handout } from "@/lib/handouts/types";
 
 export const runtime = "nodejs";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
 
-  const rl = await checkRateLimitAsync(`kit:save:${clientIp(request)}`, 30, 3600_000);
+  const rl = await checkRateLimitAsync(`kit:save:${user.id}`, 30, 3600_000);
   if (!rl.ok) return NextResponse.json({ error: "Слишком много сохранений. Попробуйте позже." }, { status: 429 });
 
   let json: unknown;

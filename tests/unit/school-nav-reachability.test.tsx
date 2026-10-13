@@ -37,8 +37,24 @@ function existingSections(): string[] {
     .filter((entry) => statSync(join(SCHOOL_DIR, entry)).isDirectory());
 }
 
-/** Разделы, до которых должен быть путь из навигации. */
+/** Разделы ИИ-генераторов и подключений, до которых должен быть путь из навигации. */
 const NAVIGABLE = [
+  "sor-soch",
+  "vsk",
+  "characteristics",
+  "homeroom",
+  "iom",
+  "connectors",
+];
+
+/** Пункты, которые уже были в рельсе и не проверяются. */
+const PRE_EXISTING = ["dashboard", "agents", "settings"];
+
+/** Старые ручные разделы и служебные страницы, исключённые из главного меню. */
+const EXCLUDED_FROM_RAIL = [
+  "create",
+  "workspace",
+  "approvals",
   "classes",
   "students",
   "teachers",
@@ -46,12 +62,7 @@ const NAVIGABLE = [
   "curriculum",
   "quality",
   "reports",
-  "vsk",
-  "connectors",
 ];
-
-/** Пункты, которые уже были в рельсе и не проверяются. */
-const PRE_EXISTING = ["dashboard", "agents", "settings"];
 
 afterEach(cleanup);
 
@@ -83,14 +94,12 @@ describe("навигация школы", () => {
     expect(missing, `нет таких страниц: ${missing.join(", ")}`).toEqual([]);
   });
 
-  it("все существующие разделы школы покрыты навигацией", async () => {
-    // Обратная полнота: страница есть, а пути к ней нет — она мертва.
+  it("все активные разделы школы покрыты навигацией", async () => {
     const { MORE_SECTIONS } = await import("@/components/school/school-rail");
     const linked = new Set(MORE_SECTIONS.map((s) => s.href.replace("/school/", "")));
     for (const item of PRE_EXISTING) linked.add(item);
-    // create и workspace открываются кнопками и диалогами, а не пунктами меню.
     const orphans = existingSections().filter(
-      (section) => !linked.has(section) && !["create", "workspace"].includes(section),
+      (section) => !linked.has(section) && !EXCLUDED_FROM_RAIL.includes(section),
     );
     expect(orphans, `разделы без навигации: ${orphans.join(", ")}`).toEqual([]);
   });

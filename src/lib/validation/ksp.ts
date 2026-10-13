@@ -5,6 +5,15 @@ const MAX_LIST_ITEMS = 50;
 const text = z.string().trim().max(MAX_TEXT_LENGTH);
 const nonEmptyText = text.min(1);
 const objectId = z.string().regex(/^[0-9a-f]{24}$/i, "Некорректный идентификатор");
+const provenanceSchema = z.object({
+  sourcePlanId: objectId,
+  sourcePlanTitle: text.max(300),
+  sourceGrade: z.number().int().min(1).max(11),
+  sourceLanguage: z.enum(["ru", "kz"]),
+  blockKind: z.enum(["stage", "task", "criterion"]),
+  sourceStage: z.enum(["beginning", "middle", "end"]).optional(),
+  copiedAt: z.string().datetime(),
+});
 
 const taskBase = {
   id: z.string().trim().min(1).max(100),
@@ -14,6 +23,10 @@ const taskBase = {
   hint: text.nullish().transform((v) => v ?? undefined),
   points: z.number().int().min(1).max(100).default(1),
   objectiveCode: text.max(100).nullish().transform((v) => v ?? undefined),
+  criterionTexts: z.array(text).max(50).optional(),
+  aiGenerated: z.boolean().optional(),
+  aiReviewed: z.boolean().optional(),
+  copiedFrom: provenanceSchema.optional(),
   timeLimitSec: z.number().int().min(0).max(3600).optional(),
   shuffle: z.boolean().optional(),
 };
@@ -48,6 +61,7 @@ const stageSchema = z.object({
   studentActions: text.default(""),
   resources: text.default(""),
   tasks: z.array(interactiveTaskSchema).max(20).default([]),
+  copiedFrom: provenanceSchema.optional(),
   keyQuestions: z.array(text).max(MAX_LIST_ITEMS).default([]),
   descriptors: z.array(text).max(MAX_LIST_ITEMS).default([]),
   assessmentMethod: text.default(""),
@@ -65,11 +79,16 @@ const headerSchema = z.object({
 
 export const kspContentSchema = z.object({
   schoolProfile: z.enum(["emn", "ogn"]).optional(),
+  qualityTargets: z.object({
+    durationMinutes: z.number().int().min(10).max(180).optional(),
+    taskPoints: z.number().int().min(1).max(100).optional(),
+  }).optional(),
   header: headerSchema,
   topic: nonEmptyText,
   learningObjectives: z.array(z.object({ code: text.max(100), text: text })).max(MAX_LIST_ITEMS).default([]),
   lessonObjectives: z.array(text).max(MAX_LIST_ITEMS).default([]),
   assessmentCriteria: z.array(text).max(MAX_LIST_ITEMS).default([]),
+  assessmentCriterionSources: z.array(z.object({ criterion: nonEmptyText, provenance: provenanceSchema })).max(MAX_LIST_ITEMS).optional(),
   languageObjectives: z.object({ terms: z.array(text).max(MAX_LIST_ITEMS).default([]), phrases: z.array(text).max(MAX_LIST_ITEMS).default([]) }).default({ terms: [], phrases: [] }),
   values: text.default(""), crossCurricularLinks: text.default(""), priorKnowledge: text.default(""),
   stages: z.object({ beginning: stageSchema, middle: stageSchema, end: stageSchema }),

@@ -15,9 +15,18 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
     (c.stages.beginning.tasks?.length ?? 0) +
     (c.stages.middle.tasks?.length ?? 0) +
     (c.stages.end.tasks?.length ?? 0);
+  const headerItems: Array<[string, string]> = [
+    ["Раздел долгосрочного плана", c.header.longTermPlanSection],
+    ["Школа", c.header.school],
+    ["Дата", c.header.date],
+    ["ФИО учителя", c.header.teacherName],
+    ["Класс", c.header.grade || String(plan.grade)],
+    ["Присутствовало / Отсутствовало", `${c.header.studentsPresent ?? "—"} / ${c.header.studentsAbsent ?? "—"}`],
+    ["Тема урока", c.topic],
+  ];
   return (
     <div className="print-plan space-y-8 rounded-2xl border border-[#ddd5cb] bg-surface p-5 md:p-8">
-      <div className="border-b border-[#ddd5cb] pb-5 text-center"><p className="editorial-kicker">Краткосрочный план урока</p><h2 className="editorial-display mt-3 text-4xl">{plan.title}</h2></div>
+      <div className="border-b border-[#ddd5cb] pb-5 text-center"><p className="editorial-kicker">Краткосрочный план урока</p><h2 className="editorial-display mt-3 break-words text-3xl sm:text-4xl">{plan.title}</h2></div>
 
       {totalTasks > 0 && (
         <div className="no-print flex justify-center">
@@ -44,18 +53,15 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
         />
       )}
 
-      <div className="overflow-x-auto border-y border-[#ddd5cb]"><table className="w-full min-w-[560px] text-sm"><tbody>
-          <TableRow label="Раздел долгосрочного плана" value={c.header.longTermPlanSection} />
-          <TableRow label="Школа" value={c.header.school} />
-          <TableRow label="Дата" value={c.header.date} />
-          <TableRow label="ФИО учителя" value={c.header.teacherName} />
-          <TableRow label="Класс" value={c.header.grade || String(plan.grade)} />
-          <TableRow
-            label="Присутствовало / Отсутствовало"
-            value={`${c.header.studentsPresent ?? "—"} / ${c.header.studentsAbsent ?? "—"}`}
-          />
-          <TableRow label="Тема урока" value={c.topic} />
+      <div className="hidden overflow-x-auto border-y border-[#ddd5cb] sm:block"><table className="w-full min-w-[560px] text-sm"><tbody>
+          {headerItems.map(([label, value]) => <TableRow key={label} label={label} value={value} />)}
         </tbody></table></div>
+      <dl className="grid gap-2 border-y border-[#ddd5cb] py-3 sm:hidden">
+        {headerItems.map(([label, value]) => <div key={label} className="rounded-lg bg-muted/40 px-3 py-2">
+          <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
+          <dd className="mt-0.5 break-words text-sm">{value || "—"}</dd>
+        </div>)}
+      </dl>
 
       <Section title="Цели обучения">
         {c.learningObjectives.length > 0 ? (
@@ -143,7 +149,7 @@ function Section({
       <h2 className="editorial-display border-b border-[#ddd5cb] pb-2 text-2xl">
         {title}
       </h2>
-      <div className="text-sm space-y-1">{children}</div>
+      <div className="break-words text-sm space-y-1">{children}</div>
     </section>
   );
 }
@@ -217,8 +223,15 @@ function StageTable({
 }
 
 function StageBody({ stage }: { stage: LessonStage }) {
+  const rows: Array<[string, string]> = [
+    ["Время", stage.time],
+    ["Действия учителя", stage.teacherActions],
+    ["Действия учеников", stage.studentActions],
+    ["Ресурсы", stage.resources],
+  ];
   return (
-    <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm border border-[#cfc5b5]">
+    <>
+    <div className="hidden overflow-x-auto sm:block"><table className="w-full min-w-[620px] text-sm border border-[#cfc5b5]">
       <thead>
         <tr className="bg-[#ebe3d4]">
           <th className="w-[15%] border border-[#cfc5b5] p-2 text-left">Время</th>
@@ -236,5 +249,12 @@ function StageBody({ stage }: { stage: LessonStage }) {
         </tr>
       </tbody>
     </table></div>
+    <dl className="grid gap-2 sm:hidden">
+      {rows.map(([label, value]) => <div key={label} className="rounded-lg border border-[#d9d1c3] bg-surface p-3">
+        <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
+        <dd className="mt-1 whitespace-pre-wrap break-words text-sm">{value || "—"}</dd>
+      </div>)}
+    </dl>
+    </>
   );
 }

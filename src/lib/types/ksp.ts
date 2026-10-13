@@ -4,10 +4,18 @@
  */
 
 import type { InteractiveTask } from "@/lib/ksp/tasks";
+import type { ReusableBlockProvenance, ReusedCriterionSource } from "@/lib/types/provenance";
 
 export type Visibility = "private" | "unlisted" | "public";
 export type Language = "ru" | "kz";
 export type SchoolProfile = "emn" | "ogn";
+
+export interface KspQualityTargets {
+  /** Teacher-selected planning aid; never an official timing requirement. */
+  durationMinutes?: number;
+  /** Teacher-selected point scale for the lesson's interactive tasks. */
+  taskPoints?: number;
+}
 
 /** Этап урока: начало / середина / конец */
 export interface LessonStage {
@@ -21,6 +29,8 @@ export interface LessonStage {
   resources: string;
   /** Интерактивные задания, привязанные к этому этапу */
   tasks?: InteractiveTask[];
+  /** Teacher-side source metadata when this stage was copied from an owned KSP. */
+  copiedFrom?: ReusableBlockProvenance;
   /**
    * Ключевые вопросы (кумулятивная беседа) — открытые/закрытые вопросы
    * для повторения, актуализации, обсуждения. Используется в начале урока,
@@ -78,6 +88,8 @@ export interface LessonHeader {
 export interface KspContent {
   /** Профиль старшей школы для выбора ТУП и генерации КСП. */
   schoolProfile?: SchoolProfile;
+  /** Optional teacher-selected thresholds used only by the advisory quality gate. */
+  qualityTargets?: KspQualityTargets;
   header: LessonHeader;
   /** Тема урока */
   topic: string;
@@ -90,6 +102,8 @@ export interface KspContent {
   lessonObjectives: string[];
   /** Критерии оценивания */
   assessmentCriteria: string[];
+  /** Source metadata for criteria copied from the teacher's other KSPs. */
+  assessmentCriterionSources?: ReusedCriterionSource[];
   /** Языковые цели: термины и ключевые фразы */
   languageObjectives: {
     terms: string[];
@@ -127,6 +141,7 @@ export function emptyKsp(): KspContent {
     learningObjectives: [],
     lessonObjectives: [],
     assessmentCriteria: [],
+    assessmentCriterionSources: [],
     languageObjectives: { terms: [], phrases: [] },
     values: "",
     crossCurricularLinks: "",

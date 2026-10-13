@@ -3,8 +3,8 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { log } from "@/lib/logger";
-import { browserFailure, clearAgentBrowserSession, getAgentBrowserSession, persistAgentBrowserSession, persistSandboxBrowserState } from "@/lib/agents/browser-session";
-import { startSandboxBrowser, getSandboxBrowserState, type BrowserSandbox } from "@/lib/agents/browser-sandbox";
+import { browserFailure, clearAgentBrowserSession, getAgentBrowserSession, persistAgentBrowserSession, persistSandboxBrowserState, readStoredBrowserState } from "@/lib/agents/browser-session";
+import { startSandboxBrowser, getSandboxBrowserState, inspectActiveField, detectPageAuthBarrier, type BrowserSandbox } from "@/lib/agents/browser-sandbox";
 import { getVercelSandbox } from "@/lib/workspace/runtime";
 
 export const runtime = "nodejs";
@@ -43,7 +43,7 @@ async function authorize() {
   const auth = await requireApiAuth();
   if (auth.response) return { response: auth.response } as const;
 
-  const rl = await checkRateLimitAsync(`agent:browser-stream:${auth.user.id}`, 40, 60_000);
+  const rl = await checkRateLimitAsync(`agent:browser-stream:${auth.user.id}`, 60, 60_000);
   if (!rl.ok) {
     return { response: NextResponse.json(
       { error: "Слишком много обращений к браузеру. Подождите минуту." },
@@ -60,7 +60,15 @@ async function runAction(userId: string, args: BrowserAction) {
   const sandbox = await getVercelSandbox(userId).catch(() => null) as BrowserSandbox | null;
   if (sandbox) {
     try {
-      const page = await startSandboxBrowser(sandbox);
+      const stored = await readStoredBrowserState(userId).catch(() => undefined);
+      const page = await startSandboxBrowser(sandbox, {
+        storageState: stored?.storageState,
+        currentUrl: stored?.currentUrl,
+      });
+
+      if (action === "warmup") {
+        return NextResponse.json({ ok: true, url: page.url() });
+      }
 
       if (action === "navigate") {
         const nav = searchUrl(typeof args.url === "string" ? args.url : "");
@@ -85,7 +93,7 @@ async function runAction(userId: string, args: BrowserAction) {
           return NextResponse.json({ error: "Недопустимая клавиша" }, { status: 400 });
         }
         await page.keyboard.press(key);
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(300);
       } else if (action === "scroll") {
         const dy = Number(args.dy ?? 0);
         if (!Number.isFinite(dy)) return NextResponse.json({ error: "Некорректная прокрутка" }, { status: 400 });
@@ -96,17 +104,20 @@ async function runAction(userId: string, args: BrowserAction) {
       } else if (action === "forward") {
         await page.goForward({ timeout: 10_000 });
       } else if (action === "reload") {
-        // Перезагрузка через повторный goto текущего URL
         await page.goto(page.url() || "about:blank", { timeout: 15_000 });
       } else if (action !== "screenshot") {
         return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
       }
 
-      const screenshot = await page.screenshot({ type: "jpeg", quality: 80 });
-      const title = await page.title();
+      const [screenshot, title, activeField, authBarrier] = await Promise.all([
+        page.screenshot({ type: "jpeg", quality: 80 }),
+        page.title().catch(() => ""),
+        inspectActiveField(page),
+        detectPageAuthBarrier(page),
+      ]);
       const currentUrl = page.url();
 
-      // Сохраняем сессию после каждого действия (не только скриншота)
+      // Сохраняем сессию (куки, localStorage, URL) в MongoDB после каждого действия
       if (action !== "screenshot") {
         const state = await getSandboxBrowserState(sandbox);
         await persistSandboxBrowserState(userId, state.storageState, state.currentUrl).catch(() => {});
@@ -117,20 +128,20 @@ async function runAction(userId: string, args: BrowserAction) {
           "Content-Type": "image/jpeg",
           "X-Page-Title": encodeURIComponent(title),
           "X-Page-Url": encodeURIComponent(currentUrl),
+          "X-Active-Field": encodeURIComponent(JSON.stringify(activeField)),
+          "X-Auth-Barrier": encodeURIComponent(JSON.stringify(authBarrier)),
           "Cache-Control": "no-store",
         },
       });
     } catch (sbErr) {
       const reason = sbErr instanceof Error ? sbErr.message : String(sbErr);
       log.error("browser-stream sandbox failed", { userId, action, reason });
-      // Если установка ещё идёт — сообщаем пользователю
       if (reason.includes("failed to start") || reason.includes("installation failed")) {
         return NextResponse.json(
-          { error: "Браузер запускается (~5 мин при первом старте). Обновите страницу через минуту." },
+          { error: "Браузер запускается (~15–30 сек при холодном старте). Подождите немного." },
           { status: 503 },
         );
       }
-      // Любая другая ошибка sandbox → падаем с понятным сообщением
       return NextResponse.json({ error: reason.slice(0, 200) }, { status: 502 });
     }
   }

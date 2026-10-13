@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { createLessonPlanSchema, lessonPlanMetaSchema } from "@/lib/validation/ksp";
 import type { KspContent } from "@/lib/types/ksp";
 import type { PlanDoc } from "@/lib/plans-repo";
-import { deletePlanWithVersions, isBoundedPlan, planMutationError, updatePlanWithVersion, planState } from "@/lib/plan-versions";
+import { deletePlanWithVersions, isBoundedPlan, planMutationError, updatePlanWithVersion, planState, PLAN_CONFLICT, PLAN_VERSION_SECTIONS, type PlanSection } from "@/lib/plan-versions";
 import { reportPlan } from "@/lib/moderation";
 import { classBelongsTo } from "@/lib/classes";
 
@@ -26,7 +26,15 @@ export interface SavePlanInput {
   /** Required for existing plans to reject stale editors. */
   expected_updated_at?: string;
 }
-export type SavePlanResult = { id: string; updated_at?: string } | { error: string };
+export type SavePlanResult = { id: string; updated_at?: string } | { error: string; code?: "conflict" };
+export type PlanConflictSnapshot = Omit<SavePlanInput, "expected_updated_at"> & { id: string; updated_at: string };
+
+function saveActionError(error: unknown, fallback: string): SavePlanResult {
+  const message = planMutationError(error, fallback);
+  return error instanceof Error && error.message === PLAN_CONFLICT
+    ? { error: message, code: "conflict" }
+    : { error: message };
+}
 
 function refreshPlan(id: string) {
   revalidatePath(`/plans/${id}`);
@@ -61,7 +69,7 @@ export async function savePlanAction(input: SavePlanInput): Promise<SavePlanResu
     revalidatePath("/dashboard");
     return { id: result.insertedId.toString(), updated_at: now.toISOString() };
   } catch (error) {
-    return { error: planMutationError(error, "Не удалось сохранить: база данных недоступна") };
+    return saveActionError(error, "Не удалось сохранить: база данных недоступна");
   }
 }
 
@@ -93,7 +101,35 @@ export async function saveDraftAction(input: SavePlanInput): Promise<SavePlanRes
     revalidatePath("/dashboard");
     return { id: result.insertedId.toString(), updated_at: now.toISOString() };
   } catch (error) {
-    return { error: planMutationError(error, "Не удалось сохранить черновик: база данных недоступна") };
+    return saveActionError(error, "Не удалось сохранить черновик: база данных недоступна");
+  }
+}
+
+/** Returns the latest full plan only to its authenticated owner after a revision conflict. */
+export async function getPlanConflictSnapshotAction(id: string): Promise<PlanConflictSnapshot | { error: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { error: "Требуется вход" };
+    const oid = toObjectId(id);
+    if (!oid) return { error: "Некорректный id" };
+    const db = await getDb();
+    const current = await db.collection<PlanDoc>(COL.plans).findOne({ _id: oid, owner_id: user.id });
+    if (!current) return { error: "План не найден" };
+    return {
+      id: oid.toHexString(),
+      title: current.title,
+      subject_id: current.subject_id,
+      grade: current.grade,
+      quarter: current.quarter,
+      section: current.section ?? null,
+      class_id: current.class_id ?? null,
+      visibility: current.visibility,
+      language: current.language,
+      content: current.content,
+      updated_at: current.updated_at.toISOString(),
+    };
+  } catch {
+    return { error: "Не удалось загрузить актуальную версию" };
   }
 }
 
@@ -140,10 +176,23 @@ export async function restorePlanVersionAction(input: {
   plan_id: string;
   version_id: string;
   expected_updated_at?: string;
-}): Promise<SavePlanResult> {  try {
+  sections?: PlanSection[];
+}): Promise<SavePlanResult> {
+  try {
     const user = await getCurrentUser();
     if (!user) return { error: "Требуется вход" };
-    const result = await updatePlanWithVersion(input.plan_id, user.id, input.expected_updated_at, { versionId: input.version_id });
+    if (input.sections !== undefined) {
+      const valid = Array.isArray(input.sections)
+        && input.sections.length > 0
+        && input.sections.length <= PLAN_VERSION_SECTIONS.length
+        && new Set(input.sections).size === input.sections.length
+        && input.sections.every((section) => (PLAN_VERSION_SECTIONS as readonly string[]).includes(section));
+      if (!valid) return { error: "Выберите один или несколько допустимых разделов для восстановления" };
+    }
+    const result = await updatePlanWithVersion(input.plan_id, user.id, input.expected_updated_at, {
+      versionId: input.version_id,
+      ...(input.sections === undefined ? {} : { sections: input.sections }),
+    });
     refreshPlan(result.id);
     return result;
   } catch (error) {

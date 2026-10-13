@@ -23,6 +23,7 @@ import {
   type SafetyDecision,
 } from "./safety";
 import { bilimClassInstructions, isBilimClassContext } from "@/lib/agents/domain-skills/bilimclass";
+import { detectPageAuthBarrier, type PageAuthBarrier } from "@/lib/agents/browser-sandbox";
 
 /**
  * Цикл агента «Использование компьютера».
@@ -88,6 +89,8 @@ export interface RunOptions {
   confirm: (action: ProposedAction, decision: SafetyDecision, probe: ElementProbe) => Promise<boolean>;
   /** Пользователь забрал управление — пора встать на паузу. */
   shouldPause?: () => boolean | Promise<boolean>;
+  /** Вызывается при обнаружении формы логина/пароля, CAPTCHA или 2FA для передачи управления учителю в рабочей области ОС. */
+  onAuthBarrier?: (barrier: PageAuthBarrier) => Promise<void>;
   /** Пользователь остановил задачу. */
   isStopped?: () => boolean | Promise<boolean>;
   maxTurns?: number;
@@ -256,7 +259,7 @@ const MAX_RECENT_TURNS = 6;
  * Список интерактивных элементов на богатой странице легко занимает тысячи
  * символов, и вместе со снимком это уже переполняет лимит запроса.
  */
-const OBSERVATION_MAX_CHARS = 2000;
+const OBSERVATION_MAX_CHARS = 3200;
 
 /**
  * Оставляет системный промпт, исходную задачу и последние ходы.
@@ -457,6 +460,7 @@ export async function runComputerUse(opts: RunOptions): Promise<string> {
     deniedActions: Array<{ name: string; label: string }>,
     buildDeniedSummary: () => string,
   ): Promise<string> {
+  let lastHandledBarrierKey = "";
   for (let turn = 1; turn <= maxTurns; turn++) {
     if (Date.now() >= deadline) {
       const message = "Остановил задачу по пятиминутному лимиту. Проверьте уже выполненные действия в журнале.";
@@ -464,13 +468,48 @@ export async function runComputerUse(opts: RunOptions): Promise<string> {
       return summary ? `${summary} ${message}` : message;
     }
     if (await opts.isStopped?.()) return "Остановлено пользователем";
+
+    let activeBarrier: PageAuthBarrier | null = null;
+    if (opts.onAuthBarrier) {
+      const barrier = await detectPageAuthBarrier(page).catch(() => null);
+      const barrierKey = barrier?.requiresUserAction ? `${page.url()}::${barrier.kind}` : "";
+      if (barrier?.requiresUserAction && barrierKey !== lastHandledBarrierKey) {
+        lastHandledBarrierKey = barrierKey;
+        activeBarrier = barrier;
+        await opts.onAuthBarrier(barrier);
+      }
+    }
+
     if (await opts.shouldPause?.()) {
-      await log({ type: "PAUSED", message: "Пользователь забрал управление — агент ждёт." });
+      const pauseUrl = page.url();
+      await log({
+        type: "PAUSED",
+        message: activeBarrier?.reason
+          || "Управление передано учителю в рабочей области ОС (введите логин/пароль или выполните действие на экране) — агент ждёт.",
+        data: activeBarrier ? { authBarrier: activeBarrier } : undefined,
+      });
+      let ticks = 0;
       while (await opts.shouldPause?.()) {
         if (await opts.isStopped?.()) return "Остановлено пользователем";
         await new Promise((resolve) => setTimeout(resolve, 800));
+        ticks += 1;
+        // Если учитель уже ввёл логин/пароль в рабочей области ОС и страница сменилась (форма входа исчезла) — продолжаем автоматически
+        if (activeBarrier && ticks % 4 === 0) {
+          const nowUrl = page.url();
+          const check = await detectPageAuthBarrier(page).catch(() => null);
+          if (nowUrl && nowUrl !== pauseUrl && check && !check.requiresUserAction) {
+            break;
+          }
+        }
       }
-      await log({ type: "RESUMED", message: "Пользователь вернул управление агенту." });
+      await log({ type: "RESUMED", message: "Управление возвращено агенту — продолжаю работу с обновлённым экраном." });
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: `Учитель завершил действие в рабочей области ОС. Текущее состояние экрана:\n${await observation(page)}` },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${await shot(page)}` } },
+        ],
+      });
     }
 
     const { actions, text } = await executeWithFallback("vision", async (client, model) => {

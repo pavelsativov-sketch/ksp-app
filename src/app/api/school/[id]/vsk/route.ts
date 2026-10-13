@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireApiAuth } from '@/lib/api-auth';
 import { requireSchoolAccess } from '@/lib/school';
+import { requireSchoolClassAccess, requireSchoolPermission } from '@/lib/school-permissions';
 import { getVskSummary } from '@/lib/school-analytics';
 import { getDb, COL } from '@/lib/mongo';
 
@@ -34,10 +35,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const user = authResult.user;
     const { id } = await ctx.params;
     
-    await requireSchoolAccess(user.id, id);
-    const vsk = await getVskSummary(id);
+    await requireSchoolPermission(user.id, id, 'school:vsk:read_all');
+    const period = new URL(req.url).searchParams.get('period') ?? undefined;
+    const vsk = await getVskSummary(id, period);
 
-    return NextResponse.json({ vsk });
+    return NextResponse.json({ vsk }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
     const status = message.includes('Access denied') ? 403 : message.includes('not found') ? 404 : 500;
@@ -52,7 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const user = authResult.user;
     const { id } = await ctx.params;
     
-    await requireSchoolAccess(user.id, id, 'director');
+    const inspector = await requireSchoolPermission(user.id, id, 'school:vsk:manage');
     let body: unknown;
     try {
       body = await req.json();
@@ -64,9 +66,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
     }
 
+    if (!parsed.data.class_name) return NextResponse.json({ error: 'A class is required for a school inspection.' }, { status: 400 });
+    const teacher = await requireSchoolAccess(parsed.data.teacher_id, id);
+    if (teacher.role !== 'teacher') return NextResponse.json({ error: 'The inspected member must have the teacher role.' }, { status: 400 });
+    await requireSchoolClassAccess(teacher.user_id, id, parsed.data.class_name, 'read');
+
     const db = await getDb();
     const doc = {
       ...parsed.data,
+      inspector_name: inspector.full_name,
+      teacher_name: teacher.full_name,
       school_id: id,
       inspector_id: user.id,
       created_at: new Date(),

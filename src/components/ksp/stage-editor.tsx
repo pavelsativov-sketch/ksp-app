@@ -10,6 +10,7 @@ import { AiEnhanceButton } from "./ai-enhance-button";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { TaskBuilder } from "./task-builder";
 import { ListEditor } from "./list-editor";
+import { PlanBlockPicker, blockProvenance, type PlanReuseBlock } from "./plan-block-picker";
 
 interface StageEditorProps {
   title: string;
@@ -18,14 +19,27 @@ interface StageEditorProps {
   onChange: (stage: LessonStage) => void;
   context: { topic: string; grade: number; subject: string; language: "ru" | "kz" };
   availableObjectives: Array<{ code: string; text: string }>;
+  availableCriteria?: string[];
 }
 
-export function StageEditor({ title, stageKey, stage, onChange, context, availableObjectives }: StageEditorProps) {
-  const { t } = useUiLocale();
+export function StageEditor({ title, stageKey, stage, onChange, context, availableObjectives, availableCriteria = [] }: StageEditorProps) {
+  const { t, locale } = useUiLocale();
   const st = t.planEditor.stages;
+  const isKk = locale === "kk";
   const tasks = stage.tasks ?? [];
   function setTasks(next: InteractiveTask[]) {
     onChange({ ...stage, tasks: next });
+  }
+  function reuseStage(block: PlanReuseBlock) {
+    if (block.kind !== "stage") return;
+    const provenance = blockProvenance(block);
+    const copied = JSON.parse(JSON.stringify(block.payload)) as LessonStage;
+    const tasks = (copied.tasks ?? []).map((task) => ({
+      ...task,
+      id: globalThis.crypto?.randomUUID?.() ?? `copy_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      copiedFrom: task.copiedFrom ?? provenance,
+    }));
+    onChange({ ...copied, tasks, copiedFrom: provenance });
   }
   const timeHint =
     stageKey === "beginning" ? st.timeBeginning : stageKey === "middle" ? st.timeMiddle : st.timeEnd;
@@ -46,13 +60,20 @@ export function StageEditor({ title, stageKey, stage, onChange, context, availab
   return (
     <section className="space-y-4 rounded-2xl border border-[#ddd5cb] bg-surface px-5 py-6 md:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd5cb] pb-4">
-        <div><p className="editorial-kicker">{st.kicker}</p><h3 className="editorial-display mt-2 text-2xl">{title}</h3></div>
-        <Input
-          className="w-36 font-mono text-xs"
-          value={stage.time}
-          onChange={(e) => onChange({ ...stage, time: e.target.value })}
-          placeholder={timeHint}
-        />
+        <div>
+          <p className="editorial-kicker">{st.kicker}</p>
+          <h3 className="editorial-display mt-2 text-2xl">{title}</h3>
+          {stage.copiedFrom && <p className="mt-2 text-xs text-[#756b63]">{isKk ? "Дереккөз жоспар" : "Источник: план"} «{stage.copiedFrom.sourcePlanTitle}» · {stage.copiedFrom.sourceGrade} {isKk ? "сынып" : "класс"}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <PlanBlockPicker kind="stage" target={{ grade: context.grade, language: context.language }} onUse={reuseStage} />
+          <Input
+            className="w-36 font-mono text-xs"
+            value={stage.time}
+            onChange={(e) => onChange({ ...stage, time: e.target.value })}
+            placeholder={timeHint}
+          />
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
@@ -259,6 +280,7 @@ export function StageEditor({ title, stageKey, stage, onChange, context, availab
         onChange={setTasks}
         context={{ stage: stageKey, ...context }}
         availableObjectives={availableObjectives}
+        availableCriteria={availableCriteria}
       />
     </section>
   );

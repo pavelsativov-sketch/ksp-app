@@ -3,6 +3,8 @@ import { requireApiAuth } from '@/lib/api-auth';
 import { requireSchoolAccess } from '@/lib/school';
 import { getCurriculumProgress } from '@/lib/school-analytics';
 import { getDb, COL } from '@/lib/mongo';
+import { requireSchoolClassAccess } from '@/lib/school-permissions';
+import { hasSchoolPermission } from '@/lib/school/role-matrix';
 import { z } from 'zod';
 
 const createSchema = z.object({
@@ -27,10 +29,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const user = authResult.user;
     const { id } = await ctx.params;
     
-    await requireSchoolAccess(user.id, id);
-    const progress = await getCurriculumProgress(id);
+    const member = await requireSchoolAccess(user.id, id);
+    const canReadAll = hasSchoolPermission(member.role, member.granted_permissions, 'school:plans:read_all');
+    const progress = await getCurriculumProgress(id, canReadAll ? undefined : user.id);
 
-    return NextResponse.json({ progress });
+    return NextResponse.json({ progress }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
     return NextResponse.json({ error: message }, { status: message.includes('Access denied') ? 403 : 500 });
@@ -42,10 +45,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (auth.response) return auth.response;
   const { id } = await ctx.params;
   try {
-    await requireSchoolAccess(auth.user.id, id, 'teacher');
     const parsed = createSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: 'Проверьте предмет, класс, учебный год и список тем.' }, { status: 400 });
     const { subject, className, academicYear, topics, startDate } = parsed.data;
+    await requireSchoolClassAccess(auth.user.id, id, className, 'write');
     const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
     if (startDate && (Number.isNaN(start!.getTime()) || start!.toISOString().slice(0, 10) !== startDate)) return NextResponse.json({ error: 'Некорректная дата начала.' }, { status: 400 });
     const lessons = topics.map((topic, index) => {
@@ -67,7 +70,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (auth.response) return auth.response;
   const { id } = await ctx.params;
   try {
-    await requireSchoolAccess(auth.user.id, id, 'teacher');
+    const member = await requireSchoolAccess(auth.user.id, id);
     const parsed = lessonSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: 'Некорректный статус урока.' }, { status: 400 });
     const input = parsed.data;
@@ -75,11 +78,20 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (input.actualDate && (Number.isNaN(date!.getTime()) || date!.toISOString().slice(0, 10) !== input.actualDate)) return NextResponse.json({ error: 'Некорректная дата урока.' }, { status: 400 });
     const { ObjectId } = await import('mongodb');
     const collection = (await getDb()).collection(COL.curriculum);
+    const curriculum = await collection.findOne({ _id: new ObjectId(input.curriculumId), school_id: id, 'lessons.number': input.lessonNumber });
+    if (!curriculum) return NextResponse.json({ error: 'Учебная программа или урок не найдены.' }, { status: 404 });
+    const canManageAll = hasSchoolPermission(member.role, member.granted_permissions, 'school:classes:manage');
+    if (curriculum.teacher_id !== auth.user.id && !canManageAll) {
+      return NextResponse.json({ error: 'Access denied: curriculum is not assigned to this teacher' }, { status: 403 });
+    }
+    if (!canManageAll) await requireSchoolClassAccess(auth.user.id, id, curriculum.class_name, 'write');
     const update = input.status === 'completed'
       ? { $set: { 'lessons.$.status': input.status, 'lessons.$.actual_date': input.actualDate ?? new Date().toISOString().slice(0, 10), updated_at: new Date() } }
       : { $set: { 'lessons.$.status': input.status, updated_at: new Date() }, $unset: { 'lessons.$.actual_date': '' } };
+    const filter: Record<string, unknown> = { _id: new ObjectId(input.curriculumId), school_id: id, 'lessons.number': input.lessonNumber };
+    if (!canManageAll) filter.teacher_id = auth.user.id;
     const result = await collection.updateOne(
-      { _id: new ObjectId(input.curriculumId), school_id: id, 'lessons.number': input.lessonNumber },
+      filter,
       update,
     );
     if (result.matchedCount === 0) return NextResponse.json({ error: 'Учебная программа или урок не найдены.' }, { status: 404 });

@@ -8,6 +8,7 @@ import type { PublicAssignment } from "@/lib/assignments";
 import type { PublicTask } from "@/lib/ksp/live-quiz";
 import type { TaskAnswer } from "@/lib/ksp/tasks";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
+import { assignmentPreviewCopy } from "@/components/assignments/assignment-preview-copy";
 
 type SubmitResult = {
   score: number;
@@ -165,8 +166,9 @@ function AnswerInput({
 }
 
 export function HomeworkRunner({ assignment }: { assignment: PublicAssignment }) {
-  const { t } = useUiLocale();
+  const { locale, t } = useUiLocale();
   const r = t.runner;
+  const copy = assignmentPreviewCopy[locale];
   const [name, setName] = useState("");
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
@@ -212,7 +214,15 @@ export function HomeworkRunner({ assignment }: { assignment: PublicAssignment })
                     : <XCircle className="mt-0.5 size-4 shrink-0 text-red-500" />}
                   {i + 1}. {task.question}
                 </p>
-                {!detail?.correct && <p className="mt-2 text-sm text-muted-foreground">{detail?.summary}</p>}
+                {detail && (
+                  detail.correct && detail.summary ? (
+                    <p className="mt-2 text-sm text-muted-foreground">{detail.summary}</p>
+                  ) : detail.correct ? (
+                    <p className="mt-2 text-sm text-muted-foreground">{copy.feedbackDisabled}</p>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">{copy.safeIncorrect}</p>
+                  )
+                )}
               </div>
             );
           })}

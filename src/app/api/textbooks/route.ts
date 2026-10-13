@@ -37,6 +37,10 @@ export async function GET() {
     chunk_count: d.chunk_count,
     visibility: d.visibility,
     owner_id: d.owner_id,
+    armanpv_id: d.armanpv_id ?? null,
+    source_url: d.source_url ?? null,
+    cover_url: d.cover_url ?? null,
+    language: d.language ?? null,
     created_at: d.created_at,
     updated_at: d.updated_at,
   }));

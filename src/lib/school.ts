@@ -1,5 +1,6 @@
 import { ObjectId, type Filter } from "mongodb";
 import { getDb, COL } from "./mongo";
+import { SCHOOL_ADMIN_FORBIDDEN_PERMISSIONS, type SchoolPermission, type SchoolRole } from "./school/role-matrix";
 
 // Types
 export interface SchoolDoc {
@@ -23,7 +24,9 @@ export interface SchoolMemberDoc {
   _id?: ObjectId;
   school_id: string;
   user_id: string;
-  role: 'director' | 'deputy' | 'teacher' | 'admin';
+  role: SchoolRole;
+  /** Explicit, school-scoped grants; legacy admin members receive no default permissions. */
+  granted_permissions?: SchoolPermission[];
   full_name: string;
   subject?: string;
   joined_at: Date;
@@ -68,8 +71,19 @@ export async function createSchool(
       full_name: fullName,
       joined_at: new Date(),
     });
+    await db.collection(COL.schoolAuditEvents).insertOne({
+      school_id: result.insertedId.toString(),
+      actor_id: userId,
+      target_user_id: userId,
+      action: 'member.created',
+      resource_type: 'school_member',
+      resource_id: userId,
+      next_role: 'director',
+      created_at: new Date(),
+    });
   } catch (error) {
     // Do not leave a school that has no director if membership creation fails.
+    await db.collection(COL.schoolMembers).deleteOne({ school_id: result.insertedId.toString(), user_id: userId }).catch(() => undefined);
     await db.collection(COL.schools).deleteOne({ _id: result.insertedId }).catch(() => undefined);
     throw error;
   }
@@ -106,26 +120,73 @@ export async function getSchoolMembers(schoolId: string): Promise<SchoolMemberDo
   return db.collection<SchoolMemberDoc>(COL.schoolMembers).find({ school_id: schoolId }).toArray();
 }
 
-export async function addSchoolMember(schoolId: string, data: Omit<SchoolMemberDoc, '_id' | 'school_id' | 'joined_at'>): Promise<string> {
+export async function addSchoolMember(
+  schoolId: string,
+  data: Omit<SchoolMemberDoc, '_id' | 'school_id' | 'joined_at'>,
+  actorId = data.user_id,
+): Promise<string> {
   const db = await getDb();
   const member = {
     ...data,
+    granted_permissions: data.role === "admin"
+      ? (data.granted_permissions ?? []).filter((permission) => !SCHOOL_ADMIN_FORBIDDEN_PERMISSIONS.includes(permission))
+      : [],
     school_id: schoolId,
     joined_at: new Date()
   };
   
   const result = await db.collection(COL.schoolMembers).insertOne(member);
+  try {
+    await db.collection(COL.schoolAuditEvents).insertOne({
+      school_id: schoolId,
+      actor_id: actorId,
+      target_user_id: data.user_id,
+      action: 'member.created',
+      resource_type: 'school_member',
+      resource_id: data.user_id,
+      next_role: data.role,
+      granted_permissions: data.granted_permissions ?? [],
+      created_at: new Date(),
+    });
+  } catch (error) {
+    await db.collection(COL.schoolMembers).deleteOne({ _id: result.insertedId }).catch(() => undefined);
+    throw error;
+  }
   return result.insertedId.toString();
 }
 
-export async function getSchoolStudents(schoolId: string, classFilter?: string, includeInactive = false): Promise<StudentDoc[]> {
+export async function getSchoolStudents(
+  schoolId: string,
+  classFilter?: string,
+  includeInactive = false,
+  allowedClassNames?: readonly string[],
+): Promise<StudentDoc[]> {
   const db = await getDb();
   const query: Filter<StudentDoc> = { school_id: schoolId };
   if (!includeInactive) query.status = { $in: ['active', null] } as unknown as StudentDoc['status'];
   if (classFilter) {
+    if (allowedClassNames && !allowedClassNames.includes(classFilter)) return [];
     query.class_name = classFilter;
+  } else if (allowedClassNames) {
+    if (allowedClassNames.length === 0) return [];
+    query.class_name = { $in: [...allowedClassNames] } as unknown as StudentDoc['class_name'];
   }
   return db.collection<StudentDoc>(COL.students).find(query).toArray();
+}
+
+/** Resolve only a class label needed for a subsequent permission check. */
+export async function getSchoolStudentClass(schoolId: string, studentId: string, activeOnly = true): Promise<string | null> {
+  if (!ObjectId.isValid(studentId)) return null;
+  const db = await getDb();
+  const student = await db.collection<StudentDoc>(COL.students).findOne(
+    {
+      _id: new ObjectId(studentId),
+      school_id: schoolId,
+      ...(activeOnly ? { $or: [{ status: "active" }, { status: { $exists: false } }] } : {}),
+    },
+    { projection: { class_name: 1, _id: 0 } },
+  );
+  return student?.class_name ?? null;
 }
 
 export async function addStudents(schoolId: string, students: Omit<StudentDoc, '_id' | 'school_id' | 'created_at'>[]): Promise<number> {
@@ -158,7 +219,7 @@ const rolePriorities = {
   teacher: 1
 };
 
-export async function requireSchoolAccess(userId: string, schoolId: string, minRole?: 'director' | 'deputy' | 'teacher' | 'admin'): Promise<SchoolMemberDoc> {
+export async function requireSchoolAccess(userId: string, schoolId: string, minRole?: SchoolRole): Promise<SchoolMemberDoc> {
   const db = await getDb();
   const member = await db.collection<SchoolMemberDoc>(COL.schoolMembers).findOne({ 
     school_id: schoolId, 

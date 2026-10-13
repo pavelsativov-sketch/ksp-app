@@ -55,3 +55,7 @@ tests/e2e/.accounts.json
 test-results/
 playwright-report/
 tests/e2e/.auth.json
+tests/e2e-screenshots/
+*.zip
+plan.md
+manus-webdev.json

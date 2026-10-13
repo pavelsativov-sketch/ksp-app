@@ -1,6 +1,4 @@
 import type { Browser, BrowserContext, Page } from "playwright";
-import { launch as launchCloudflareBrowser, type BrowserWorker } from "@cloudflare/playwright";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { getDb, COL } from "@/lib/mongo";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
@@ -22,36 +20,22 @@ export interface RemoteBrowserSession {
   performUiAction: (action: string, args?: Record<string, unknown>, allowedOrigin?: string) => Promise<{ screenshot: Uint8Array; title: string; currentUrl: string }>;
 }
 
-// Reuse one Browser Run session for a short task. Cloudflare's keep_alive is
-// an idle timeout, so it keeps a user session available without being a hard
-// five-minute maximum. Cookies and form state are encrypted in Mongo.
 const SESSION_TTL_MS = 5 * 60_000;
 const sessions = new Map<string, AgentBrowserSession>();
 const opening = new Map<string, Promise<AgentBrowserSession>>();
 
-/** Browser Run in Workers; native Playwright is reserved for local Node development. */
+/** Запуск стандартного Playwright Chromium (в Vercel Sandbox или локально в Node.js). */
 export async function launchAgentBrowser(): Promise<Browser> {
-  let cloudflareContext: Awaited<ReturnType<typeof getCloudflareContext>> | null = null;
-  try {
-    cloudflareContext = await getCloudflareContext({ async: true });
-  } catch {
-    // Normal Next.js Node development does not have a Workers request context.
-  }
-
-  if (cloudflareContext) {
-    const binding = (cloudflareContext.env as typeof cloudflareContext.env & { BROWSER?: BrowserWorker }).BROWSER;
-    if (!binding) throw new Error("Cloudflare Browser Run binding BROWSER is not configured");
-    // The Cloudflare fork exposes the same browser operations used below but
-    // intentionally omits Playwright's Node-only bind/unbind methods.
-    return await launchCloudflareBrowser(binding, { keep_alive: SESSION_TTL_MS }) as unknown as Browser;
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("Browser Run is unavailable: no Cloudflare request context");
-  }
-  const localPackage = "playwright";
-  const { chromium } = await import(localPackage);
-  return chromium.launch({ headless: true });
+  const { chromium } = await import("playwright");
+  return chromium.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+    ],
+  });
 }
 
 function storageKey(): Buffer {
@@ -85,6 +69,10 @@ type SavedBrowserState = {
   sessionId?: string;
   interactionState?: unknown;
 };
+
+export async function readStoredBrowserState(userId: string): Promise<SavedBrowserState | undefined> {
+  return readStoredState(userId);
+}
 
 async function readStoredState(userId: string): Promise<SavedBrowserState | undefined> {
   const db = await getDb();
@@ -137,24 +125,68 @@ export async function clearAgentBrowserSession(userId: string): Promise<void> {
       await browserRpc(userId, "close", { sessionId: stored.sessionId }).catch(() => {});
     }
   }
+  try {
+    const { getVercelSandbox } = await import("@/lib/workspace/runtime");
+    const { closeSandboxBrowser } = await import("@/lib/agents/browser-sandbox");
+    const sandbox = await getVercelSandbox(userId).catch(() => null);
+    if (sandbox) {
+      await closeSandboxBrowser(sandbox as never).catch(() => {});
+      try { await (sandbox as { fs?: { unlink?: (p: string) => Promise<void> } }).fs?.unlink?.("/tmp/mekty-browser-state.json"); } catch {}
+    }
+  } catch {}
   const db = await getDb();
   await db.collection(COL.agentBrowserSessions).deleteOne({ user_id: userId });
 }
 
+type PlaywrightStorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
+
+function mergeStorageStates(
+  prev: PlaywrightStorageState | undefined,
+  next: PlaywrightStorageState,
+): PlaywrightStorageState {
+  if (!prev) return next;
+  const cookieMap = new Map<string, PlaywrightStorageState["cookies"][number]>();
+  for (const c of prev.cookies ?? []) {
+    cookieMap.set(`${c.name}|${c.domain}|${c.path}`, c);
+  }
+  for (const c of next.cookies ?? []) {
+    cookieMap.set(`${c.name}|${c.domain}|${c.path}`, c);
+  }
+  const originMap = new Map<string, PlaywrightStorageState["origins"][number]>();
+  for (const o of prev.origins ?? []) {
+    originMap.set(o.origin, o);
+  }
+  for (const o of next.origins ?? []) {
+    originMap.set(o.origin, o);
+  }
+  return {
+    cookies: Array.from(cookieMap.values()),
+    origins: Array.from(originMap.values()),
+  };
+}
+
 /**
  * Сохраняет состояние браузера Vercel Sandbox (куки, localStorage, URL) в MongoDB.
- * После завершения агента пользователь может открыть вкладку «Браузер» и продолжить
- * работу с той же страницы — Cloudflare браузер восстановит эти куки.
+ * Объединяет куки и localStorage по доменам, чтобы авторизация в BilimClass, НОБД и Kundelik
+ * сохранялась между перезапусками песочницы.
  */
 export async function persistSandboxBrowserState(
   userId: string,
   storageState: unknown,
   currentUrl: string | undefined,
 ): Promise<void> {
-  if (!storageState) return;
+  if (!storageState || typeof storageState !== "object") return;
+  const prev = await readStoredState(userId).catch(() => undefined);
+  const merged = mergeStorageStates(
+    prev?.storageState,
+    storageState as PlaywrightStorageState,
+  );
+  const validUrl = currentUrl && /^https?:\/\//i.test(currentUrl)
+    ? currentUrl
+    : prev?.currentUrl;
   const state: SavedBrowserState = {
-    storageState: storageState as Awaited<ReturnType<BrowserContext["storageState"]>>,
-    currentUrl: currentUrl && /^https?:\/\//i.test(currentUrl) ? currentUrl : undefined,
+    storageState: merged,
+    currentUrl: validUrl,
   };
   const db = await getDb();
   await db.collection(COL.agentBrowserSessions).updateOne(

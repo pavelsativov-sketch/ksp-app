@@ -11,6 +11,8 @@ export default async function SchoolWorkspacePage({ searchParams }: { searchPara
 
   const sp = await searchParams;
   const initialTab: OsTab = sp.os === "files" ? "files" : sp.os === "browser" ? "browser" : sp.os === "terminal" ? "terminal" : "os";
+  const openComputerUse = sp.os === "computer-use";
 
-  return <SchoolWorkspace sysInfo={await sysInfo()} initialTab={initialTab} />;
+  return <SchoolWorkspace sysInfo={await sysInfo()} initialTab={initialTab} openComputerUse={openComputerUse} />;
 }
+

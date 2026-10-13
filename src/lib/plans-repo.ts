@@ -58,6 +58,8 @@ export interface PlanDoc {
   is_draft?: boolean;
   /** Скрыт модерацией: не показывается в библиотеке и чужим по ссылке. */
   moderation_hidden?: boolean;
+  /** Internal marker updated atomically with school approval-cycle creation. */
+  last_approval_cycle_id?: string;
   hidden_at?: Date;
   hidden_by?: string;
   created_at: Date;

@@ -16,9 +16,14 @@ import type { AgentPage } from "./computer/loop";
 
 // Re-export the Sandbox type shape we actually need (avoids hard import from @vercel/sandbox).
 interface SandboxFs {
-  readFile(path: string, encoding: string): Promise<string>;
-  writeFile(path: string, content: string, encoding: string): Promise<void>;
-  unlink?(path: string): Promise<void>;
+  readFile(path: string, options?: { encoding?: null; signal?: AbortSignal } | null): Promise<Buffer>;
+  readFile(path: string, options: { encoding: BufferEncoding; signal?: AbortSignal } | BufferEncoding): Promise<string>;
+  writeFile(
+    path: string,
+    content: string | Buffer | Uint8Array,
+    options?: { encoding?: BufferEncoding; signal?: AbortSignal } | BufferEncoding,
+  ): Promise<void>;
+  unlink?(path: string, options?: { signal?: AbortSignal }): Promise<void>;
 }
 interface SandboxCmd {
   exitCode: number;
@@ -92,13 +97,22 @@ async function processAction(page, context, cmd) {
       }
       return { result: { url: page.url(), status: res && typeof res.status === 'function' ? res.status() : null } };
     }
-    case 'click':
-      await page.mouse.click(Number(cmd.x), Number(cmd.y), {
+    case 'click': {
+      const cx = Number(cmd.x);
+      const cy = Number(cmd.y);
+      await page.evaluate(([px, py]) => {
+        document.querySelectorAll('.v-feedback-wishes-promo').forEach(el => el.remove());
+        const hit = document.elementFromPoint(px, py);
+        const link = hit && hit.closest ? hit.closest('a[target="_blank"]') : null;
+        if (link) link.removeAttribute('target');
+      }, [cx, cy]).catch(() => {});
+      await page.mouse.click(cx, cy, {
         button: String(cmd.button ?? 'left'),
         clickCount: Number(cmd.clickCount ?? 1),
       });
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(450);
       return {};
+    }
     case 'type':
       await page.keyboard.type(String(cmd.text ?? ''), { delay: 10 });
       return {};
@@ -138,6 +152,12 @@ async function processAction(page, context, cmd) {
     }
     case 'storageState':
       return { result: await context.storageState() };
+    case 'restoreState': {
+      if (cmd.storageState && Array.isArray(cmd.storageState.cookies) && cmd.storageState.cookies.length > 0) {
+        await context.addCookies(cmd.storageState.cookies).catch(() => {});
+      }
+      return { result: { ok: true } };
+    }
     default:
       throw new Error('Unknown action: ' + cmd.action);
   }
@@ -158,6 +178,19 @@ async function main() {
   }
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
+
+  // Если сайт всё же открыл всплывающую вкладку (window.open / target="_blank"),
+  // перенаправляем основную страницу туда, чтобы агент и учитель видели переход.
+  context.on('page', async (popup) => {
+    try {
+      await popup.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+      const popupUrl = popup.url();
+      await popup.close().catch(() => {});
+      if (popupUrl && popupUrl !== 'about:blank') {
+        await page.goto(popupUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+      }
+    } catch {}
+  });
 
   if (state.currentUrl && (state.currentUrl.startsWith('http://') || state.currentUrl.startsWith('https://'))) {
     await page.goto(state.currentUrl, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
@@ -212,6 +245,8 @@ main().catch(err => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+const initLocks = new WeakMap<BrowserSandbox, Promise<void>>();
+
 async function ensurePlaywright(sandbox: BrowserSandbox): Promise<void> {
   try {
     await sandbox.fs.readFile("/tmp/node_modules/playwright/package.json", "utf8");
@@ -220,7 +255,10 @@ async function ensurePlaywright(sandbox: BrowserSandbox): Promise<void> {
 
   const install = await sandbox.runCommand({
     cmd: "bash",
-    args: ["-lc", "npm --prefix /tmp install playwright && npx --prefix /tmp playwright install chromium"],
+    args: [
+      "-lc",
+      "PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 npm --prefix /tmp install playwright --no-audit --no-fund --prefer-offline && PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 npx --prefix /tmp playwright install chromium",
+    ],
     cwd: "/tmp",
     timeoutMs: 120_000,
   });
@@ -335,8 +373,8 @@ async function sendCmd<T extends Record<string, unknown>>(
  * Создаёт объект AgentPage, использующий Playwright внутри Vercel Sandbox.
  * Все методы общаются с воркером через файловую систему /tmp.
  */
-export function makeSandboxAgentPage(sandbox: BrowserSandbox): AgentPage {
-  let currentUrl = "about:blank";
+export function makeSandboxAgentPage(sandbox: BrowserSandbox, initialUrl = "about:blank"): AgentPage {
+  let currentUrl = initialUrl;
 
   const send = async <T extends Record<string, unknown>>(action: string, args: Record<string, unknown> = {}): Promise<T> => {
     const result = await sendCmd<T & { currentUrl?: string }>(sandbox, action, args);
@@ -391,24 +429,43 @@ export async function getSandboxBrowserState(
 
 /**
  * Запускает Playwright браузер в Vercel Sandbox и возвращает AgentPage.
- *
- * При первом запуске устанавливает Playwright (~3-5 мин). Subsequent запуски
- * используют уже установленный браузер, воркер стартует за ~10-15 сек.
- *
- * @param opts.storageState - куки из предыдущей сессии (из MongoDB)
- * @param opts.currentUrl   - страница, с которой начинает агент
+ * Защищён от гонок параллельных запросов (warmup, screenshot, navigate).
  */
 export async function startSandboxBrowser(
   sandbox: BrowserSandbox,
   opts: { storageState?: unknown; currentUrl?: string } = {},
 ): Promise<AgentPage> {
-  await ensurePlaywright(sandbox);
+  let lock = initLocks.get(sandbox);
+  if (!lock) {
+    lock = (async () => {
+      await ensurePlaywright(sandbox);
+      if (!await isWorkerRunning(sandbox)) {
+        const saved = await getSandboxBrowserState(sandbox);
+        const initialState = opts.storageState ?? saved.storageState ?? null;
+        const initialUrl = opts.currentUrl ?? (saved.currentUrl !== "about:blank" ? saved.currentUrl : "about:blank");
+        await startWorker(sandbox, initialState, initialUrl);
+      } else if (opts.storageState) {
+        await sendCmd(sandbox, "restoreState", { storageState: opts.storageState }).catch(() => {});
+      }
+    })().finally(() => {
+      initLocks.delete(sandbox);
+    });
+    initLocks.set(sandbox, lock);
+  }
+  await lock;
 
-  if (!await isWorkerRunning(sandbox)) {
-    await startWorker(sandbox, opts.storageState ?? null, opts.currentUrl ?? "about:blank");
+  const currentState = await getSandboxBrowserState(sandbox);
+  const page = makeSandboxAgentPage(sandbox, currentState.currentUrl || "about:blank");
+
+  if (
+    opts.currentUrl &&
+    /^https?:\/\//i.test(opts.currentUrl) &&
+    (page.url() === "about:blank" || !page.url())
+  ) {
+    await page.goto(opts.currentUrl, { timeout: 20_000 }).catch(() => {});
   }
 
-  return makeSandboxAgentPage(sandbox);
+  return page;
 }
 
 /**
@@ -421,4 +478,118 @@ export async function closeSandboxBrowser(sandbox: BrowserSandbox): Promise<void
     // воркер мог уже завершиться по таймауту
   }
   try { await sandbox.fs.unlink?.(READY_FILE); } catch {}
+}
+
+export interface ActiveFieldInfo {
+  isEditable: boolean;
+  isPassword: boolean;
+  tag: string;
+  type: string;
+  label: string;
+}
+
+/**
+ * Определяет, какое поле ввода сейчас в фокусе на странице в браузере ОС.
+ * Позволяет пользователю вводить логин и пароль напрямую с клавиатуры на экране ОС.
+ */
+export async function inspectActiveField(page: { evaluate: AgentPage["evaluate"] }): Promise<ActiveFieldInfo> {
+  try {
+    const info = await page.evaluate((() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body || el === document.documentElement) {
+        return { isEditable: false, isPassword: false, tag: "", type: "", label: "" };
+      }
+      const tag = (el.tagName || "").toLowerCase();
+      const input = el as HTMLInputElement;
+      const type = (input.type || "").toLowerCase();
+      const isEditable =
+        tag === "input" ||
+        tag === "textarea" ||
+        el.isContentEditable ||
+        el.getAttribute("role") === "textbox";
+      const isPassword = tag === "input" && type === "password";
+      const parts: string[] = [];
+      if (el.getAttribute("aria-label")) parts.push(el.getAttribute("aria-label")!);
+      if (el.id) {
+        try {
+          const lab = document.querySelector<HTMLElement>(`label[for="${CSS.escape(el.id)}"]`);
+          if (lab?.innerText) parts.push(lab.innerText.trim());
+        } catch {}
+      }
+      const ph = el.getAttribute("placeholder") || el.getAttribute("name") || "";
+      if (ph) parts.push(ph.trim());
+      return {
+        isEditable,
+        isPassword,
+        tag,
+        type,
+        label: parts.join(" · ").replace(/\s+/g, " ").slice(0, 80),
+      };
+    }) as never);
+    if (info && typeof info === "object") return info as ActiveFieldInfo;
+  } catch {}
+  return { isEditable: false, isPassword: false, tag: "", type: "", label: "" };
+}
+
+export interface PageAuthBarrier {
+  requiresUserAction: boolean;
+  kind: "login" | "captcha" | "2fa" | null;
+  reason: string;
+}
+
+/**
+ * Проверяет, есть ли на странице форма входа (логин/пароль), CAPTCHA или 2FA/СМС-код,
+ * требующие ручного ввода пользователем в рабочей области ОС.
+ */
+export async function detectPageAuthBarrier(page: { evaluate: AgentPage["evaluate"] }): Promise<PageAuthBarrier> {
+  try {
+    const res = await page.evaluate((() => {
+      const isVisible = (el: Element | null) => {
+        if (!el) return false;
+        const r = (el as HTMLElement).getBoundingClientRect?.();
+        if (!r || r.width < 8 || r.height < 8) return false;
+        const st = window.getComputedStyle(el);
+        return st.display !== "none" && st.visibility !== "hidden" && st.opacity !== "0";
+      };
+
+      // 1. Проверка CAPTCHA
+      const captchaEl = document.querySelector(
+        'iframe[src*="recaptcha" i], iframe[src*="turnstile" i], iframe[src*="hcaptcha" i], .g-recaptcha, .cf-turnstile, .h-captcha, [id*="captcha" i]',
+      );
+      if (isVisible(captchaEl)) {
+        return {
+          requiresUserAction: true,
+          kind: "captcha",
+          reason: "На странице требуется пройти проверку CAPTCHA («Я не робот») в рабочей области ОС",
+        };
+      }
+
+      // 2. Проверка 2FA / одноразового кода из СМС
+      const inputs = Array.from(document.querySelectorAll("input")).filter(isVisible);
+      for (const inp of inputs) {
+        const meta = `${inp.autocomplete || ""} ${inp.name || ""} ${inp.id || ""} ${inp.placeholder || ""} ${inp.getAttribute("aria-label") || ""}`.toLowerCase();
+        if (/one-time-code|otp|2fa|код из смс|sms.?код|код подтверждения|проверочный код/i.test(meta)) {
+          return {
+            requiresUserAction: true,
+            kind: "2fa",
+            reason: "На странице запрашивается код подтверждения (2FA / СМС) — введите его в рабочей области ОС",
+          };
+        }
+      }
+
+      // 3. Проверка видимого поля пароля (форма входа)
+      const hasPassword = inputs.some((inp) => (inp.type || "").toLowerCase() === "password");
+      if (hasPassword) {
+        return {
+          requiresUserAction: true,
+          kind: "login",
+          reason: "На странице открыта форма входа — введите логин и пароль прямо на экране в рабочей области ОС",
+        };
+      }
+
+      return { requiresUserAction: false, kind: null, reason: "" };
+    }) as never);
+    if (res && typeof res === "object") return res as PageAuthBarrier;
+  } catch {}
+  return { requiresUserAction: false, kind: null, reason: "" };
 }

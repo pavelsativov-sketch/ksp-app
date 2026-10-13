@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { MonitorPlay, Loader2, Play, ShieldAlert, ShieldCheck, Check, X } from "lucide-react";
+import { MonitorPlay, Loader2, Play, ShieldAlert, ShieldCheck, Check, X, Lock, Keyboard, Hand } from "lucide-react";
 
 /**
  * Панель агента «Использование компьютера».
  *
- * Здесь учитель видит, что агент собирается сделать, и решает по опасным
- * действиям. Молчание трактуется как отказ, поэтому кнопки «Разрешить» и
- * «Отклонить» равнозначны по последствию отсутствия ответа — но явный отказ
- * понятнее и попадает в лог задачи.
+ * Здесь учитель видит живой экран браузера прямо в рабочей области ОС, может
+ * в любой момент кликнуть по полю логина/пароля на экране и ввести данные
+ * напрямую с клавиатуры, а также подтверждать или отклонять важные действия.
  */
 
 interface LogLine {
@@ -22,6 +21,23 @@ interface PendingAction {
   action: { name: string; intent: string; args: Record<string, unknown> };
   decision: { risk: string; reason: string; policy?: string };
   probe: { label: string; tag: string; visible: boolean };
+}
+
+interface ActiveFieldInfo {
+  tag: string;
+  type: string;
+  name: string;
+  placeholder: string;
+  isPassword: boolean;
+  isEditable: boolean;
+  hasValue: boolean;
+}
+
+interface PageAuthBarrier {
+  requiresUserAction: boolean;
+  kind: "login" | "captcha" | "2fa" | null;
+  reason: string;
+  domain: string;
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
@@ -48,15 +64,15 @@ const RISK_LABEL: Record<string, string> = {
 };
 
 const SUGGESTIONS = [
-  "BilimClass: отметь урок проведённым — дата, класс, предмет",
-  "BilimClass: укажи тему урока — дата, класс, предмет, тема",
-  "BilimClass: добавь домашнее задание — урок и текст задания",
+  "BilimClass: открой дэшборд учителя и отметь урок проведённым",
+  "BilimClass: на дэшборде нажми 3-ю кнопку (Журнал урока) над предметом и нажми «Провести урок»",
+  "BilimClass: открой с дэшборда 2-ю кнопку (Оценки и проведение) или 1-ю кнопку (КТП)",
 ];
 
 export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: string; initialUrl?: string } = {}) {
   const [goal, setGoal] = useState(
     initialGoal ?? (initialUrl?.includes("bilimclass")
-      ? "Войти в BilimClass и открыть расписание"
+      ? "Открыть дэшборд учителя в BilimClass и отметить урок проведённым"
       : initialUrl?.includes("nobd")
         ? "Войти в НОБД и открыть отчёты"
         : "")
@@ -64,17 +80,34 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   const [startUrl, setStartUrl] = useState(initialUrl ?? "");
 
   // Читаем цель из sessionStorage (устанавливается AgentComposer при редиректе)
-  React.useEffect(() => {
+  useEffect(() => {
     const stored = sessionStorage.getItem('computer-use-goal');
-    if (stored) { setGoal(stored); sessionStorage.removeItem('computer-use-goal'); }
+    if (!stored) return;
+    const timeout = window.setTimeout(() => {
+      setGoal(stored);
+      sessionStorage.removeItem('computer-use-goal');
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, []);
+
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<LogLine[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [control, setControl] = useState<"ai" | "user">("ai");
+  const [authBarrier, setAuthBarrier] = useState<PageAuthBarrier | null>(null);
+  const [activeField, setActiveField] = useState<ActiveFieldInfo | null>(null);
+  const [pendingPreview, setPendingPreview] = useState("");
+  const [screenBusy, setScreenBusy] = useState(false);
+
   const logEndRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const kbInputRef = useRef<HTMLInputElement>(null);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const typeBufferRef = useRef("");
+  const typeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const appendLog = useCallback((line: LogLine) => {
     setLog((prev) => [...prev, line].slice(-200));
@@ -84,47 +117,165 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [log]);
 
-  // Пока агент работает, опрашиваем журнал и снимок экрана: длинный POST сам
-  // по себе не отдаёт промежуточных событий, а учитель должен видеть ход
-  // работы, а не пустое окно пять минут.
-  useEffect(() => {
-    if (!running) return;
-    const poll = window.setInterval(async () => {
+  const applyFrameResponse = useCallback(async (res: Response) => {
+    if (!res.ok || !res.headers.get("content-type")?.startsWith("image/")) return;
+    const rawActiveField = res.headers.get("X-Active-Field");
+    const rawAuthBarrier = res.headers.get("X-Auth-Barrier");
+    if (rawActiveField) {
       try {
-        const res = await fetch("/api/agents/computer?action=screenshot", {
-          cache: "no-store",
-        });
-        if (res.ok) {
-          const blob = await res.blob();
-          setScreenshot((prev) => {
-            if (prev) URL.revokeObjectURL(prev);
-            return URL.createObjectURL(blob);
-          });
-        }
-      } catch {
-        // Снимок — вспомогательный, его отсутствие не должно ломать панель.
-      }
-    }, 3000);
-    return () => window.clearInterval(poll);
-  }, [running]);
+        setActiveField(JSON.parse(decodeURIComponent(rawActiveField)) as ActiveFieldInfo);
+      } catch { /* ignore */ }
+    }
+    if (rawAuthBarrier) {
+      try {
+        setAuthBarrier(JSON.parse(decodeURIComponent(rawAuthBarrier)) as PageAuthBarrier);
+      } catch { /* ignore */ }
+    }
+    const blob = await res.blob();
+    setScreenshot((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(blob);
+    });
+  }, []);
 
-  // Запросы подтверждения приходят отдельным маршрутом: цикл агента висит
-  // в длинном POST и отдать их по нему не может.
+  // Загружаем текущий снимок экрана при открытии окна и пока агент работает
+  const refreshScreenshot = useCallback(async () => {
+    if (typeBufferRef.current) return;
+    try {
+      const res = await fetch("/api/agents/computer?action=screenshot", { cache: "no-store" });
+      await applyFrameResponse(res);
+    } catch {
+      // Снимок вспомогательный
+    }
+  }, [applyFrameResponse]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void refreshScreenshot(); }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [refreshScreenshot]);
+
+  useEffect(() => {
+    if (!running && control !== "user") return;
+    const poll = window.setInterval(() => {
+      void refreshScreenshot();
+    }, 2500);
+    return () => window.clearInterval(poll);
+  }, [running, control, refreshScreenshot]);
+
+  // Опрашиваем живые события, барьер входа и запросы подтверждения
   useEffect(() => {
     if (!running) return;
     const poll = window.setInterval(async () => {
       try {
         const res = await fetch("/api/agents/computer", { cache: "no-store" });
         if (!res.ok) return;
-        const data = (await res.json()) as { pending?: PendingAction[] };
+        const data = (await res.json()) as {
+          pending?: PendingAction[];
+          events?: LogLine[];
+          authBarrier?: PageAuthBarrier | null;
+          control?: "ai" | "user";
+        };
         if (data.pending) setPending(data.pending);
+        if (data.events && data.events.length > 0) {
+          setLog(data.events.slice(-200));
+        }
+        if (data.authBarrier !== undefined) setAuthBarrier(data.authBarrier);
+        if (data.control) setControl(data.control);
       } catch {
-        // Опрос не обязан быть надёжным: пропущенный ответ = отказ, и агент
-        // не станет действовать без подтверждения.
+        // Опрос не обязан быть надёжным
       }
     }, 1500);
     return () => window.clearInterval(poll);
   }, [running]);
+
+  const enqueueScreenAction = useCallback((params: Record<string, string>) => {
+    setScreenBusy(true);
+    queueRef.current = queueRef.current
+      .catch(() => {})
+      .then(async () => {
+        try {
+          const res = await fetch("/api/agents/browser-stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+            cache: "no-store",
+          });
+          await applyFrameResponse(res);
+        } finally {
+          setScreenBusy(false);
+        }
+      });
+    return queueRef.current;
+  }, [applyFrameResponse]);
+
+  const flushTypedBuffer = useCallback(() => {
+    if (typeTimerRef.current) {
+      clearTimeout(typeTimerRef.current);
+      typeTimerRef.current = null;
+    }
+    const text = typeBufferRef.current;
+    if (!text) return;
+    typeBufferRef.current = "";
+    setPendingPreview("");
+    void enqueueScreenAction({ action: "type", text });
+  }, [enqueueScreenAction]);
+
+  const handleScreenClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
+    if (!imgRef.current) return;
+    kbInputRef.current?.focus({ preventScroll: true });
+    flushTypedBuffer();
+    const rect = imgRef.current.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1280);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 800);
+    if (x < 0 || y < 0 || x >= 1280 || y >= 800) return;
+    void enqueueScreenAction({ action: "click", x: String(x), y: String(y) });
+  }, [enqueueScreenAction, flushTypedBuffer]);
+
+  const handleScreenKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") return;
+    const specialKeys = ["Enter", "Tab", "Backspace", "Delete", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+    if (specialKeys.includes(e.key)) {
+      e.preventDefault();
+      if (e.key === "Backspace" && typeBufferRef.current.length > 0) {
+        typeBufferRef.current = typeBufferRef.current.slice(0, -1);
+        setPendingPreview(typeBufferRef.current);
+        return;
+      }
+      flushTypedBuffer();
+      void enqueueScreenAction({ action: "key", key: e.key });
+    }
+  }, [enqueueScreenAction, flushTypedBuffer]);
+
+  const handleScreenInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (!val) return;
+    e.target.value = "";
+    typeBufferRef.current += val;
+    setPendingPreview(typeBufferRef.current);
+    if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
+    typeTimerRef.current = setTimeout(() => {
+      flushTypedBuffer();
+    }, 240);
+  }, [flushTypedBuffer]);
+
+  const handleScreenPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text");
+    if (!pasted) return;
+    flushTypedBuffer();
+    void enqueueScreenAction({ action: "type", text: pasted });
+  }, [enqueueScreenAction, flushTypedBuffer]);
+
+  const toggleControl = useCallback(async (next: "ai" | "user") => {
+    flushTypedBuffer();
+    setControl(next);
+    if (next === "ai") setAuthBarrier(null);
+    await fetch("/api/agents/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ control: next }),
+    }).catch(() => {});
+  }, [flushTypedBuffer]);
 
   const answer = useCallback(async (id: string, allow: boolean) => {
     setPending((prev) => prev.filter((p) => p.id !== id));
@@ -146,8 +297,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     setError(null);
     setSummary(null);
     setPending([]);
-    setLog([]);
-    appendLog({ type: "THINK", message: `Задача: ${task}` });
+    setLog([{ type: "THINK", message: `Задача: ${task}` }]);
 
     try {
       const res = await fetch("/api/agents/computer", {
@@ -162,7 +312,9 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
         events?: Array<{ type: string; message: string }>;
       }>(res);
 
-      for (const event of data.events ?? []) appendLog(event);
+      if (data.events && data.events.length > 0) {
+        setLog(data.events);
+      }
 
       if (!res.ok) {
         setError(data.error ?? "Агент не смог выполнить задачу");
@@ -170,13 +322,14 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
         setSummary(data.summary || "Задача выполнена");
         appendLog({ type: "END", message: data.summary || "Задача выполнена" });
       }
+      void refreshScreenshot();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Сбой связи с агентом");
     } finally {
       setRunning(false);
       setPending([]);
     }
-  }, [goal, startUrl, running, appendLog]);
+  }, [goal, startUrl, running, appendLog, refreshScreenshot]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#0d0f1a] text-slate-200">
@@ -185,9 +338,28 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
         <span className="text-xs font-semibold">Агент: работа с компьютером</span>
         {running && (
           <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] text-sky-300">
-            <Loader2 className="size-3 animate-spin" /> работает
+            <Loader2 className="size-3 animate-spin" /> {control === "user" ? "ждёт вашего ввода" : "работает"}
           </span>
         )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {control === "user" ? (
+            <button
+              type="button"
+              onClick={() => void toggleControl("ai")}
+              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/90 px-2.5 py-1 text-[10px] font-semibold text-slate-950 hover:bg-emerald-400"
+            >
+              <Play className="size-3 fill-current" /> Продолжить с ИИ
+            </button>
+          ) : running ? (
+            <button
+              type="button"
+              onClick={() => void toggleControl("user")}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-medium text-amber-200 hover:bg-amber-400/20"
+            >
+              <Hand className="size-3" /> Взять управление
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -198,7 +370,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           id="computer-goal"
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
-          rows={3}
+          rows={2}
           disabled={running}
           placeholder="Например: найди на сайте материалы по теме «Дроби» и открой раздел с упражнениями"
           className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-sky-500/60 disabled:opacity-60"
@@ -212,7 +384,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           value={startUrl}
           onChange={(e) => setStartUrl(e.target.value)}
           disabled={running}
-          placeholder="https://school.kz/lessons"
+          placeholder="https://www.bilimclass.kz"
           className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-sky-500/60 disabled:opacity-60"
         />
 
@@ -252,15 +424,76 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           </p>
         )}
 
+        {(control === "user" || authBarrier?.requiresUserAction) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-100">
+            <div className="flex items-center gap-2">
+              <Lock className="size-4 shrink-0 text-amber-300" />
+              <span>
+                {authBarrier?.reason || "Кликните прямо по полю логина или пароля на экране ниже и введите данные с клавиатуры."}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void toggleControl("ai")}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-slate-950 hover:bg-emerald-400"
+            >
+              <Play className="size-3 fill-current" /> Готово — передать ИИ
+            </button>
+          </div>
+        )}
+
+        {/* Скрытое поле для прямого клавиатурного ввода при клике по экрану */}
+        <input
+          ref={kbInputRef}
+          type="text"
+          defaultValue=""
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          aria-label="Прямой ввод с клавиатуры на экран агента"
+          onBlur={flushTypedBuffer}
+          onKeyDown={handleScreenKeyDown}
+          onChange={handleScreenInputChange}
+          onPaste={handleScreenPaste}
+          className="pointer-events-none fixed -left-[9999px] top-0 h-1 w-1 opacity-0"
+        />
+
         {screenshot && (
-          <figure className="mt-3">
+          <figure className="relative mt-3">
             <img
+              ref={imgRef}
               src={screenshot}
               alt="Текущий экран, которым управляет агент"
-              className="w-full rounded-lg border border-white/10"
+              onClick={handleScreenClick}
+              draggable={false}
+              className="w-full cursor-text rounded-lg border border-white/10"
             />
-            <figcaption className="mt-1 text-[10px] text-slate-500">
-              Экран, который видит агент
+            {screenBusy && (
+              <div className="absolute right-2 top-2 h-4 w-4 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" />
+            )}
+            {(activeField?.isEditable || pendingPreview) && (
+              <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-[#121521]/90 px-3 py-1 text-[10px] text-white/90 shadow-lg">
+                {activeField?.isPassword ? (
+                  <Lock className="size-3 text-amber-300" />
+                ) : (
+                  <Keyboard className="size-3 text-sky-300" />
+                )}
+                <span>
+                  {activeField?.isPassword
+                    ? "Поле пароля активно — печатайте с клавиатуры"
+                    : `Поле «${activeField?.placeholder || activeField?.name || "ввода"}» активно`}
+                </span>
+                {pendingPreview && (
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-sky-200">
+                    {activeField?.isPassword ? "•".repeat(Math.min(12, pendingPreview.length)) : pendingPreview}
+                  </span>
+                )}
+              </div>
+            )}
+            <figcaption className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+              <span>Интерактивный экран ОС (кликните по полю логина/пароля и печатайте с клавиатуры)</span>
+              <span>Сессии сохраняются ✓</span>
             </figcaption>
           </figure>
         )}
@@ -275,9 +508,9 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                 <li
                   key={`${line.type}-${i}`}
                   className={`text-[11px] leading-snug ${
-                    line.type === "WARNING"
+                    line.type === "WARNING" || line.type === "PAUSED"
                       ? "text-amber-300"
-                      : line.type === "END"
+                      : line.type === "END" || line.type === "RESUMED"
                         ? "text-emerald-300"
                         : line.type === "ERROR"
                           ? "text-rose-300"

@@ -7,11 +7,6 @@ import { getTeacherGradebook, getStudentResults, exportGradebookToCsv, exportStu
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const rl = await checkRateLimitAsync(`gradebook-export:${clientIp(request)}`, 30, 60_000);
-  if (!rl.ok) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  }
-
   if (!isMongoConfigured()) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }
@@ -19,6 +14,11 @@ export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rl = await checkRateLimitAsync(`gradebook-export:${user.id || clientIp(request)}`, 30, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const url = new URL(request.url);
@@ -42,7 +42,8 @@ export async function GET(request: Request) {
     filename = "gradebook.csv";
   }
 
-  return new NextResponse(new TextEncoder().encode(csv), {
+  const csvWithBom = csv.startsWith("\uFEFF") ? csv : `\uFEFF${csv}`;
+  return new NextResponse(new TextEncoder().encode(csvWithBom), {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

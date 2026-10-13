@@ -144,9 +144,9 @@ const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
   tasks: () => [
     // Groq проверен живым вызовом listFiles: tool_calls вернулся за 808 мс.
     // Ставим его первым, чтобы короткие задания не ждали медленный Gemini.
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: true, label: "Groq GPT OSS 120B (Primary)", temperature: 0.2, maxTokens: 1024 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Primary)", temperature: 0.2, maxTokens: 8192 }),
     // Gemini остаётся резервом после быстрого проверенного маршрута.
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 1)", temperature: 0.2, maxTokens: 1024 }),
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 1)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),
     // Groq GPT OSS 20B — быстрый резерв.
     withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-20b", supportsJsonSchema: true, label: "Groq GPT OSS 20B (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),

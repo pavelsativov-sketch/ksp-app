@@ -40,6 +40,8 @@ describe("клик по элементу под курсором", () => {
     ["Создать урок", "EDUCATIONAL_RECORDS_MODIFICATION"],
     ["Опубликовать СОР", "EDUCATIONAL_RECORDS_MODIFICATION"],
     ["Провести урок", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Провести урок (отметка проведения в журнале за 13.10)", "EDUCATIONAL_RECORDS_MODIFICATION"],
+    ["Сабақты өткізу", "EDUCATIONAL_RECORDS_MODIFICATION"],
     ["Начать урок", "EDUCATIONAL_RECORDS_MODIFICATION"],
     // Скачивание и сохранение файлов из сети — по документации Computer Use
     // тоже требует подтверждения («User Data Management»).
@@ -68,6 +70,9 @@ describe("клик по элементу под курсором", () => {
     ["Домой"],
     ["Журнал"],
     ["КТП"],
+    ["[7 Б РУС | Вторник 13.10 | Статус: Не проведен] Кнопка 1: Перейти в КТП"],
+    ["[7 Б РУС | Вторник 13.10 | Статус: Не проведен] Кнопка 2: Перейти в журнал (оценки и проведение)"],
+    ["[7 Б РУС | Вторник 13.10 | Статус: Не проведен] Кнопка 3: Перейти в журнал урока"],
   ])("остаётся автоматическим: «%s»", (label) => {
     expect(classifyClick(label).requiresConfirmation).toBe(false);
   });

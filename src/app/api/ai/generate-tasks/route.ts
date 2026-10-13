@@ -12,7 +12,9 @@ const bodySchema = z.object({
   subject: z.string().trim().min(1).max(200),
   stage: z.enum(["beginning", "middle", "end"]),
   language: z.enum(["ru", "kz"]).default("ru"),
-  count: z.coerce.number().int().min(1).max(8).default(3),
+  count: z.coerce.number().int().min(2).max(3).default(3),
+  baseTask: interactiveTaskSchema.optional(),
+  variationStyle: z.enum(["alternate", "simpler", "harder", "pair", "shorter"]).optional(),
 });
 
 export const runtime = "nodejs";
@@ -51,7 +53,19 @@ export async function POST(request: Request) {
 
   try {
     const generated = await generateTasks(parsed.data);
-    const tasks = z.array(interactiveTaskSchema).max(parsed.data.count).safeParse(generated);
+    const baseTask = parsed.data.baseTask;
+    const matchingType = baseTask ? generated.filter((task) => task.type === baseTask.type) : generated;
+    if (baseTask && matchingType.length < 2) {
+      await quota.reservation.finalize(false);
+      return NextResponse.json({ error: "AI не подготовил достаточно вариантов исходного формата. Попробуйте другой тип варианта." }, { status: 502 });
+    }
+    const normalized = matchingType.slice(0, parsed.data.count).map((task) => baseTask ? {
+      ...task,
+      points: baseTask.points,
+      objectiveCode: baseTask.objectiveCode,
+      criterionTexts: baseTask.criterionTexts,
+    } : task);
+    const tasks = z.array(interactiveTaskSchema).min(2).max(parsed.data.count).safeParse(normalized);
     if (!tasks.success) {
       await quota.reservation.finalize(false);
       console.error("AI generated invalid tasks", tasks.error.flatten());

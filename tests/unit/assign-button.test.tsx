@@ -13,6 +13,15 @@ beforeEach(() => {
     if (String(url).includes("/api/assignments/library")) {
       return { ok: true, json: async () => ({ fromAssignments: [], fromPlans: [] }) };
     }
+    if (String(url).includes("/api/assignments/preview")) {
+      return {
+        ok: true,
+        json: async () => ({
+          tasks: [{ id: `${planId}:0`, question: "2+2?", type: "MCQ", points: 2, options: ["3", "4"], answer: "4" }],
+          fingerprint: "a".repeat(64),
+        }),
+      };
+    }
     return { ok: true, json: async () => ({ id: "x", code: "123456" }) };
   });
 });
@@ -35,10 +44,12 @@ function openDialog() {
 
 it("opens dialog, lists plan tasks and creates assignment", async () => {
   openDialog();
-  expect(await screen.findByText("Домашняя выдача ученикам")).toBeTruthy();
+  expect((await screen.findAllByText("Домашняя выдача ученикам")).length).toBeGreaterThan(0);
   expect(screen.getByText("2+2?")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /Создать ссылку \(1\)/ }));
-  await screen.findByText(/Готово! Код: 123456/);
+  fireEvent.click(screen.getByRole("button", { name: /Предпросмотр для ученика \(1\)/ }));
+  const issueButton = await screen.findByRole("button", { name: /Создать выдачу/ });
+  fireEvent.click(issueButton);
+  expect((await screen.findAllByText(/123456/)).length).toBeGreaterThan(0);
   const [url, init] = fetchMock.mock.calls.find(([u]) => u === "/api/assignments") ?? [];
   expect(url).toBe("/api/assignments");
   expect(JSON.parse(init.body)).toMatchObject({
@@ -54,6 +65,7 @@ it("shows empty state when plan has no tasks", async () => {
   );
   fireEvent.click(screen.getByRole("button", { name: "Задать домой" }));
   expect(await screen.findByText(/В плане пока нет интерактивных заданий/)).toBeTruthy();
-  expect(screen.getByRole("button", { name: /Создать ссылку \(0\)/ })).toBeTruthy();
+  const btn = screen.getByRole("button", { name: /Предпросмотр для ученика \(0\)/ }) as HTMLButtonElement;
+  expect(btn.disabled).toBe(true);
   await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 });

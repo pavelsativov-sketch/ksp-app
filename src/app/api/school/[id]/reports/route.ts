@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireApiAuth } from '@/lib/api-auth';
-import { requireSchoolAccess } from '@/lib/school';
+import { getSchoolById } from '@/lib/school';
+import { requireSchoolPermission } from '@/lib/school-permissions';
 import { getAttendancePerClass, getCurriculumProgress, getQualityMetrics, getSchoolOverview, getVskSummary } from '@/lib/school-analytics';
-
-function csvCell(value: string | number | null | undefined): string {
-  const raw = value == null ? "" : String(value);
-  const text = /^[\s\uFEFF]*[=+@-]/.test(raw) ? `'${raw}` : raw;
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
-function csv(rows: Array<Array<string | number | null | undefined>>): string {
-  return `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
-}
+import { getDict } from '@/lib/i18n/server';
+import { schoolReportCopy } from '@/lib/school-report-copy';
+import { formatReportTimestamp, resolveReportTimeZone, toCsv, type CsvValue } from '@/lib/school-report-export';
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -19,8 +13,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (authResult.response) return authResult.response;
     const user = authResult.user;
     const { id } = await ctx.params;
-    
-    await requireSchoolAccess(user.id, id);
+    const url = new URL(req.url);
+    const permission = url.searchParams.get('format') === 'csv' ? 'school:reports:export' : 'school:reports:read';
+    await requireSchoolPermission(user.id, id, permission);
+    const school = await getSchoolById(id);
+    if (!school) throw new Error('School not found');
+    const { locale } = await getDict();
+    const copy = schoolReportCopy[locale];
+    const generatedAt = new Date();
+    const timeZone = resolveReportTimeZone(url.searchParams.get('timezone'));
+    const formattedAt = formatReportTimestamp(generatedAt, locale, timeZone);
     const [overview, attendance, quality, curriculum, vsk] = await Promise.all([
       getSchoolOverview(id),
       getAttendancePerClass(id),
@@ -28,31 +30,47 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       getCurriculumProgress(id),
       getVskSummary(id),
     ]);
-    const report = { generatedAt: new Date().toISOString(), overview, attendance, quality, curriculum, vsk };
-    const url = new URL(req.url);
+    const metadata = {
+      schoolName: school.name,
+      period: copy.allPeriod,
+      filters: copy.noFilters,
+      generatedAt: generatedAt.toISOString(),
+      formattedAt,
+      timeZone,
+      disclosure: copy.disclosure,
+    };
+    const report = { generatedAt: generatedAt.toISOString(), metadata, overview, attendance, quality, curriculum, vsk };
     if (url.searchParams.get("format") === "csv") {
-      const rows: Array<Array<string | number | null | undefined>> = [
-        ["Раздел", "Показатель", "Значение", "Примечание"],
-        ["Сводка", "Учащиеся", overview.students, ""],
-        ["Сводка", "Педагоги", overview.teachers, ""],
-        ["Сводка", "Классы", overview.classes, ""],
-        ["Сводка", "Посещаемость", overview.attendanceRate === null ? "" : `${Math.round(overview.attendanceRate * 100)}%`, ""],
-        ["Сводка", "Качество знаний", overview.qualityScore === null ? "" : `${Math.round(overview.qualityScore * 100)}%`, ""],
-        ["Сводка", "Выполнение КТП", overview.curriculumProgress === null ? "" : `${Math.round(overview.curriculumProgress * 100)}%`, ""],
-        ["Посещаемость", "Класс", "Процент", "Количество отметок"],
-        ...attendance.map((item) => ["Посещаемость", item.className, `${Math.round(item.rate * 100)}%`, item.total]),
-        ["Успеваемость", "Предмет", "Средний процент", ""],
-        ...quality.map((item) => ["Успеваемость", item._id || "Без предмета", `${Math.round(item.average_score * 100)}%`, ""]),
-        ["КТП", "Предмет · класс", "Пройдено уроков", "Всего уроков"],
-        ...curriculum.map((item) => ["КТП", `${item.subject} · ${item.class_name}`, item.lessons.filter((lesson) => lesson.status === "completed").length, item.lessons.length]),
-        ["ВШК", "Проверка", "Балл", "Статус"],
-        ...vsk.map((item) => ["ВШК", `${item.direction} · ${item.teacher_name || "Педагог"}`, item.status === "completed" ? item.overall_score : "", item.status]),
+      const percent = (value: number | null) => value === null ? copy.noData : `${Math.round(value * 100)}%`;
+      const rows: CsvValue[][] = [
+        [copy.section, copy.field, copy.value, copy.note, copy.source],
+        [copy.metadata, copy.school, school.name, "", copy.sourceEntered],
+        [copy.metadata, copy.period, copy.allPeriod, "", copy.sourceComputed],
+        [copy.metadata, copy.filters, copy.noFilters, "", copy.sourceComputed],
+        [copy.metadata, copy.exportedAt, formattedAt, "", copy.sourceComputed],
+        [copy.metadata, copy.timeZone, timeZone, "", copy.sourceComputed],
+        [copy.methodology, copy.disclosure, "", "", copy.sourceComputed],
+        [copy.overview, copy.students, overview.students, "", copy.sourceEntered],
+        [copy.overview, copy.teachers, overview.teachers, "", copy.sourceEntered],
+        [copy.overview, copy.classes, overview.classes, "", copy.sourceComputed],
+        [copy.overview, copy.attendanceRate, percent(overview.attendanceRate), copy.attendanceNote, copy.sourceComputed],
+        [copy.overview, copy.qualityScore, percent(overview.qualityScore), copy.qualityNote, copy.sourceComputed],
+        [copy.overview, copy.curriculumProgress, percent(overview.curriculumProgress), copy.curriculumNote, copy.sourceComputed],
+        [copy.attendanceSection, copy.class, copy.percent, copy.attendanceCount, copy.source],
+        ...attendance.map((item) => [copy.attendanceSection, item.className, `${Math.round(item.rate * 100)}%`, item.total, copy.sourceComputed]),
+        [copy.qualitySection, copy.subject, copy.averagePercent, "", copy.source],
+        ...quality.map((item) => [copy.qualitySection, item._id || copy.noSubject, `${Math.round(item.average_score * 100)}%`, "", copy.sourceComputed]),
+        [copy.curriculumSection, copy.subjectClass, copy.completedLessons, copy.totalLessons, copy.source],
+        ...curriculum.map((item) => [copy.curriculumSection, `${item.subject} · ${item.class_name}`, item.lessons.filter((lesson) => lesson.status === "completed").length, item.lessons.length, copy.sourceComputed]),
+        [copy.vskSection, copy.inspection, copy.score, copy.status, copy.source],
+        ...vsk.map((item) => [copy.vskSection, `${item.direction} · ${item.teacher_name || copy.noTeacher}`, item.status === "completed" ? item.overall_score : copy.noData, item.status === "completed" ? copy.completed : copy.draft, copy.sourceEntered]),
       ];
-      return new Response(csv(rows), {
+      return new Response(toCsv(rows), {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="school-report-${id}.csv"`,
           "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
         },
       });
     }

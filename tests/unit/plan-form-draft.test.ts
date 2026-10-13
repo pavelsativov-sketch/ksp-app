@@ -7,9 +7,9 @@ import { PlanForm } from "@/components/ksp/plan-form";
 import { getPlanExamples } from "@/lib/plan-examples";
 
 const mocks = vi.hoisted(() => ({
-  draft: vi.fn(), save: vi.fn(), push: vi.fn(), generate: vi.fn(),
+  draft: vi.fn(), save: vi.fn(), push: vi.fn(), generate: vi.fn(), conflict: vi.fn(),
 }));
-vi.mock("@/app/actions/plans", () => ({ saveDraftAction: mocks.draft, savePlanAction: mocks.save }));
+vi.mock("@/app/actions/plans", () => ({ saveDraftAction: mocks.draft, savePlanAction: mocks.save, getPlanConflictSnapshotAction: mocks.conflict }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, back: vi.fn() }) }));
 vi.mock("@/components/ksp/hooks/use-plan-ai", () => ({ usePlanAi: () => ({ generateWithAi: mocks.generate, aiLoading: false }) }));
 vi.mock("@/components/ksp/objectives-picker", () => ({ ObjectivesPicker: () => null }));
@@ -81,6 +81,46 @@ it("submits the initial timestamp then advances it after each successful save", 
   fireEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
   await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
   expect(mocks.save.mock.calls[0][0].expected_updated_at).toBe("2026-09-17T12:02:00Z");
+});
+
+it("requires an explicit version choice after a server revision conflict", async () => {
+  vi.stubGlobal("React", React);
+  const id = "507f1f77bcf86cd799439011";
+  const serverUpdatedAt = "2026-09-17T12:02:00.000Z";
+  const localContent = { ...emptyKsp(), topic: "Local topic", schoolProfile: "emn" as const };
+  mocks.draft
+    .mockResolvedValueOnce({ error: "План изменился на сервере. Обновите страницу и повторите." , code: "conflict" })
+    .mockResolvedValueOnce({ id, updated_at: "2026-09-17T12:03:00.000Z" });
+  mocks.conflict.mockResolvedValue({
+    id,
+    title: "Server copy",
+    subject_id: null,
+    grade: 5,
+    quarter: null,
+    class_id: null,
+    section: null,
+    visibility: "private",
+    language: "ru",
+    content: { ...emptyKsp(), topic: "Server topic", schoolProfile: "emn" as const },
+    updated_at: serverUpdatedAt,
+  });
+  render(React.createElement(PlanForm, {
+    subjects: [],
+    initialPlan: { id, updated_at: "2026-09-17T12:00:00.000Z", title: "Local copy", content: localContent },
+  }));
+
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+  await screen.findByText("План изменили на сервере");
+  expect(screen.getByText("Server copy · Server topic")).toBeTruthy();
+  expect(mocks.draft.mock.calls[0][0].expected_updated_at).toBe("2026-09-17T12:00:00.000Z");
+
+  fireEvent.click(screen.getByRole("button", { name: "Оставить локальную версию" }));
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+  await waitFor(() => expect(mocks.draft).toHaveBeenCalledTimes(2));
+  expect(mocks.draft.mock.calls[1][0]).toMatchObject({
+    expected_updated_at: serverUpdatedAt,
+    content: { topic: "Local topic" },
+  });
 });
 
 it("AI-fill preserves user text, reports filled fields and offers undo", async () => {

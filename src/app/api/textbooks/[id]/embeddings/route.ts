@@ -18,7 +18,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const db = await getDb();
     const tb = await db.collection<TextbookDoc>(COL.textbooks).findOne({ _id: oid });
     if (!tb) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (tb.owner_id !== auth.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (tb.owner_id !== auth.user.id && tb.owner_id !== "system:armanpv") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (tb.status !== "ready") return NextResponse.json({ error: "Текст учебника ещё не готов" }, { status: 409 });
     // Canonical string matters because textbook_id is stored as a string on chunks.
     const embedding = await embedTextbookChunks(oid.toString(), db);

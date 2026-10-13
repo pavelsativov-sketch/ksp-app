@@ -1,4 +1,4 @@
-/** Atlas → bounded local vectors → server-side keyword ranking over the entire textbook. */
+/** Atlas → bounded local vectors → server-side keyword & structural ranking over the entire textbook. */
 import { getDb, COL, toObjectId } from "@/lib/mongo";
 import { embedQuery, cosineSimilarity } from "./embed";
 import { getCachedRetrieval, setCachedRetrieval } from "./cache";
@@ -42,6 +42,41 @@ export async function retrieveTextbookContext(opts: {
   return result;
 }
 
+/**
+ * Извлекает номера страниц из текста запроса (напр., «стр. 45», «стр. 45-47», «45-бет»).
+ */
+export function extractRequestedPageNumbers(query: string): number[] {
+  const pages = new Set<number>();
+  const rangeMatches = query.matchAll(
+    /(?:стр\.?|с\.?|бет)\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?|(\d{1,3})\s*(?:-\s*)?бет/gi,
+  );
+  for (const m of rangeMatches) {
+    const start = Number(m[1] ?? m[3]);
+    const end = m[2] ? Number(m[2]) : start;
+    if (Number.isInteger(start) && start >= 1 && start <= 600) {
+      const safeEnd = Number.isInteger(end) && end >= start ? Math.min(end, start + 6) : start;
+      for (let p = start; p <= safeEnd; p++) pages.add(p);
+    }
+  }
+  return [...pages].slice(0, 8);
+}
+
+/**
+ * Извлекает ссылки на номера параграфов (`§ 12`, `параграф 12`, `12-тақырып`).
+ */
+export function extractSectionMarkers(query: string): string[] {
+  const markers = new Set<string>();
+  const matches = query.matchAll(/(?:§\s*(\d{1,3})|параграф\s+(\d{1,3})|(\d{1,3})\s*-\s*(?:параграф|тақырып))/gi);
+  for (const m of matches) {
+    const num = m[1] ?? m[2] ?? m[3];
+    if (num) {
+      markers.add(`§ ${num}`);
+      markers.add(`§${num}`);
+    }
+  }
+  return [...markers];
+}
+
 async function retrieveTextbookContextUncached(opts: {
   textbookId: string;
   query: string;
@@ -59,6 +94,10 @@ async function retrieveTextbookContextUncached(opts: {
   if (!tb.has_embeddings || (tb.embedding_status && tb.embedding_status !== "ready")) {
     warnings.push("Семантическая индексация учебника не завершена. Продолжите её на странице учебников.");
   }
+
+  const requestedPages = extractRequestedPageNumbers(query);
+  const sectionMarkers = extractSectionMarkers(query);
+
   let queryEmbedding: number[] | null = null;
   try {
     queryEmbedding = await embedQuery(query);
@@ -76,9 +115,24 @@ async function retrieveTextbookContextUncached(opts: {
       .find({ textbook_id: textbookId }, { projection: { content: 1, chunk_index: 1, page_number: 1, embedding: 1 } })
       .sort({ chunk_index: 1 }).limit(LOCAL_VECTOR_LIMIT + 1).toArray();
     if (docs.length <= LOCAL_VECTOR_LIMIT) {
-      const scored = docs.filter((d) => Array.isArray(d.embedding) && d.embedding.length === queryEmbedding!.length)
-        .map((d) => ({ doc: d, score: cosineSimilarity(queryEmbedding!, d.embedding) }))
-        .sort((a, b) => b.score - a.score).slice(0, k);
+      const scored = docs
+        .filter((d) => Array.isArray(d.embedding) && d.embedding.length === queryEmbedding!.length)
+        .map((d) => {
+          let score = cosineSimilarity(queryEmbedding!, d.embedding);
+          if (requestedPages.length > 0 && typeof d.page_number === "number" && requestedPages.includes(d.page_number)) {
+            score += 0.25;
+          }
+          const contentStr = String(d.content ?? "").toLowerCase();
+          for (const marker of sectionMarkers) {
+            if (contentStr.includes(marker.toLowerCase())) {
+              score += 0.2;
+              break;
+            }
+          }
+          return { doc: d, score };
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, k);
       if (scored.length) return buildContext(tb.title, scored.map((s, i) => toMatch(s.doc, i)), "vector", warnings);
     } else {
       warnings.push("Учебник слишком большой для локального векторного поиска; поиск по словам охватывает весь учебник.");
@@ -86,17 +140,26 @@ async function retrieveTextbookContextUncached(opts: {
   }
   warnings.push("Контекст подобран по ключевым словам, а не по смысловой близости.");
   const tokens = tokenize(query);
-  if (!tokens.length) return buildContext(tb.title, [], "keyword", [...warnings, "В запросе нет слов для поиска."]);
+  if (!tokens.length && !requestedPages.length) {
+    return buildContext(tb.title, [], "keyword", [...warnings, "В запросе нет слов для поиска."]);
+  }
+  const scoreExpressions: Record<string, unknown>[] = tokens.map((token) => ({
+    $cond: [
+      { $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$content", ""] } }, { $literal: token }] }, 0] },
+      token.length >= 6 ? 2 : 1,
+      0,
+    ],
+  }));
+  if (requestedPages.length > 0) {
+    scoreExpressions.push({
+      $cond: [{ $in: ["$page_number", requestedPages] }, 5, 0],
+    });
+  }
   // $match uses the existing textbook_id/chunk_index index. Ranking/limit happen on Mongo,
   // not on a truncated client-side prefix. No Atlas/text index or corpus transfer is required.
   const docs = await db.collection(COL.textbookChunks).aggregate([
     { $match: { textbook_id: textbookId } },
-    { $project: { content: 1, chunk_index: 1, page_number: 1, keyword_score: { $add: tokens.map((token) => ({
-      $cond: [
-        { $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$content", ""] } }, { $literal: token }] }, 0] },
-        token.length >= 6 ? 2 : 1, 0,
-      ],
-    })) } } },
+    { $project: { content: 1, chunk_index: 1, page_number: 1, keyword_score: { $add: scoreExpressions } } },
     { $match: { keyword_score: { $gt: 0 } } },
     { $sort: { keyword_score: -1, chunk_index: 1 } },
     { $limit: k },
@@ -132,19 +195,36 @@ function toMatch(doc: unknown, i: number): TextbookChunkMatch {
   };
 }
 
+function classifyChunkTag(content: string): string {
+  if (/(?:упражнение|упр\.|задание|задача|жаттығу|тапсырма|есеп|вопросы и задания|сұрақтар мен тапсырмалар)/i.test(content)) {
+    return " [Упражнения/Тапсырмалар]";
+  }
+  if (/(?:определение|правило|теорема|анықтама|ереже|запомните|есіңе сақта)/i.test(content)) {
+    return " [Теория/Анықтама]";
+  }
+  return "";
+}
+
 function buildContext(title: string, chunks: TextbookChunkMatch[], method: "vector" | "keyword", warnings: string[]): RetrievedContext {
   const nonEmpty = chunks.filter((c) => c.content && c.content.trim().length > 0);
   const promptBlock = nonEmpty.length === 0 ? "" :
     `Цитаты из учебника «${title}» (используй эти фрагменты как ОПОРУ; ссылайся в тексте КСП на стр. № при необходимости):\n\n` +
-    nonEmpty.map((c, i) => `[${i + 1}] стр. ${c.page_number ?? "?"}: ${truncate(c.content, 600)}`).join("\n\n");
+    nonEmpty
+      .map((c, i) => `[${i + 1}] стр. ${c.page_number ?? "?"}${classifyChunkTag(c.content)}: ${truncate(c.content, 600)}`)
+      .join("\n\n");
   return { chunks: nonEmpty, textbookTitle: title, promptBlock, method, warnings,
     status: nonEmpty.length === 0 ? "unavailable" : warnings.length ? "degraded" : "ok" };
 }
 
 function tokenize(s: string): string[] {
+  const sectionTokens = extractSectionMarkers(s).map((m) => m.toLowerCase());
   // Include Kazakh letters, not only the Russian alphabet.
-  return [...new Set(s.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, " ").split(/\s+/)
-    .filter((w) => w.length >= 3))].slice(0, 24);
+  const words = s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !/^(?:тема|класс|стр|бет|урок|сабақ)$/.test(w));
+  return [...new Set([...sectionTokens, ...words])].slice(0, 24);
 }
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";

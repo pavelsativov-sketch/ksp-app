@@ -18,6 +18,13 @@ import { QrCard } from "@/components/ksp/qr-card";
 import { SaveTemplateButton } from "@/components/templates/save-template-button";
 import { CommentsSection } from "@/components/ksp/comments-section";
 import { ReviewSection } from "@/components/ksp/review-section";
+import { SchoolApprovalPanel } from "@/components/school/school-approval-panel";
+import { schoolApprovalCopy } from "@/lib/school-approval-copy";
+import { getActiveSchool } from "@/lib/school/active";
+import { getDict } from "@/lib/i18n/server";
+import { getSchoolClasses, requireSchoolAccess } from "@/lib/school";
+import { getAssignedSchoolClassNames } from "@/lib/school-permissions";
+import { hasSchoolPermission } from "@/lib/school/role-matrix";
 import { siteUrl } from "@/lib/site";
 import { resolveWatermark } from "@/lib/billing/watermark";
 import { getComments, getReviews, getUserNames } from "@/lib/comments";
@@ -85,6 +92,22 @@ export default async function PlanViewPage({
   }
 
   const isOwner = user?.id === plan.owner_id;
+  const [approvalSchool, dict] = await Promise.all([
+    isOwner && user ? getActiveSchool(user.id) : Promise.resolve(null),
+    getDict(),
+  ]);
+  const approvalLocale = dict.locale;
+  const approvalCopy = schoolApprovalCopy[approvalLocale];
+  let approvalClassNames: string[] = [];
+  if (approvalSchool?._id && user && isOwner) {
+    const schoolId = approvalSchool._id.toString();
+    const member = await requireSchoolAccess(user.id, schoolId);
+    if (hasSchoolPermission(member.role, member.granted_permissions, "school:students:read_all")) {
+      approvalClassNames = await getSchoolClasses(schoolId);
+    } else if (hasSchoolPermission(member.role, member.granted_permissions, "school:students:read_assigned")) {
+      approvalClassNames = await getAssignedSchoolClassNames(schoolId, user.id);
+    }
+  }
 
   // Контекст урока для всех раздаточных (лист, памятки, кроссворд).
   const handoutKspContext = plan.content ? {
@@ -286,6 +309,11 @@ export default async function PlanViewPage({
         </div>
       </header>
       {isOwner && <QualityGate content={plan.content} planId={plan.id} language={plan.language} />}
+      {isOwner && (approvalSchool?._id ? (
+        <SchoolApprovalPanel schoolId={approvalSchool._id.toString()} planId={plan.id} currentUpdatedAt={plan.updated_at} locale={approvalLocale} mode="owner" availableClasses={approvalClassNames} initialClassName={plan.content.header.grade} />
+      ) : (
+        <Card><CardHeader><CardTitle>{approvalCopy.queueTitle}</CardTitle><CardDescription>{approvalCopy.noSchool} <Link className="underline" href="/school">{approvalCopy.open}</Link></CardDescription></CardHeader></Card>
+      ))}
       {isOwner && !plan.moderationHidden && (
         <details className="no-print rounded-xl border border-border bg-surface p-4">
           <summary className="cursor-pointer text-sm font-bold">QR-код на план</summary>

@@ -137,7 +137,7 @@ export function localTupObjectives(opts: {
   return rows.map((row) => ({
     id: `tup:informatics:${row.profile}:${row.code}`,
     code: row.code,
-    text_ru: row.text_ru,
+    text_ru: row.text_ru.replace(/\s+[1-4]\s*четверть[\s\S]*$/i, "").trim(),
     text_kz: null,
     grade: row.grade,
     section: "Типовая учебная программа",

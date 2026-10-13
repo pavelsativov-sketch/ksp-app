@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { COL, getDb } from "@/lib/mongo";
 import { toPlanRow, type PlanDoc } from "@/lib/plans-repo";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,10 @@ export const runtime = "nodejs";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+  const rl = await checkRateLimitAsync(`profile:export:${user.id}`, 10, 3600_000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Слишком много выгрузок профиля. Попробуйте позже." }, { status: 429 });
+  }
   try {
     const db = await getDb();
     const [userDoc, plans, versions, textbooks, likes, assignments, attempts, planEvents] = await Promise.all([

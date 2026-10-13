@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Save, Loader2, Check, AlertTriangle, Undo2, Lightbulb } from "lucide-react";
+import Link from "next/link";
+import { Sparkles, Save, Loader2, Check, AlertTriangle, Undo2, Lightbulb, Languages, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -39,21 +40,26 @@ import { mergeAiIntoKsp } from "@/lib/ai/merge";
 import {
   savePlanAction,
   saveDraftAction,
+  getPlanConflictSnapshotAction,
   type SavePlanInput,
+  type PlanConflictSnapshot,
 } from "@/app/actions/plans";
 import { ListEditor } from "./list-editor";
 import { StageEditor } from "./stage-editor";
 import { computeProgress, collectWarnings } from "@/lib/ksp/plan-progress";
-import { usePlanDraft } from "./hooks/use-plan-draft";
+import { usePlanDraft, type DraftState } from "./hooks/use-plan-draft";
 import { usePlanAi } from "./hooks/use-plan-ai";
 import { PlanSidebar, type SidebarSection } from "./plan-sidebar";
 import { AiLoadingOverlay } from "./ai-loading";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { fill, type Dict } from "@/lib/i18n/dictionaries";
+import { PlanBlockPicker, blockProvenance, type PlanReuseBlock } from "./plan-block-picker";
+import { AiContextCard } from "./ai-context-card";
 
 interface PlanFormProps {
   initialPlan?: Partial<SavePlanInput> & { id?: string; updated_at?: string };
   subjects: SubjectRow[];
+  initialTab?: "meta" | "goals" | "context" | "flow" | "evaluation";
   /** Классы и группы учителя для привязки плана. */
   classes?: Array<{ id: string; name: string }>;
   /** Isolates example local drafts without assigning a server plan ID. */
@@ -67,6 +73,19 @@ interface DiffItem {
   preview: string; // начало нового значения
 }
 type ContentDiff = DiffItem[];
+
+function sameEditableDraft(a: DraftState, b: DraftState): boolean {
+  return JSON.stringify({ ...a, id: undefined }) === JSON.stringify({ ...b, id: undefined });
+}
+
+function formatSavedAt(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
 
 /** Сравнивает контент до/после AI: список изменённых полей для подтверждения. */
 function diffContent(before: KspContent, after: KspContent, t: Dict): ContentDiff {
@@ -128,13 +147,19 @@ function aiSteps(t: Dict): string[] {
   return t.planEditor.aiSteps;
 }
 
-export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: PlanFormProps) {
+export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, initialTab = "meta" }: PlanFormProps) {
   const router = useRouter();
-  const { t } = useUiLocale();
+  const { t, locale } = useUiLocale();
   const pe = t.planEditor;
+  const aiHistoryKey = initialPlan?.id ?? (exampleKey ? `example:${exampleKey}` : "unsaved");
   const expectedUpdatedAt = useRef(initialPlan?.updated_at);
   const [isPending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [serverSavedAt, setServerSavedAt] = useState<string | null>(initialPlan?.updated_at ?? null);
+  const [conflictSnapshot, setConflictSnapshot] = useState<PlanConflictSnapshot | null>(null);
+  const [conflictLoading, setConflictLoading] = useState(false);
+  const [conflictLoadError, setConflictLoadError] = useState<string | null>(null);
   /**
    * Код подсказки под ошибкой сохранения.
    *
@@ -145,9 +170,16 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
    */
   const [saveErrorHint, setSaveErrorHint] = useState<"metaProfile" | "goalsTopic" | "metaTitle" | null>(null);
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [activeTab, setActiveTab] = useState<string>("meta");
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [showValidation, setShowValidation] = useState(false);
   const [textbookId, setTextbookId] = useState<string | null>(null);
+  const [armanpvId, setArmanpvId] = useState<string | null>(null);
+  const [previousTopic, setPreviousTopic] = useState<string>("");
+  const [previousHomework, setPreviousHomework] = useState<string>("");
+  const [recentPlans, setRecentPlans] = useState<Array<{ id: string; title: string; topic: string; section: string | null; homework: string }>>([]);
+  const [recentPlansOpen, setRecentPlansOpen] = useState(false);
+  const [recentPlansLoading, setRecentPlansLoading] = useState(false);
+  const [translatingKsp, setTranslatingKsp] = useState(false);
   // Снапшот контента до AI-заполнения — для кнопки «Отменить».
   const aiUndoRef = useRef<KspContent | null>(null);
   const [aiApplied, setAiApplied] = useState(false);
@@ -156,7 +188,21 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
   const [refundMessage, setRefundMessage] = useState("");
   // AI-результат, ожидающий подтверждения: показываем дифф до применения.
   const [pendingAi, setPendingAi] = useState<{ merged: KspContent; diff: ContentDiff } | null>(null);
-  const { state, setState, draftSaved, clearDraft } = usePlanDraft(initialPlan?.id ?? (exampleKey ? `example:${exampleKey}` : undefined), {
+  const {
+    state,
+    setState,
+    getLatestState,
+    draftSaved,
+    localDraftStatus,
+    lastLocalSavedAt,
+    isOnline,
+    recoveredDraft,
+    clearDraft,
+    saveDraftNow,
+    setServerUpdatedAt,
+    restoreRecoveredDraft,
+    discardRecoveredDraft,
+  } = usePlanDraft(initialPlan?.id ?? (exampleKey ? `example:${exampleKey}` : undefined), {
     id: initialPlan?.id,
     title: initialPlan?.title ?? "",
     subjectId: initialPlan?.subject_id ?? subjects[0]?.id ?? "",
@@ -167,14 +213,78 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
     visibility: (initialPlan?.visibility as Visibility) ?? "private",
     language: (initialPlan?.language as Language) ?? "ru",
     content: initialPlan?.content ?? emptyKsp(),
-  });
+  }, initialPlan?.updated_at);
   
   const { id: planId, title, subjectId, grade, quarter, classId, section, visibility, language, content } = state;
   const schoolProfile = content.schoolProfile ?? "";
 
+  async function loadConflictSnapshot(id: string | undefined) {
+    if (!id) return;
+    setConflictLoading(true);
+    setConflictLoadError(null);
+    try {
+      const result = await getPlanConflictSnapshotAction(id);
+      if ("error" in result) {
+        setConflictSnapshot(null);
+        setConflictLoadError(result.error);
+      } else {
+        setConflictSnapshot(result);
+      }
+    } catch {
+      setConflictSnapshot(null);
+      setConflictLoadError(pe.errors.draftFailed);
+    } finally {
+      setConflictLoading(false);
+    }
+  }
+
+  function keepLocalConflictVersion() {
+    if (!conflictSnapshot) return;
+    expectedUpdatedAt.current = conflictSnapshot.updated_at;
+    setServerUpdatedAt(conflictSnapshot.updated_at);
+    setServerSavedAt(conflictSnapshot.updated_at);
+    const next = { ...getLatestState(), id: conflictSnapshot.id };
+    setState(next);
+    saveDraftNow(next);
+    setConflictSnapshot(null);
+    setConflictLoadError(null);
+    setSaveError(null);
+    setSaveNotice(pe.save.localKept);
+    setDraftStatus("idle");
+  }
+
+  function useLatestServerVersion() {
+    if (!conflictSnapshot) return;
+    const latest = conflictSnapshot;
+    expectedUpdatedAt.current = latest.updated_at;
+    setServerUpdatedAt(latest.updated_at);
+    setServerSavedAt(latest.updated_at);
+    setState({
+      id: latest.id,
+      title: latest.title,
+      subjectId: latest.subject_id ?? "",
+      grade: latest.grade,
+      quarter: latest.quarter,
+      classId: latest.class_id ?? "",
+      section: latest.section ?? "",
+      visibility: latest.visibility,
+      language: latest.language,
+      content: latest.content,
+    });
+    clearDraft();
+    setConflictSnapshot(null);
+    setConflictLoadError(null);
+    setSaveError(null);
+    setSaveNotice(pe.save.serverLoaded);
+    setDraftStatus("idle");
+  }
+
   // ── Серверный черновик: сохраняет недозаполненный план на сервере ──
   async function saveDraft() {
+    if (recoveredDraft || conflictSnapshot || conflictLoading || conflictLoadError) return;
     setDraftStatus("saving");
+    setSaveNotice(null);
+    const submitted = state;
     try {
       const res = await saveDraftAction({
         id: planId,
@@ -192,13 +302,27 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
       if ("error" in res) {
         setDraftStatus("error");
         setSaveError(res.error);
+        if (res.code === "conflict") void loadConflictSnapshot(planId);
       } else {
         // Запоминаем id нового плана, чтобы повторное сохранение обновляло
         // тот же документ, а не плодило дубликаты.
-        setState((prev) => ({ ...prev, id: res.id }));
-        expectedUpdatedAt.current = res.updated_at;
+        const latest = getLatestState();
+        const changedWhileSaving = !sameEditableDraft(latest, submitted);
+        const next = { ...latest, id: res.id };
+        setState(next);
+        if (res.updated_at) {
+          expectedUpdatedAt.current = res.updated_at;
+          setServerUpdatedAt(res.updated_at);
+          setServerSavedAt(res.updated_at);
+        }
         setDraftStatus("saved");
-        clearDraft();
+        setSaveError(null);
+        if (changedWhileSaving) {
+          setSaveNotice(pe.save.newerEditsKept);
+          if (res.updated_at) saveDraftNow(next);
+        } else {
+          clearDraft();
+        }
       }
     } catch {
       setDraftStatus("error");
@@ -221,7 +345,30 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
     }));
   };
 
-  const { generateWithAi, aiLoading, aiError, ragNote, quotaRemaining, progress: aiProgress, cancelAi } = usePlanAi();
+  function setAssessmentCriteria(items: string[]) {
+    setContent((prev) => ({
+      ...prev,
+      assessmentCriteria: items,
+      assessmentCriterionSources: (prev.assessmentCriterionSources ?? []).filter((source) => items.includes(source.criterion)),
+    }));
+  }
+
+  function reuseCriterion(block: PlanReuseBlock) {
+    if (block.kind !== "criterion") return;
+    const criterion = block.payload.trim();
+    if (!criterion) return;
+    const provenance = blockProvenance(block);
+    setContent((prev) => {
+      if (prev.assessmentCriteria.includes(criterion)) return prev;
+      return {
+        ...prev,
+        assessmentCriteria: [...prev.assessmentCriteria, criterion],
+        assessmentCriterionSources: [...(prev.assessmentCriterionSources ?? []), { criterion, provenance }],
+      };
+    });
+  }
+
+  const { generateWithAi, replayRun, canReplayExactly, runHistory, aiLoading, aiError, ragNote, lastRunContext, quotaRemaining, progress: aiProgress, cancelAi } = usePlanAi({ historyKey: aiHistoryKey });
 
   // Профиль школы берём из localStorage только пока он не выбран пользователем
   // (и не восстановлен из серверного черновика). Единый источник истины —
@@ -342,6 +489,18 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  function previewAiContent(aiContent: NonNullable<Awaited<ReturnType<typeof generateWithAi>>>) {
+    const currentContent = getLatestState().content;
+    const merged = mergeAiIntoKsp(currentContent, aiContent);
+    const diff = diffContent(currentContent, merged, t);
+    if (diff.length === 0) {
+      setSaveError(pe.errors.aiNoChanges);
+      return;
+    }
+    // Candidate remains a preview; a teacher must explicitly apply it.
+    setPendingAi({ merged, diff });
+  }
+
   async function handleAiGenerate() {
     // Предупреждение о профиле школы для 10-11 классов (критично для ТУП).
     if (!schoolProfile && (grade === 10 || grade === 11)) {
@@ -358,19 +517,21 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
       learningObjectives: content.learningObjectives.map((o) => (o.code ? `${o.code} — ${o.text}` : o.text)),
       language,
       schoolProfile: schoolProfile || undefined,
+      section: section || undefined,
+      previousTopic: previousTopic || undefined,
+      previousHomework: previousHomework || undefined,
       textbookId,
+      armanpvId,
+      planRevision: expectedUpdatedAt.current ?? null,
     });
 
-    if (aiContent) {
-      const merged = mergeAiIntoKsp(content, aiContent);
-      const diff = diffContent(content, merged, t);
-      if (diff.length === 0) {
-        setSaveError(pe.errors.aiNoChanges);
-        return;
-      }
-      // Показываем дифф: учитель решает, применять ли результат.
-      setPendingAi({ merged, diff });
-    }
+    if (aiContent) previewAiContent(aiContent);
+  }
+
+  async function replayAiRun(runId: string) {
+    setSaveError(null);
+    const aiContent = await replayRun(runId);
+    if (aiContent) previewAiContent(aiContent);
   }
 
   function applyPendingAi() {
@@ -411,11 +572,86 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
     setAiApplied(false);
   }
 
-  /** Сколько полей AI реально заполнил — для подтверждающей подписи. */
+  async function loadRecentPlans() {
+    setRecentPlansOpen((prev) => !prev);
+    if (recentPlans.length > 0) return;
+    setRecentPlansLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("grade", String(grade));
+      if (subjectId) params.set("subjectId", subjectId);
+      if (planId) params.set("excludeId", planId);
+      const res = await fetch(`/api/plans/recent?${params.toString()}`);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          plans?: Array<{ id: string; title: string; topic: string; section: string | null; homework: string }>;
+        };
+        setRecentPlans(data.plans ?? []);
+      }
+    } catch {
+      // Ignore error
+    } finally {
+      setRecentPlansLoading(false);
+    }
+  }
+
+  async function handleTranslateMirrorKsp() {
+    const targetLanguage = language === "ru" ? "kz" : "ru";
+    setTranslatingKsp(true);
+    setSaveError(null);
+    setSaveNotice(null);
+    try {
+      const res = await fetch("/api/ai/translate-ksp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetLanguage,
+          grade,
+          subject: subjectName,
+          title,
+          section,
+          content,
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        language?: "ru" | "kz";
+        title?: string;
+        section?: string;
+        content?: KspContent;
+      };
+      if (!res.ok || !data.content) {
+        throw new Error(data.error ?? "Не удалось выполнить зеркальный перевод");
+      }
+      aiUndoRef.current = content;
+      setState((prev) => ({
+        ...prev,
+        language: targetLanguage,
+        title: data.title || prev.title,
+        section: data.section ?? prev.section,
+        content: {
+          ...data.content!,
+          schoolProfile: prev.content.schoolProfile,
+        },
+      }));
+      setAiApplied(true);
+      setSaveNotice(
+        targetLanguage === "kz"
+          ? "План переведён на казахский язык (ҚМЖ) с сохранением кодов целей обучения ГОСО."
+          : "План переведён на русский язык (КСП) с официальными формулировками целей ГОСО.",
+      );
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Ошибка зеркального перевода КСП");
+    } finally {
+      setTranslatingKsp(false);
+    }
+  }
   /** Сколько полей AI реально заполнил — для подтверждающей подписи. */
   function save() {
+    if (recoveredDraft || conflictSnapshot || conflictLoading || conflictLoadError) return;
     setSaveError(null);
     setSaveErrorHint(null);
+    setSaveNotice(null);
     setShowValidation(true);
     if (!title.trim()) {
       setActiveTab("meta");
@@ -448,14 +684,29 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
       language,
       content: { ...content, schoolProfile: schoolProfile as SchoolProfile },
     };
+    const submitted = state;
     startTransition(async () => {
       const res = await savePlanAction(payload);
       if ("error" in res && res.error) {
         setSaveError(res.error);
+        if (res.code === "conflict") void loadConflictSnapshot(planId);
       } else if ("id" in res && res.id) {
-        expectedUpdatedAt.current = res.updated_at;
-        clearDraft();
-        router.push(`/plans/${res.id}`);
+        const latest = getLatestState();
+        const changedWhileSaving = !sameEditableDraft(latest, submitted);
+        const next = { ...latest, id: res.id };
+        if (res.updated_at) {
+          expectedUpdatedAt.current = res.updated_at;
+          setServerUpdatedAt(res.updated_at);
+          setServerSavedAt(res.updated_at);
+        }
+        setState(next);
+        if (changedWhileSaving) {
+          setSaveNotice(pe.save.newerEditsKept);
+          if (res.updated_at) saveDraftNow(next);
+        } else {
+          clearDraft();
+          router.push(`/plans/${res.id}`);
+        }
       }
     });
   }
@@ -686,6 +937,22 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
                 )}
                 {pe.goals.aiFill}
               </Button>
+              {content.topic.trim() && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleTranslateMirrorKsp()}
+                  disabled={aiLoading || translatingKsp}
+                  title="Зеркальный перевод плана между русским (КСП) и казахским (ҚМЖ) с сохранением кодов целей ГОСО"
+                >
+                  {translatingKsp ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Languages className="w-4 h-4" />
+                  )}
+                  {language === "ru" ? "КСП → ҚМЖ (Қаз)" : "ҚМЖ → КСП (Рус)"}
+                </Button>
+              )}
               {aiApplied && !aiLoading && (
                 <Button type="button" variant="outline" onClick={undoAiGenerate}>
                   {pe.goals.aiUndo}
@@ -695,7 +962,12 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
             <TextbookPicker
               value={textbookId}
               onChange={setTextbookId}
+              armanpvId={armanpvId}
+              onArmanPvChange={setArmanpvId}
               grade={grade}
+              subjectId={subjectId}
+              subjectName={subjectName}
+              language={language}
             />
             {aiApplied && !aiLoading && aiFilledCount > 0 && (
               <div className="text-xs text-emerald-700">
@@ -731,7 +1003,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
               </div>
             )}
             {ragNote && (
-              <div className="text-xs text-emerald-700">{ragNote}</div>
+              <div className={`text-xs ${lastRunContext?.rag.status === "unavailable" || lastRunContext?.rag.status === "degraded" ? "text-amber-800" : "text-emerald-700"}`} role="status">{ragNote}</div>
             )}
             {aiError && (
               <div className="text-xs text-red-600">{aiError}</div>
@@ -748,6 +1020,61 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
             className={showValidation && !content.topic.trim() ? "border-red-400 focus-visible:ring-red-400" : ""}
             aria-invalid={showValidation && !content.topic.trim()}
           />
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-xs font-medium text-slate-700">
+                Преемственность КТП: тема предыдущего урока (для актуализации знаний и проверки ДЗ)
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-sky-700"
+                onClick={() => void loadRecentPlans()}
+              >
+                <History className="w-3.5 h-3.5 mr-1" />
+                {recentPlansOpen ? "Скрыть прошлые уроки" : "Выбрать из моих прошлых уроков"}
+              </Button>
+            </div>
+            <Input
+              value={previousTopic}
+              onChange={(e) => setPreviousTopic(e.target.value)}
+              placeholder="Напр.: «Алгоритмы и исполнители» — AI свяжет начало урока и опрос ДЗ с этой темой"
+              className="h-8 text-xs bg-white"
+            />
+            {recentPlansOpen && (
+              <div className="rounded-lg border border-slate-200 bg-white p-2 text-xs space-y-1">
+                {recentPlansLoading ? (
+                  <p className="text-slate-500 flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Загружаем прошлые уроки…
+                  </p>
+                ) : recentPlans.length === 0 ? (
+                  <p className="text-slate-500">
+                    Сохранённые уроки по {grade} классу не найдены. Вы можете ввести тему предыдущего урока вручную выше.
+                  </p>
+                ) : (
+                  recentPlans.map((rp) => (
+                    <button
+                      key={rp.id}
+                      type="button"
+                      onClick={() => {
+                        setPreviousTopic(rp.topic);
+                        setPreviousHomework(rp.homework || "");
+                        if (rp.section && !section) setSection(rp.section);
+                        setRecentPlansOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-slate-100"
+                    >
+                      <span className="font-medium text-slate-800 truncate">{rp.topic}</span>
+                      {rp.section && (
+                        <span className="ml-2 shrink-0 text-[11px] text-slate-500">{rp.section}</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           {aiError && (
             <p className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200">
               {aiError}
@@ -764,10 +1091,12 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {lastRunContext && !aiLoading && <AiContextCard context={lastRunContext} locale={locale} history={runHistory} canReplayExactly={canReplayExactly} onReplay={(runId) => { void replayAiRun(runId); }} />}
           <ObjectivesPicker
             subjectId={subjectId}
             subjectName={subjectName}
             grade={grade}
+            language={language}
             schoolProfile={schoolProfile || undefined}
             selectedCodes={content.learningObjectives
               .map((o) => o.code)
@@ -830,18 +1159,24 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
           <AiEnhanceButton
             section="assessmentCriteria"
             current={content.assessmentCriteria}
-            onApply={(improved) =>
-              setContent((prev) => ({ ...prev, assessmentCriteria: improved }))
-            }
+            onApply={setAssessmentCriteria}
             context={{ topic: content.topic, subject: subjectName, grade, language }}
           />
         </CardHeader>
         <CardContent>
+          <PlanBlockPicker
+            kind="criterion"
+            target={{ grade, language, objectiveCodes: content.learningObjectives.map((objective) => objective.code) }}
+            onUse={reuseCriterion}
+          />
+          {(content.assessmentCriterionSources ?? []).map((source) => (
+            <p key={`${source.criterion}:${source.provenance.sourcePlanId}`} className="mt-2 text-xs text-[#756b63]">
+              {pe.goals.criteriaTitle}: «{source.criterion}» — {locale === "kk" ? "дереккөз жоспар" : "источник: план"} «{source.provenance.sourcePlanTitle}»
+            </p>
+          ))}
           <ListEditor
             items={content.assessmentCriteria}
-            onChange={(items) =>
-              setContent((prev) => ({ ...prev, assessmentCriteria: items }))
-            }
+            onChange={setAssessmentCriteria}
             placeholder={pe.goals.criteriaPh}
           />
         </CardContent>
@@ -1005,6 +1340,30 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <section aria-labelledby="quality-targets-title" className="rounded-xl border border-[#ddd5cb] bg-[#f8f4ed] p-4">
+            <h3 id="quality-targets-title" className="font-semibold">{locale === "kk" ? "Сабақтың жоспарлау бағдарлары" : "Ориентиры планирования урока"}</h3>
+            <p className="mb-3 mt-1 text-xs text-muted-foreground">{locale === "kk" ? "Мұғалім өз сабағына нысаналы мәндерді белгілейді. Бұл мемлекеттік норма емес." : "Задайте значения для своего урока. Это подсказки quality gate, не нормативы."}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="quality-duration-target">{locale === "kk" ? "Ұзақтығы, минут" : "Целевая длительность, минут"}</Label>
+                <Input id="quality-duration-target" type="number" min={10} max={180} step={5} placeholder="45" value={content.qualityTargets?.durationMinutes ?? ""} aria-describedby="quality-duration-hint" onChange={(event) => {
+                  const raw = event.currentTarget.value;
+                  const value = raw === "" ? undefined : Number(raw);
+                  if (value === undefined || (Number.isInteger(value) && value >= 10 && value <= 180)) setContent((prev) => ({ ...prev, qualityTargets: { ...prev.qualityTargets, durationMinutes: value } }));
+                }} />
+                <p id="quality-duration-hint" className="text-[11px] text-muted-foreground">{locale === "kk" ? "Бос қалса, тексеру 45 минутты ұсыныс ретінде қолданады." : "Пустое поле использует 45 минут только как исходный ориентир."}</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="quality-points-target">{locale === "kk" ? "Тапсырма ұпайлары" : "Целевая сумма баллов заданий"}</Label>
+                <Input id="quality-points-target" type="number" min={1} max={100} step={1} placeholder="10" value={content.qualityTargets?.taskPoints ?? ""} aria-describedby="quality-points-hint" onChange={(event) => {
+                  const raw = event.currentTarget.value;
+                  const value = raw === "" ? undefined : Number(raw);
+                  if (value === undefined || (Number.isInteger(value) && value >= 1 && value <= 100)) setContent((prev) => ({ ...prev, qualityTargets: { ...prev.qualityTargets, taskPoints: value } }));
+                }} />
+                <p id="quality-points-hint" className="text-[11px] text-muted-foreground">{locale === "kk" ? "Бос қалса, тексеру 10 ұпайды ұсыныс ретінде қолданады." : "Пустое поле использует 10 баллов только как исходный ориентир."}</p>
+              </div>
+            </div>
+          </section>
           <StageEditor
             title={pe.flow.beginning}
             stageKey="beginning"
@@ -1015,6 +1374,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
             }
             context={{ topic: content.topic, grade, subject: subjectName, language }}
             availableObjectives={content.learningObjectives}
+            availableCriteria={content.assessmentCriteria}
           />
           <StageEditor
             title={pe.flow.middle}
@@ -1026,6 +1386,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
             }
             context={{ topic: content.topic, grade, subject: subjectName, language }}
             availableObjectives={content.learningObjectives}
+            availableCriteria={content.assessmentCriteria}
           />
           <StageEditor
             title={pe.flow.end}
@@ -1037,6 +1398,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
             }
             context={{ topic: content.topic, grade, subject: subjectName, language }}
             availableObjectives={content.learningObjectives}
+            availableCriteria={content.assessmentCriteria}
           />
         </CardContent>
       </Card>
@@ -1159,6 +1521,70 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
         </TabsContent>
       </Tabs>
 
+        {recoveredDraft && (
+          <section role="alert" className="space-y-3 rounded-2xl border border-[#dbc7a7] bg-[#f8eedc] p-4 text-sm text-[#745329]">
+            <h2 className="font-semibold">{pe.save.staleDraftTitle}</h2>
+            <p>{fill(pe.save.staleDraftDescription, {
+              localAt: formatSavedAt(recoveredDraft.savedAt),
+              serverAt: formatSavedAt(recoveredDraft.currentUpdatedAt),
+            })}</p>
+            <p>{pe.save.staleDraftWarning}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {planId && <Link className="text-primary underline underline-offset-4" href={`/plans/${planId}/history`}>{pe.save.compareHistory}</Link>}
+              <Button type="button" onClick={() => { restoreRecoveredDraft(); setSaveNotice(pe.save.localKept); }}>
+                {pe.save.useLocalCopy}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => { discardRecoveredDraft(); setSaveNotice(pe.save.serverLoaded); }}>
+                {pe.save.useServerCopy}
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {(conflictLoading || conflictLoadError || conflictSnapshot) && (
+          <section role="alert" className="space-y-3 rounded-2xl border border-[#dbc7a7] bg-[#f8eedc] p-4 text-sm text-[#745329]">
+            <h2 className="font-semibold">{pe.save.conflictTitle}</h2>
+            <p>{pe.save.conflictDescription}</p>
+            {conflictLoading && <p role="status" className="flex items-center gap-2"><Loader2 className="size-4 animate-spin" />{pe.save.saving}</p>}
+            {conflictLoadError && (
+              <div className="flex flex-wrap items-center gap-2">
+                <p>{conflictLoadError}</p>
+                <Button type="button" variant="outline" onClick={() => void loadConflictSnapshot(planId ?? initialPlan?.id)}>
+                  {pe.save.retryDraft}
+                </Button>
+              </div>
+            )}
+            {conflictSnapshot && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[#dbc7a7] bg-white/70 p-3">
+                    <p className="font-semibold">{pe.save.localVersionLabel}</p>
+                    <p>{title || "—"} · {content.topic || "—"}</p>
+                  </div>
+                  <div className="rounded-xl border border-[#dbc7a7] bg-white/70 p-3">
+                    <p className="font-semibold">{pe.save.serverVersionLabel}</p>
+                    <p>{conflictSnapshot.title || "—"} · {conflictSnapshot.content.topic || "—"}</p>
+                    <p className="mt-1 text-xs">{formatSavedAt(conflictSnapshot.updated_at)}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link className="mr-auto text-primary underline underline-offset-4" href={`/plans/${conflictSnapshot.id}/history`}>
+                    {pe.save.compareHistory}
+                  </Link>
+                  <Button type="button" variant="outline" onClick={keepLocalConflictVersion}>
+                    {pe.save.keepLocal}
+                  </Button>
+                  <Button type="button" onClick={useLatestServerVersion}>
+                    {pe.save.loadServer}
+                  </Button>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {saveNotice && <p role="status" className="rounded-xl border border-[#b9d4c6] bg-[#eef6f1] p-3 text-sm text-[#2f5b4f]">{saveNotice}</p>}
+
         {saveError && (
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
             <AlertTriangle className="mt-0.5 size-5 shrink-0 text-red-600" />
@@ -1174,8 +1600,18 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
           </div>
         )}
 
-        {/* Auto-save indicator */}
-        <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground" aria-live="polite">
+        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-xs text-muted-foreground" aria-live="polite">
+          {!isOnline && <span className="text-[#9b651f]">{pe.save.offline}</span>}
+          {localDraftStatus === "saving" && <span className="flex items-center gap-1"><Loader2 className="size-3 animate-spin" />{pe.save.localSaving}</span>}
+          {localDraftStatus === "saved" && <span className="flex items-center gap-1 text-[#2f5b4f]"><Check className="size-3" />{pe.save.localSaved}</span>}
+          {localDraftStatus === "error" && <span className="text-red-600">{pe.save.localFailed}</span>}
+          {localDraftStatus === "error" && !recoveredDraft && (
+            <button type="button" className="text-primary underline underline-offset-2" onClick={() => saveDraftNow()}>
+              {pe.save.retryLocal}
+            </button>
+          )}
+          {lastLocalSavedAt && localDraftStatus !== "error" && <span>{fill(pe.save.localSavedAt, { at: formatSavedAt(lastLocalSavedAt) })}</span>}
+          {serverSavedAt && <span>{fill(pe.save.serverSavedAt, { at: formatSavedAt(serverSavedAt) })}</span>}
           {draftStatus === "saving" && (
             <span className="flex items-center gap-1">
               <Loader2 className="size-3 animate-spin" />
@@ -1186,12 +1622,6 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
             <span className="flex items-center gap-1 text-[#2f5b4f]">
               <Check className="size-3" />
               {pe.save.allSaved}
-            </span>
-          )}
-          {draftStatus === "idle" && draftSaved && (
-            <span className="flex items-center gap-1 text-[#2f5b4f]">
-              <Check className="size-3" />
-              {pe.save.draftLocal}
             </span>
           )}
         </div>
@@ -1209,12 +1639,12 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey }: Pl
           <Button variant="outline" onClick={() => router.back()} type="button">
             {pe.save.cancel}
           </Button>
-          <Button variant="outline" onClick={() => void saveDraft()} disabled={isPending || draftStatus === "saving"} type="button">
-            {pe.save.saveDraft}
+          <Button variant="outline" onClick={() => void saveDraft()} disabled={isPending || draftStatus === "saving" || !!recoveredDraft || !!conflictSnapshot || conflictLoading || !!conflictLoadError} type="button">
+            {draftStatus === "error" ? pe.save.retryDraft : pe.save.saveDraft}
           </Button>
-          <Button onClick={save} disabled={isPending || draftStatus === "saving"} type="button" title={pe.save.saveTitle}>
+          <Button onClick={save} disabled={isPending || draftStatus === "saving" || !!recoveredDraft || !!conflictSnapshot || conflictLoading || !!conflictLoadError} type="button" title={pe.save.saveTitle}>
             {isPending ? <Loader2 className="animate-spin" /> : <Save />}
-            Сохранить
+            {pe.save.save}
           </Button>
         </div>
 

@@ -6,6 +6,8 @@
  * `interactive_task_attempts` table; the task shape here is designed to port.
  */
 
+import type { ReusableBlockProvenance } from "@/lib/types/provenance";
+
 export type TaskType =
   | "MCQ" // single-choice multiple-choice
   | "TRUE_FALSE"
@@ -22,6 +24,14 @@ export interface BaseTask {
   hint?: string;
   points: number;
   objectiveCode?: string;
+  /** Exact criterion texts selected in the KSP; optional for legacy tasks. */
+  criterionTexts?: string[];
+  /** Teacher-only provenance; public learner tasks are projected without these flags. */
+  aiGenerated?: boolean;
+  /** Explicit human review; any subsequent teacher edit resets this to false. */
+  aiReviewed?: boolean;
+  /** Source metadata for a teacher-owned copy from another KSP. */
+  copiedFrom?: ReusableBlockProvenance;
   /** Optional per-task timer in seconds. When > 0, player shows countdown. */
   timeLimitSec?: number;
   /** When true, MCQ options are shuffled on each render for the student. */

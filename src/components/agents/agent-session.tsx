@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, CircleCheck, CircleX } from "lucide-react";
+import { Loader2, CircleCheck, CircleX, Globe, Lock, ExternalLink } from "lucide-react";
+import { useOsShellStore } from "@/lib/store/os-shell";
 
 export interface AgentEvent {
   type: string;
   message: string;
-  data?: { tool?: string; args?: Record<string, unknown>; result?: string } | null;
+  data?: {
+    tool?: string;
+    args?: Record<string, unknown>;
+    result?: string;
+    url?: string;
+    authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string; domain?: string };
+  } | null;
   createdAt?: string | null;
 }
 
@@ -18,22 +25,41 @@ type Status = "connecting" | "running" | "completed" | "failed" | "stopped";
  */
 export type AgentStatus = Status;
 
-export function AgentSession({ taskId, variant = "compact", onStatus }: {
+type AgentSessionProps = {
   taskId: string;
   /** compact — тёмный лог внутри ОС; chat — тот же поток в чатовой панели. */
   variant?: "compact" | "chat";
   onStatus?: (s: AgentStatus) => void;
-}) {
+  onBrowserActivity?: (info: { url: string; requiresUserAction?: boolean; reason?: string }) => void;
+};
+
+export function AgentSession(props: AgentSessionProps) {
+  return (
+    <AgentSessionStream
+      key={props.taskId}
+      taskId={props.taskId}
+      onStatus={props.onStatus}
+      onBrowserActivity={props.onBrowserActivity}
+    />
+  );
+}
+
+function AgentSessionStream({
+  taskId,
+  onStatus,
+  onBrowserActivity,
+}: Pick<AgentSessionProps, "taskId" | "onStatus" | "onBrowserActivity">) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [status, setStatus] = useState<Status>("connecting");
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
-  
+  const onBrowserActivityRef = useRef(onBrowserActivity);
 
   useEffect(() => {
-    // The panel is reused for the next task; remove the previous task's log.
-    setEvents([]);
-    setStatus("connecting");
+    onBrowserActivityRef.current = onBrowserActivity;
+  }, [onBrowserActivity]);
+
+  useEffect(() => {
     const es = new EventSource(`/api/agents/task/${taskId}`);
     let final = false;
 
@@ -53,6 +79,35 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
           return;
         }
         setEvents((prev) => [...prev.slice(-400), ev]);
+
+        if (ev.type === "TOOL_CALL" && ev.data?.tool === "browserNavigate") {
+          const targetUrl = typeof ev.data?.args?.url === "string" ? ev.data.args.url : "";
+          if (targetUrl) {
+            onBrowserActivityRef.current?.({ url: targetUrl });
+          }
+        } else if (ev.type === "TOOL_RESULT" && (ev.data?.tool === "browserNavigate" || ev.data?.tool === "browserClick" || ev.data?.tool === "browserType") && ev.data?.result) {
+          try {
+            const parsed = JSON.parse(ev.data.result) as {
+              success?: boolean;
+              url?: string;
+              authBarrier?: { requiresUserAction?: boolean; reason?: string };
+            };
+            if (parsed.success && parsed.url) {
+              onBrowserActivityRef.current?.({
+                url: parsed.url,
+                requiresUserAction: parsed.authBarrier?.requiresUserAction,
+                reason: parsed.authBarrier?.reason,
+              });
+            }
+          } catch { /* ignore */ }
+        } else if (ev.type === "PAUSED" && ev.data?.authBarrier?.requiresUserAction) {
+          onBrowserActivityRef.current?.({
+            url: ev.data.url || "",
+            requiresUserAction: true,
+            reason: ev.data.authBarrier.reason,
+          });
+        }
+
         if (ev.type === "END") {
           setStatus(ev.message === "Остановлено пользователем" ? "stopped" : "completed");
           final = true;
@@ -71,19 +126,15 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
     return () => es.close();
   }, [taskId]);
 
-  // Наружу статус отдаём отдельным эффектом на верхнем уровне компонента:
-  // хук внутри колбэка другого эффекта — «Invalid hook call».
   useEffect(() => {
     onStatus?.(status);
   }, [status, onStatus]);
 
-  // автоскролл вниз, пока пользователь не отмотал вверх
   useEffect(() => {
     const el = scrollRef.current;
     if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [events.length]);
 
-  // План из META: чеклист шагов, отмечаются по мере выполнения инструментов.
   const metaEv = events.find((e) => e.type === "META") as unknown as (AgentEvent & { plan?: string[] }) | undefined;
   const plan = metaEv?.plan ?? (metaEv?.data as unknown as { plan?: string[] } | undefined)?.plan ?? null;
   const doneSteps = events.filter((e) => e.type === "TOOL_RESULT").length;
@@ -94,7 +145,6 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* План-чеклист + прогресс (как карточка задачи в чате) */}
       {plan && plan.length > 0 && (
         <div className="mx-3 mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
@@ -143,7 +193,7 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
           </p>
         )}
         {events.filter((e) => e.type !== "META").map((ev, i) => (
-          <EventLine key={i} ev={ev} />
+          <EventLine key={i} ev={ev} previewIndex={i} />
         ))}
         {status === "completed" && (
           <p className="flex items-center gap-1.5 pt-1 text-emerald-400"><CircleCheck className="size-3.5" /> Задача завершена</p>
@@ -159,7 +209,8 @@ export function AgentSession({ taskId, variant = "compact", onStatus }: {
   );
 }
 
-function EventLine({ ev }: { ev: AgentEvent }) {
+function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number }) {
+  const setTab = useOsShellStore((s) => s.setTab);
   const tool = ev.data?.tool;
   if (ev.type === "THINK") {
     return <p className="text-muted-foreground/70 italic">· {ev.message}</p>;
@@ -167,8 +218,27 @@ function EventLine({ ev }: { ev: AgentEvent }) {
   if (ev.type === "REASONING") {
     return <p className="whitespace-pre-wrap text-slate-400">{ev.message}</p>;
   }
+  if (ev.type === "PAUSED") {
+    return (
+      <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 font-sans text-xs text-amber-100">
+        <div className="flex items-start gap-2">
+          <Lock className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium leading-snug">{ev.message}</p>
+            <button
+              type="button"
+              onClick={() => setTab("browser")}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-400/20 px-2.5 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-400/30"
+            >
+              <Globe className="size-3" /> Открыть экран в рабочей области ОС →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (ev.type === "TOOL_CALL") {
-    if (tool === "executeCommand") {
+    if (tool === "executeCommand" || tool === "runCommand") {
       return (
         <p className="rounded bg-black/40 px-2 py-1 text-emerald-300">
           <span className="text-emerald-500">$</span> {ev.message.replace(/^\$ /, "")}
@@ -185,8 +255,55 @@ function EventLine({ ev }: { ev: AgentEvent }) {
   }
   if (ev.type === "TOOL_RESULT") {
     const out = extractResult(ev);
-    if (!out) return null;
-    return <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-black/30 px-2 py-1 text-slate-300">{out}</pre>;
+    const browserInfo = extractBrowserMeta(ev);
+    if (!out && !browserInfo) return null;
+    return (
+      <div className="space-y-1.5">
+        {out && (
+          <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-black/30 px-2 py-1 text-slate-300">
+            {out}
+          </pre>
+        )}
+        {browserInfo && (
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111420] font-sans">
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-2.5 py-1.5 text-[11px]">
+              <span className="flex min-w-0 items-center gap-1.5 truncate text-slate-300">
+                <Globe className="size-3 shrink-0 text-sky-400" />
+                <span className="truncate">{browserInfo.title || browserInfo.url}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setTab("browser")}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300 hover:bg-sky-500/25"
+              >
+                В рабочей области ОС <ExternalLink className="size-2.5" />
+              </button>
+            </div>
+            {browserInfo.authBarrier?.requiresUserAction && (
+              <div className="flex items-center gap-1.5 border-b border-amber-400/20 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
+                <Lock className="size-3 shrink-0 text-amber-300" />
+                <span>
+                  {browserInfo.authBarrier.reason || "Для входа кликните по полю логина/пароля прямо в рабочей области ОС справа."}
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setTab("browser")}
+              title="Перейти к интерактивному экрану в рабочей области ОС"
+              className="block w-full bg-black/40 text-left"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/agents/browser-stream?action=screenshot&v=${previewIndex}`}
+                alt={browserInfo.title || "Снимок страницы в браузере ОС"}
+                className="max-h-44 w-full object-cover object-top opacity-90 transition-opacity hover:opacity-100"
+              />
+            </button>
+          </div>
+        )}
+      </div>
+    );
   }
   if (ev.type === "END") {
     return <p className="whitespace-pre-wrap rounded bg-emerald-500/10 px-2 py-1 text-emerald-300">✓ {ev.message}</p>;
@@ -198,6 +315,30 @@ function EventLine({ ev }: { ev: AgentEvent }) {
     return <p className="whitespace-pre-wrap rounded bg-amber-500/10 px-2 py-1 text-amber-300">⚠ {ev.message}</p>;
   }
   return <p className="text-muted-foreground">{ev.message}</p>;
+}
+
+function extractBrowserMeta(ev: AgentEvent): {
+  url?: string;
+  title?: string;
+  authBarrier?: { requiresUserAction?: boolean; reason?: string };
+} | null {
+  if (ev.data?.tool !== "browserNavigate" || !ev.data?.result) return null;
+  try {
+    const parsed = JSON.parse(ev.data.result) as {
+      success?: boolean;
+      url?: string;
+      title?: string;
+      authBarrier?: { requiresUserAction?: boolean; reason?: string };
+    };
+    if (!parsed.success) return null;
+    return {
+      url: parsed.url,
+      title: parsed.title,
+      authBarrier: parsed.authBarrier,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function extractResult(ev: AgentEvent): string | null {
@@ -219,3 +360,4 @@ export function StatusDot({ status }: { status: Status }) {
   const color = status === "running" || status === "connecting" ? "bg-amber-400 animate-pulse" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
   return <span className={`inline-block size-2 rounded-full ${color}`} aria-hidden />;
 }
+
