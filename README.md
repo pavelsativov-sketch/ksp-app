@@ -1,3 +1,13 @@
+---
+title: Mekty KSP & OS
+emoji: 🎓
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # КСП App
 
 Веб-приложение для учителей Казахстана: конструктор краткосрочных планов урока (КСП) по стандарту обновлённого содержания РК.
