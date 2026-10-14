@@ -227,7 +227,6 @@ export async function runAgentTask(
           done = true;
           continue;
         }
-        await log({ type: 'WARNING', message: 'Модель не вызвала finishTask — прошу подтвердить результат инструментом.' });
         messages.push({
           role: 'user',
           content: 'Не объявляй задачу завершённой обычным текстом. Проверь результат и вызови finishTask с итогом; если выполнить нельзя — также вызови finishTask и объясни причину.',

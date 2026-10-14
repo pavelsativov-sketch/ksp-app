@@ -61,6 +61,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const typeBufferRef = useRef('');
   const typeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInitialUrlRef = useRef(initialUrl?.trim() || '');
+  const canvasFocusedRef = useRef(false);
 
   const landingUrl = initialUrl?.trim() || 'https://www.google.com';
   const dailyQuotaBlocked = /дневн.{0,30}лимит/i.test(error);
@@ -326,10 +327,19 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     void navigate(trimmed);
   }, [navigate, initialUrl]);
 
-  // Periodic frame sync so live agent actions inside OS Workspace are visible immediately
+  // Keep canvasFocusedRef in sync so the interval below can read it without stale closure
+  useEffect(() => { canvasFocusedRef.current = canvasFocused; }, [canvasFocused]);
+
+  // Periodic frame sync so live agent actions inside OS Workspace are visible immediately.
+  // Paused while user is actively controlling the browser to avoid refresh interruptions.
   useEffect(() => {
     const id = setInterval(() => {
-      if (document.visibilityState === 'visible' && pendingCountRef.current === 0 && !typeBufferRef.current) {
+      if (
+        document.visibilityState === 'visible' &&
+        pendingCountRef.current === 0 &&
+        !typeBufferRef.current &&
+        !canvasFocusedRef.current
+      ) {
         void fetchFrame();
       }
     }, 3500);

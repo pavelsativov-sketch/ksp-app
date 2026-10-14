@@ -73,11 +73,7 @@ const RISK_LABEL: Record<string, string> = {
   EDUCATIONAL_RECORDS_MODIFICATION: "Изменение оценок, посещаемости или учебных записей",
 };
 
-const SUGGESTIONS = [
-  "BilimClass: открой дэшборд учителя и отметь урок проведённым",
-  "BilimClass: на дэшборде нажми 3-ю кнопку (Журнал урока) над предметом и нажми «Провести урок»",
-  "BilimClass: открой с дэшборда 2-ю кнопку (Оценки и проведение) или 1-ю кнопку (КТП)",
-];
+
 
 export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: string; initialUrl?: string } = {}) {
   const [goal, setGoal] = useState(
@@ -447,20 +443,6 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-sky-500/60 disabled:opacity-60"
         />
 
-        {!running && !goal && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setGoal(s)}
-                className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] text-slate-400 transition-colors hover:border-sky-500/40 hover:text-sky-300"
-              >
-                {s.length > 46 ? `${s.slice(0, 46)}…` : s}
-              </button>
-            ))}
-          </div>
-        )}
 
         <button
           type="button"
