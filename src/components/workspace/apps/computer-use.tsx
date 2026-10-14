@@ -105,6 +105,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   const [control, setControl] = useState<"ai" | "user">("ai");
   const [authBarrier, setAuthBarrier] = useState<PageAuthBarrier | null>(null);
   const [activeField, setActiveField] = useState<ActiveFieldInfo | null>(null);
+  const [liveText, setLiveText] = useState("");
   const [screenBusy, setScreenBusy] = useState(false);
 
   const [imgLayout, setImgLayout] = useState<{ width: number; height: number } | null>(null);
@@ -132,11 +133,13 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       try {
         const parsed = JSON.parse(decodeURIComponent(rawActiveField)) as ActiveFieldInfo;
         setActiveField(parsed);
+        if (parsed.value !== undefined) setLiveText(parsed.value);
       } catch {
         setActiveField(null);
       }
     } else {
       setActiveField(null);
+      setLiveText("");
     }
     if (rawAuthBarrier) {
       try {
@@ -152,7 +155,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
 
   // Загружаем текущий снимок экрана при открытии окна и пока агент работает
   const refreshScreenshot = useCallback(async () => {
-    if (typeBufferRef.current) return;
+    if (typeBufferRef.current || document.activeElement === kbInputRef.current) return;
     try {
       const res = await fetch("/api/agents/computer?action=screenshot", { cache: "no-store" });
       await applyFrameResponse(res);
@@ -167,12 +170,13 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [refreshScreenshot]);
 
   useEffect(() => {
-    if (!running && control !== "user") return;
+    if (!running) return;
     const poll = window.setInterval(() => {
+      if (typeBufferRef.current || document.activeElement === kbInputRef.current) return;
       void refreshScreenshot();
     }, 2500);
     return () => window.clearInterval(poll);
-  }, [running, control, refreshScreenshot]);
+  }, [running, refreshScreenshot]);
 
   // Опрашиваем живые события, барьер входа и запросы подтверждения
   useEffect(() => {
@@ -232,22 +236,37 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [enqueueScreenAction]);
 
   const handleScreenClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
+    e.stopPropagation();
     if (!imgRef.current) return;
     kbInputRef.current?.focus({ preventScroll: true });
+    setLiveText("");
     flushTypedBuffer();
     const rect = imgRef.current.getBoundingClientRect();
-    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1280);
-    const y = Math.round(((e.clientY - rect.top) / rect.height) * 800);
-    if (x < 0 || y < 0 || x >= 1280 || y >= 800) return;
+    const scaleX = 1280 / rect.width;
+    const scaleY = 800 / rect.height;
+    const scale = Math.max(scaleX, scaleY);
+    const renderedW = 1280 / scale;
+    const renderedH = 800 / scale;
+    const offsetX = (rect.width - renderedW) / 2;
+    const offsetY = (rect.height - renderedH) / 2;
+
+    const rawX = (e.clientX - rect.left - offsetX) / (renderedW / 1280);
+    const rawY = (e.clientY - rect.top - offsetY) / (renderedH / 800);
+
+    if (rawX < 0 || rawY < 0 || rawX >= 1280 || rawY >= 800) return;
+    const x = Math.round(rawX);
+    const y = Math.round(rawY);
     void enqueueScreenAction({ action: "click", x: String(x), y: String(y) });
   }, [enqueueScreenAction, flushTypedBuffer]);
 
   const handleScreenKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") return;
     const specialKeys = ["Enter", "Tab", "Backspace", "Delete", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
     if (specialKeys.includes(e.key)) {
       e.preventDefault();
       if (e.key === "Backspace") {
+        setLiveText((prev) => (prev.length > 0 ? prev.slice(0, -1) : ""));
         if (typeBufferRef.current.length > 0) {
           typeBufferRef.current = typeBufferRef.current.slice(0, -1);
           return;
@@ -262,20 +281,24 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [enqueueScreenAction, flushTypedBuffer]);
 
   const handleScreenInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     const val = e.target.value;
     if (!val) return;
     e.target.value = "";
+    setLiveText((prev) => prev + val);
     typeBufferRef.current += val;
     if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
     typeTimerRef.current = setTimeout(() => {
       flushTypedBuffer();
-    }, 150);
+    }, 40);
   }, [flushTypedBuffer]);
 
   const handleScreenPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     e.preventDefault();
     const pasted = e.clipboardData.getData("text");
     if (!pasted) return;
+    setLiveText((prev) => prev + pasted);
     flushTypedBuffer();
     void enqueueScreenAction({ action: "type", text: pasted });
   }, [enqueueScreenAction, flushTypedBuffer]);
@@ -518,12 +541,17 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
             {fieldOverlayStyle && (
               <div
                 style={fieldOverlayStyle}
-                className={`pointer-events-none absolute z-20 rounded border-2 transition-all ${
+                className={`pointer-events-none absolute z-20 rounded border-2 transition-all flex items-center px-2 overflow-hidden ${
                   activeField?.isPassword
-                    ? "border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)]"
-                    : "border-sky-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)]"
+                    ? "border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] bg-black/25 backdrop-blur-[1px]"
+                    : "border-sky-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] bg-black/25 backdrop-blur-[1px]"
                 }`}
-              />
+              >
+                <div className="flex items-center text-xs font-mono text-white/95 select-none truncate">
+                  <span>{activeField?.isPassword ? "•".repeat((liveText || activeField?.value || "").length) : (liveText || activeField?.value || "")}</span>
+                  <span className="inline-block w-0.5 h-3.5 bg-sky-400 animate-pulse ml-0.5 shrink-0" />
+                </div>
+              </div>
             )}
             <figcaption className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
               <span>Интерактивный экран ОС (кликните по полю логина/пароля и печатайте напрямую)</span>

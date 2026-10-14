@@ -46,6 +46,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [activeField, setActiveField] = useState<ActiveFieldInfo | null>(null);
   const [authBarrier, setAuthBarrier] = useState<PageAuthBarrier | null>(null);
   const [canvasFocused, setCanvasFocused] = useState(false);
+  const [liveText, setLiveText] = useState('');
   const [clickPing, setClickPing] = useState<{ x: number; y: number; id: number } | null>(null);
   const [handingOver, setHandingOver] = useState(false);
 
@@ -87,11 +88,15 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       try {
         const parsed = JSON.parse(decodeURIComponent(rawActiveField)) as ActiveFieldInfo;
         setActiveField(parsed);
+        if (parsed.value !== undefined) {
+          setLiveText(parsed.value);
+        }
       } catch {
         setActiveField(null);
       }
     } else {
       setActiveField(null);
+      setLiveText('');
     }
     if (rawAuthBarrier) {
       try {
@@ -125,7 +130,8 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
   const enqueueAction = useCallback((params: Record<string, string>) => {
     pendingCountRef.current += 1;
-    setLoading(true);
+    const isNavigation = !params.action || ['navigate', 'reload', 'back', 'forward'].includes(params.action);
+    if (isNavigation) setLoading(true);
     setError('');
     queueRef.current = queueRef.current
       .catch(() => {})
@@ -217,12 +223,14 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
    * getBoundingClientRect() возвращал именно элемент изображения без обёртки.
    */
   const handleImageClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
+    e.stopPropagation();
     const img = imgRef.current;
     if (!img) return;
 
     // Фокусируем ввод с клавиатуры для прямого набора в поле удалённого экрана
     kbInputRef.current?.focus({ preventScroll: true });
     setCanvasFocused(true);
+    setLiveText('');
 
     // Рассчитываем реальные координаты пикселя в удалённом браузере
     const rect = img.getBoundingClientRect();
@@ -255,10 +263,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
     typeTimerRef.current = setTimeout(() => {
       flushTypedBuffer();
-    }, 150);
+    }, 40);
   }, [flushTypedBuffer]);
 
   const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
+    e.stopPropagation();
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
       // Let onPaste handle clipboard paste
       return;
@@ -267,6 +276,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     if (specialKeys.includes(e.key)) {
       e.preventDefault();
       if (e.key === 'Backspace') {
+        setLiveText((prev) => (prev.length > 0 ? prev.slice(0, -1) : ''));
         if (typeBufferRef.current.length > 0) {
           typeBufferRef.current = typeBufferRef.current.slice(0, -1);
           return;
@@ -279,25 +289,23 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       void enqueueAction({ action: 'key', key: e.key });
       return;
     }
-
-    // Если событие пришло на container (div), перехватываем печатный символ
-    if (e.currentTarget === containerRef.current && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      queueCharacters(e.key);
-    }
-  }, [enqueueAction, flushTypedBuffer, queueCharacters]);
+  }, [enqueueAction, flushTypedBuffer]);
 
   const handleCanvasInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     const val = e.target.value;
     if (!val) return;
     e.target.value = '';
+    setLiveText((prev) => prev + val);
     queueCharacters(val);
   }, [queueCharacters]);
 
   const handleCanvasPaste = useCallback((e: React.ClipboardEvent<HTMLElement>) => {
+    e.stopPropagation();
     e.preventDefault();
     const pasted = e.clipboardData.getData('text');
     if (!pasted) return;
+    setLiveText((prev) => prev + pasted);
     flushTypedBuffer();
     void enqueueAction({ action: 'type', text: pasted });
   }, [enqueueAction, flushTypedBuffer]);
@@ -484,8 +492,10 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           kbInputRef.current?.focus({ preventScroll: true });
           setCanvasFocused(true);
         }}
-        onKeyDown={handleCanvasKeyDown}
-        onPaste={handleCanvasPaste}
+        onFocus={() => {
+          kbInputRef.current?.focus({ preventScroll: true });
+          setCanvasFocused(true);
+        }}
       >
         {/*
           Скрытый input: перехватывает ввод с клавиатуры после клика на
@@ -585,12 +595,19 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         {imgSrc && fieldOverlayStyle && (
           <div
             style={fieldOverlayStyle}
-            className={`pointer-events-none absolute z-20 rounded border-2 transition-all ${
+            className={`pointer-events-none absolute z-20 rounded border-2 transition-all flex items-center px-2 overflow-hidden ${
               activeField?.isPassword
-                ? 'border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)]'
-                : 'border-sky-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)]'
+                ? 'border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] bg-black/25 backdrop-blur-[1px]'
+                : 'border-sky-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] bg-black/25 backdrop-blur-[1px]'
             }`}
-          />
+          >
+            {canvasFocused && (
+              <div className="flex items-center text-xs font-mono text-white/95 select-none truncate">
+                <span>{activeField?.isPassword ? '•'.repeat((liveText || activeField?.value || '').length) : (liveText || activeField?.value || '')}</span>
+                <span className="inline-block w-0.5 h-3.5 bg-sky-400 animate-pulse ml-0.5 shrink-0" />
+              </div>
+            )}
+          </div>
         )}
 
         {isInstalling && (

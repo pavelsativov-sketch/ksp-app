@@ -65,12 +65,12 @@ export const DESKTOP_APPS: DesktopApp[] = [
     hint: 'Успеваемость и посещаемость класса',
   },
   {
-    id: 'bilimclass-agent', title: 'BilimClass', type: 'computer-use', url: 'https://www.bilimclass.kz/login', Icon: GraduationCap, color: '#14b8a6',
-    hint: 'Войдите в свой аккаунт; агент работает с системой в браузере',
+    id: 'bilimclass-agent', title: 'BilimClass', type: 'browser', url: 'https://www.bilimclass.kz/login', Icon: GraduationCap, color: '#14b8a6',
+    hint: 'Войдите в свой аккаунт в браузере; агент работает с системой',
   },
   {
-    id: 'nobd-agent', title: 'НОБД', type: 'computer-use', url: 'https://nobd.edu.kz/login', Icon: GraduationCap, color: '#0f766e',
-    hint: 'Войдите в государственную систему; агент работает с ней в браузере',
+    id: 'nobd-agent', title: 'НОБД', type: 'browser', url: 'https://nobd.edu.kz/login', Icon: GraduationCap, color: '#0f766e',
+    hint: 'Войдите в государственную систему в браузере',
   },
 ];
 

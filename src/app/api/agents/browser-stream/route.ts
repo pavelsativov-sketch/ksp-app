@@ -43,7 +43,7 @@ async function authorize() {
   const auth = await requireApiAuth();
   if (auth.response) return { response: auth.response } as const;
 
-  const rl = await checkRateLimitAsync(`agent:browser-stream:${auth.user.id}`, 60, 60_000);
+  const rl = await checkRateLimitAsync(`agent:browser-stream:${auth.user.id}`, 240, 60_000);
   if (!rl.ok) {
     return { response: NextResponse.json(
       { error: "Слишком много обращений к браузеру. Подождите минуту." },
