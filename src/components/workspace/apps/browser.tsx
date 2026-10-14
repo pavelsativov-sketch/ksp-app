@@ -64,9 +64,14 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const lastInitialUrlRef = useRef(initialUrl?.trim() || '');
   const canvasFocusedRef = useRef(false);
 
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+
   const landingUrl = initialUrl?.trim() || 'https://www.google.com';
   const dailyQuotaBlocked = /дневн.{0,30}лимит/i.test(error);
   const isInstalling = /устанавливается|запускается.*мин|failed to start/i.test(error);
+  const isRateLimited = /ограничил|подождите \d+ секунд/i.test(error);
+
+
 
   const acceptFrame = useCallback(async (res: Response) => {
     if (!res.ok) {
@@ -181,6 +186,26 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     setInputUrl(url);
     await enqueueAction({ action: 'navigate', url });
   }, [enqueueAction, flushTypedBuffer]);
+
+  useEffect(() => {
+    if (!isRateLimited) {
+      setRetryCountdown(null);
+      return;
+    }
+    setRetryCountdown(15);
+    const interval = setInterval(() => {
+      setRetryCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          setError('');
+          void navigate(pageUrl || landingUrl);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isRateLimited, navigate, pageUrl, landingUrl]);
 
   const clearSession = useCallback(async () => {
     if (!window.confirm('Завершить внешний сеанс и удалить сохранённые данные входа?')) return;
@@ -316,24 +341,31 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     void doAction({ action: 'scroll', dy: Math.round(e.deltaY).toString() });
   }, [doAction]);
 
-  // Load on mount
+  // Load on mount or sync when initialUrl changes
   const startedRef = useRef(false);
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    void (async () => {
-      const restoredUrl = await fetchFrame();
-      if (restoredUrl === 'about:blank' || !restoredUrl) await navigate(landingUrl);
-    })();
-  }, [fetchFrame, landingUrl, navigate]);
-
-  // Sync when parent passes a new initialUrl (e.g., when AI agent or connector navigates)
-  useEffect(() => {
     const trimmed = initialUrl?.trim() || '';
-    if (!trimmed || trimmed === lastInitialUrlRef.current) return;
-    lastInitialUrlRef.current = trimmed;
-    void navigate(trimmed);
-  }, [navigate, initialUrl]);
+    if (!startedRef.current) {
+      startedRef.current = true;
+      lastInitialUrlRef.current = trimmed;
+      void (async () => {
+        if (trimmed) {
+          await navigate(trimmed);
+        } else {
+          const restoredUrl = await fetchFrame();
+          if (restoredUrl === 'about:blank' || !restoredUrl) {
+            await navigate('https://www.google.com');
+          }
+        }
+      })();
+      return;
+    }
+
+    if (trimmed && trimmed !== lastInitialUrlRef.current) {
+      lastInitialUrlRef.current = trimmed;
+      void navigate(trimmed);
+    }
+  }, [fetchFrame, navigate, initialUrl]);
 
   // Keep canvasFocusedRef in sync so the interval below can read it without stale closure
   useEffect(() => { canvasFocusedRef.current = canvasFocused; }, [canvasFocused]);
@@ -629,7 +661,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         {!isInstalling && error && (
           <div className={`absolute z-10 flex justify-center px-3 ${imgSrc ? 'left-3 right-3 top-3' : 'inset-0 items-center bg-[#090b12]'}`}>
             <div className={`flex max-w-full items-center gap-3 rounded-lg border border-amber-300/20 bg-[#151722]/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
-              <p className="min-w-0 flex-1 text-sm text-white/75">{error}</p>
+              <p className="min-w-0 flex-1 text-sm text-white/75">
+                {retryCountdown !== null
+                  ? `Подготовка браузера... Автоматическое подключение через ${retryCountdown} сек.`
+                  : error}
+              </p>
               {dailyQuotaBlocked ? (
                 <>
                   <button type="button" onClick={openExternally} className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-sky-300/25 bg-sky-300/10 px-2.5 py-1.5 text-xs font-medium text-sky-200 hover:bg-sky-300/20">
@@ -638,9 +674,29 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
                   <span className="shrink-0 text-xs text-amber-200/70">Сброс в 00:00 UTC</span>
                 </>
               ) : (
-                <button type="button" onClick={() => void navigate(pageUrl || landingUrl)} className="shrink-0 text-sm text-blue-300 underline underline-offset-2">Повторить</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRetryCountdown(null);
+                    setError('');
+                    void navigate(pageUrl || landingUrl);
+                  }}
+                  className="shrink-0 text-sm text-blue-300 underline underline-offset-2"
+                >
+                  {retryCountdown !== null ? 'Подключить сейчас' : 'Повторить'}
+                </button>
               )}
-              <button type="button" onClick={() => setError('')} aria-label="Скрыть сообщение" className="shrink-0 text-white/50 hover:text-white"><X className="size-4" /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRetryCountdown(null);
+                  setError('');
+                }}
+                aria-label="Скрыть сообщение"
+                className="shrink-0 text-white/50 hover:text-white"
+              >
+                <X className="size-4" />
+              </button>
             </div>
           </div>
         )}
