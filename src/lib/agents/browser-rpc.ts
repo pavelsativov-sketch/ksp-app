@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 
-const BROWSER_RPC_URL = process.env.BROWSER_RPC_URL || "https://ksp-app.pavelsativov.workers.dev/_agent/browser";
+const BROWSER_RPC_URL = process.env.BROWSER_RPC_URL || "https://cautious-enigma-97rrrw5jp7w92xv7w-3000.app.github.dev/_agent/browser";
 const encoder = new TextEncoder();
 // The Worker accepts a 256 KB request. IndexedDB snapshots from third-party
 // sites can be several megabytes, so only carry a bounded restore snapshot.
