@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  executor:
+    build: ./executor
+    environment:
+      - EXECUTOR_AUTH_SECRET=${EXECUTOR_AUTH_SECRET:-change-me}
+      - ALLOWED_COMMANDS=${ALLOWED_COMMANDS:-echo,ls,cat,git}
+    ports:
+      - "4000:4000"
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
