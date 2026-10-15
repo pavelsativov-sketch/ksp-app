@@ -504,13 +504,6 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         </button>
         <button
           type="button"
-          onClick={() => void navigate('https://login.kundelik.kz')}
-          className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/20 font-medium transition-colors"
-        >
-          Kundelik.kz
-        </button>
-        <button
-          type="button"
           onClick={() => void navigate('https://nobd.edu.kz/login')}
           className="px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 border border-violet-500/20 font-medium transition-colors"
         >

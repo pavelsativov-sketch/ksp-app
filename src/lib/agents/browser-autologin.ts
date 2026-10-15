@@ -53,14 +53,6 @@ export const KNOWN_LOGIN_SITES: Record<string, {
     submitSelector: "button[type='submit'], button.login-btn, button:has-text('іру'), button:has-text('Войти')",
     waitAfterMs: 2000,
   },
-  "kundelik.kz": {
-    name: "Kundelik.kz",
-    loginPath: "/login",
-    loginSelector: "input[name='login'], input[type='email'], input[name='username']",
-    passwordSelector: "input[type='password']",
-    submitSelector: "button[type='submit'], input[type='submit']",
-    waitAfterMs: 2000,
-  },
   "bilimland.kz": {
     name: "BilimLand",
     loginPath: "/login",
