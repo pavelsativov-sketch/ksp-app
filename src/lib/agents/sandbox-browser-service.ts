@@ -53,7 +53,13 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
 
     log.info("sandbox-browser: Starting browser runner inside Vercel Sandbox...", { userId });
 
-    // 2. Записываем файл runner'а в /tmp/runner.mjs
+    // 2. Записываем конфигурацию и скрипт runner'а
+    const secret = process.env.AUTH_SECRET;
+    await sandbox.fs.writeFile(
+      "/tmp/runner-config.json",
+      JSON.stringify({ secret, port: 3000 }),
+      "utf8",
+    );
     await sandbox.fs.writeFile("/tmp/runner.mjs", RUNNER_SCRIPT, "utf8");
 
     // 3. Проверяем наличие установленного Playwright
@@ -76,23 +82,22 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
     }
 
     // 4. Запускаем runner в фоновом режиме на порту 3000
-    const secret = process.env.AUTH_SECRET;
     await sandbox.runCommand({
       cmd: "bash",
       args: [
         "-lc",
-        `cd /tmp && export AUTH_SECRET="${secret}" PORT=3000 NODE_PATH=/tmp/node_modules; pkill -f "/tmp/runner.mjs" || true; nohup node /tmp/runner.mjs > /tmp/runner.log 2>&1 &`,
+        "pkill -f 'runner.mjs' || true; cd /tmp && nohup node /tmp/runner.mjs > /tmp/runner.log 2>&1 &",
       ],
       detached: true,
     });
 
-    // 5. Ожидаем готовности runner'а (до 10 секунд)
+    // 5. Ожидаем готовности runner'а (до 20 секунд)
     const startTime = Date.now();
     let ready = false;
-    while (Date.now() - startTime < 10_000) {
-      await new Promise((r) => setTimeout(r, 400));
+    while (Date.now() - startTime < 20_000) {
+      await new Promise((r) => setTimeout(r, 500));
       const ok = await fetch(`${domainUrl}/health`, {
-        signal: AbortSignal.timeout(1000),
+        signal: AbortSignal.timeout(1500),
         cache: "no-store",
       })
         .then((r) => r.ok)

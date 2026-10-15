@@ -21,5 +21,11 @@ export function browserFailure(error: unknown): { message: string; status: numbe
       status: 429,
     };
   }
+  if (/запускается|подождите|sandbox/i.test(detail)) {
+    return {
+      message: detail,
+      status: 503,
+    };
+  }
   return { message: "Облачный браузер временно недоступен. Попробуйте ещё раз позже.", status: 503 };
 }

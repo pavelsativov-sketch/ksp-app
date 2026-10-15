@@ -6,12 +6,18 @@ export const RUNNER_SCRIPT = `import http from "node:http";
 import crypto from "node:crypto";
 import net from "node:net";
 import dns from "node:dns/promises";
+import fs from "node:fs";
 import { chromium } from "playwright";
 
-const PORT = parseInt(process.env.PORT || "3000", 10);
-const SECRET = process.env.AUTH_SECRET;
+let config = {};
+try {
+  config = JSON.parse(fs.readFileSync("/tmp/runner-config.json", "utf8"));
+} catch {}
+
+const PORT = parseInt(process.env.PORT || config.port || "3000", 10);
+const SECRET = process.env.AUTH_SECRET || config.secret;
 if (!SECRET || SECRET.length < 20) {
-  console.error("[RUNNER] FATAL: AUTH_SECRET env variable is required and must be at least 20 chars.");
+  console.error("[RUNNER] FATAL: AUTH_SECRET env variable or /tmp/runner-config.json secret is required and must be at least 20 chars.");
   process.exit(1);
 }
 
@@ -139,7 +145,11 @@ async function isPublicRequest(rawUrl) {
 
 async function installRequestGuard(context) {
   await context.route("**/*", async (route) => {
-    if (await isPublicRequest(route.request().url())) return route.continue();
+    const rawUrl = route.request().url();
+    if (rawUrl.startsWith("data:") || rawUrl.startsWith("blob:") || rawUrl.startsWith("about:")) {
+      return route.continue();
+    }
+    if (await isPublicRequest(rawUrl)) return route.continue();
     return route.abort();
   });
 }

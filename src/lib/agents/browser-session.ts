@@ -218,6 +218,7 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
       if (stored?.sessionId) {
         const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now, rpcUrl);
         if (await remote.remote!.validate()) return remote;
+        sessions.delete(userId);
       }
       const created = await createBrowserRpcSession(userId, {
         storageState: stored?.storageState,
@@ -370,11 +371,10 @@ function createRemoteSession(
         if (closed) return false;
         try {
           const status = await send<{ open: boolean; url: string }>("status");
-          currentUrl = status.result.url || currentUrl;
-          return status.result.open;
-        } catch (error) {
-          if (error instanceof BrowserRpcError && error.status === 410) return false;
-          throw error;
+          currentUrl = status?.result?.url || currentUrl;
+          return Boolean(status?.result?.open);
+        } catch {
+          return false;
         }
       },
     },
