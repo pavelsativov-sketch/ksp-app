@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { getDb, COL } from "@/lib/mongo";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { browserRpc, BrowserRpcError, createBrowserRpcSession } from "@/lib/agents/browser-rpc";
+import { log } from "@/lib/logger";
 export { browserFailure } from "@/lib/agents/browser-failure";
 
 export interface AgentBrowserSession {
@@ -237,15 +238,43 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
 
   const stored = await readStoredState(userId).catch(() => undefined);
   if (process.env.VERCEL === "1") {
-    if (stored?.sessionId) {
-      const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now);
-      if (await remote.remote!.validate()) return remote;
+    // Сначала пробуем Codespaces runner (быстрый, без лимитов)
+    try {
+      if (stored?.sessionId) {
+        const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now);
+        if (await remote.remote!.validate()) return remote;
+      }
+      const created = await createBrowserRpcSession(userId, {
+        storageState: stored?.storageState,
+        currentUrl: stored?.currentUrl,
+      });
+      return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now);
+    } catch (e) {
+      // Если Codespaces недоступен (503) — переходим на Vercel Sandbox
+      if (!(e instanceof BrowserRpcError) || e.status !== 503) throw e;
+      log.warn("browser-session: Codespaces runner unavailable, falling back to Vercel Sandbox", { userId });
     }
-    const created = await createBrowserRpcSession(userId, {
-      storageState: stored?.storageState,
-      currentUrl: stored?.currentUrl,
-    });
-    return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now);
+
+    // Vercel Sandbox fallback — всегда доступен, холодный старт ~3-5 мин
+    try {
+      const { getVercelSandbox } = await import("@/lib/workspace/runtime");
+      const { startSandboxBrowser } = await import("@/lib/agents/browser-sandbox");
+      const sandbox = await getVercelSandbox(userId);
+      if (sandbox) {
+        const page = await startSandboxBrowser(sandbox as never, {
+          storageState: stored?.storageState,
+          currentUrl: stored?.currentUrl,
+        });
+        const ctx = (page as unknown as { context: () => BrowserContext }).context();
+        const br = ctx.browser()!;
+        const session: AgentBrowserSession = { browser: br, context: ctx, page: page as unknown as Page, lastSeen: now };
+        sessions.set(userId, session);
+        return session;
+      }
+    } catch (sandboxErr) {
+      log.error("browser-session: Vercel Sandbox fallback failed", { userId, error: String(sandboxErr) });
+    }
+    throw new BrowserRpcError("Облачный браузер временно недоступен. Запустите Codespaces runner или повторите позже.", 503);
   }
 
   const browser = await launchAgentBrowser();

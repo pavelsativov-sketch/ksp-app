@@ -190,6 +190,24 @@ const server = http.createServer(async (req, res) => {
         await page.goForward({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => {});
       } else if (action === "reload") {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+      } else if (action === "evaluate") {
+        const script = String(args.script ?? "null");
+        result = await page.evaluate(new Function("return (" + script + ")")());
+      } else if (action === "fill") {
+        // fill({ selector, value }) — fills input by CSS selector (for auto-login)
+        const sel = String(args.selector ?? "");
+        const val = String(args.value ?? "");
+        if (sel) {
+          await page.locator(sel).first().fill(val, { timeout: 5000 }).catch(async () => {
+            // Fallback: click and type if fill fails
+            await page.locator(sel).first().click({ timeout: 3000 }).catch(() => {});
+            await page.keyboard.type(val, { delay: 20 });
+          });
+          await page.waitForTimeout(100);
+        }
+      } else if (action === "wait") {
+        const ms = Math.min(Number(args.ms ?? 500), 5000);
+        await page.waitForTimeout(ms);
       } else if (action === "screenshot" && !captureScreenshot) {
         const screenshot = await page.screenshot({ type: "jpeg", quality: 80 });
         res.writeHead(200, {

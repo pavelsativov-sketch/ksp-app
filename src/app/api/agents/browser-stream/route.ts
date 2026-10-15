@@ -10,6 +10,7 @@ import {
   persistAgentBrowserSession,
 } from "@/lib/agents/browser-session";
 import { inspectActiveField, detectPageAuthBarrier } from "@/lib/agents/browser-sandbox";
+import { tryAutoLogin, KNOWN_LOGIN_SITES } from "@/lib/agents/browser-autologin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,11 +115,32 @@ async function runAction(userId: string, args: BrowserAction) {
       const frame = await session.remote.performUiAction(remoteAction, remoteArgs, allowedOrigin);
       if (action !== "screenshot") await persistAgentBrowserSession(userId);
 
-      return new NextResponse(new Uint8Array(frame.screenshot), {
+      // Авто-вход: если перешли на страницу входа известного сайта — заполняем форму автоматически
+      let autoFrame = frame;
+      if (action === "navigate") {
+        const navigatedUrl = frame.currentUrl || "";
+        const hostname = (() => { try { return new URL(navigatedUrl).hostname.replace(/^www\./, ""); } catch { return ""; } })();
+        const navPath = (() => { try { return new URL(navigatedUrl).pathname; } catch { return ""; } })();
+        const site = hostname ? KNOWN_LOGIN_SITES[hostname] : undefined;
+        const isLoginPage = site && (!site.loginPath || navPath.startsWith(site.loginPath));
+        if (isLoginPage) {
+          const sendRpc = async (act: string, rpcArgs: Record<string, unknown>) => {
+            await session.remote!.performUiAction(act, rpcArgs).catch(() => {});
+          };
+          const didLogin = await tryAutoLogin(userId, navigatedUrl, sendRpc);
+          if (didLogin) {
+            // Берём финальный скриншот после входа
+            autoFrame = await session.remote.performUiAction("screenshot", {}).catch(() => frame);
+            await persistAgentBrowserSession(userId);
+          }
+        }
+      }
+
+      return new NextResponse(new Uint8Array(autoFrame.screenshot), {
         headers: {
           "Content-Type": "image/jpeg",
-          "X-Page-Title": encodeURIComponent(frame.title),
-          "X-Page-Url": encodeURIComponent(frame.currentUrl),
+          "X-Page-Title": encodeURIComponent(autoFrame.title),
+          "X-Page-Url": encodeURIComponent(autoFrame.currentUrl),
           // Remote runner не возвращает DOM-данные — отправляем пустые значения
           // чтобы browser.tsx сбросил старую рамку активного поля.
           "X-Active-Field": encodeURIComponent(JSON.stringify(EMPTY_ACTIVE_FIELD)),
@@ -165,6 +187,32 @@ async function runAction(userId: string, args: BrowserAction) {
     }
 
     if (action !== "screenshot") await persistAgentBrowserSession(userId);
+
+    // Авто-вход для local/Sandbox пути через Playwright page.fill()
+    if (action === "navigate") {
+      const currentUrl = page.url();
+      const hostname = (() => { try { return new URL(currentUrl).hostname.replace(/^www\./, ""); } catch { return ""; } })();
+      const site = hostname ? KNOWN_LOGIN_SITES[hostname] : undefined;
+      const navPath = (() => { try { return new URL(currentUrl).pathname; } catch { return ""; } })();
+      const isLoginPage = site && (!site.loginPath || navPath.startsWith(site.loginPath));
+      if (isLoginPage) {
+        const sendRpc = async (act: string, rpcArgs: Record<string, unknown>) => {
+          if (act === "fill") {
+            const sel = String(rpcArgs.selector ?? "");
+            const val = String(rpcArgs.value ?? "");
+            if (sel && val) await page.locator(sel).first().fill(val, { timeout: 5000 }).catch(() => {});
+          } else if (act === "press") {
+            await page.keyboard.press(String(rpcArgs.key ?? "Enter")).catch(() => {});
+          } else if (act === "wait") {
+            await page.waitForTimeout(Math.min(Number(rpcArgs.ms ?? 500), 5000));
+          } else if (act === "evaluate") {
+            await page.evaluate(String(rpcArgs.script ?? "null")).catch(() => {});
+          }
+        };
+        await tryAutoLogin(userId, currentUrl, sendRpc);
+        await persistAgentBrowserSession(userId);
+      }
+    }
 
     const [screenshot, title, activeField, authBarrier] = await Promise.all([
       page.screenshot({ type: "jpeg", quality: 80 }),

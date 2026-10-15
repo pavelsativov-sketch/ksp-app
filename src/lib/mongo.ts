@@ -111,6 +111,7 @@ export const COL = {
   workspaceSnapshots: "workspace_snapshots",
   connectors: "connectors",
   auditLog: "audit_log",
+  browserCredentials: "browser_credentials",
 } as const;
 
 async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
