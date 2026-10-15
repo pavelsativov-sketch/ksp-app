@@ -77,6 +77,13 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const isRateLimited = /ограничил|подождите \d+ секунд/i.test(error);
   const isSessionExpired = /session expired|сессия истекла|410/i.test(error);
 
+  // Keepalive: пингуем runner каждые 10 мин, чтобы Codespace не засыпал
+  useEffect(() => {
+    const ping = () => void fetch('/api/health/browser-keepalive', { cache: 'no-store' }).catch(() => {});
+    ping(); // сразу при открытии
+    const id = setInterval(ping, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
 
   const acceptFrame = useCallback(async (res: Response) => {
