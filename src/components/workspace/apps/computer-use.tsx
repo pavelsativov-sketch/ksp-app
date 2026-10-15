@@ -174,7 +174,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     const poll = window.setInterval(() => {
       if (typeBufferRef.current || document.activeElement === kbInputRef.current) return;
       void refreshScreenshot();
-    }, 2500);
+    }, 1200);
     return () => window.clearInterval(poll);
   }, [running, refreshScreenshot]);
 
@@ -244,7 +244,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     const rect = imgRef.current.getBoundingClientRect();
     const scaleX = 1280 / rect.width;
     const scaleY = 800 / rect.height;
-    const scale = Math.max(scaleX, scaleY);
+    const scale = Math.min(scaleX, scaleY); // object-fit:contain → min
     const renderedW = 1280 / scale;
     const renderedH = 800 / scale;
     const offsetX = (rect.width - renderedW) / 2;
@@ -387,7 +387,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
 
     const scaleX = 1280 / imgLayout.width;
     const scaleY = 800 / imgLayout.height;
-    const scale = Math.max(scaleX, scaleY);
+    const scale = Math.min(scaleX, scaleY); // object-fit:contain → min
     const renderedW = 1280 / scale;
     const renderedH = 800 / scale;
     const offsetX = (imgLayout.width - renderedW) / 2;

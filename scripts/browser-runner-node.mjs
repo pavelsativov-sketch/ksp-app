@@ -3,7 +3,12 @@ import crypto from "node:crypto";
 import { chromium } from "playwright";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
-const SECRET = process.env.AUTH_SECRET || "1078d15f9ca9d1a1fa076aba007a7d445675c0818fe6a2e1";
+const SECRET = process.env.AUTH_SECRET;
+if (!SECRET || SECRET.length < 20) {
+  console.error("[RUNNER] FATAL: AUTH_SECRET env variable is required and must be at least 20 chars.");
+  console.error("[RUNNER] Start with: AUTH_SECRET=<your-secret> node scripts/browser-runner-node.mjs");
+  process.exit(1);
+}
 
 let browserInstance = null;
 const sessions = new Map();

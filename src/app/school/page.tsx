@@ -10,7 +10,17 @@ export default async function SchoolWorkspacePage({ searchParams }: { searchPara
   if (!user) redirect("/login?next=/school");
 
   const sp = await searchParams;
-  const initialTab: OsTab = sp.os === "files" ? "files" : sp.os === "browser" ? "browser" : sp.os === "terminal" ? "terminal" : "os";
+  // Deep-link на конкретную вкладку ОС: с коннекторов (?os=browser) и
+  // радиокнопок задач. Все значения OsTab, кроме computer-use, который
+  // открывается как окно поверх рабочего стола.
+  const TAB_BY_PARAM: Partial<Record<string, OsTab>> = {
+    files: "files",
+    browser: "browser",
+    terminal: "terminal",
+    editor: "editor",
+    log: "log",
+  };
+  const initialTab: OsTab = TAB_BY_PARAM[sp.os ?? ""] ?? "os";
   const openComputerUse = sp.os === "computer-use";
 
   return <SchoolWorkspace sysInfo={await sysInfo()} initialTab={initialTab} openComputerUse={openComputerUse} />;

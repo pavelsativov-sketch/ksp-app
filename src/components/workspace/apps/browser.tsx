@@ -70,6 +70,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const dailyQuotaBlocked = /дневн.{0,30}лимит/i.test(error);
   const isInstalling = /устанавливается|запускается.*мин|failed to start/i.test(error);
   const isRateLimited = /ограничил|подождите \d+ секунд/i.test(error);
+  const isSessionExpired = /session expired|сессия истекла|410/i.test(error);
 
 
 
@@ -255,15 +256,15 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     // Фокусируем ввод с клавиатуры для прямого набора в поле удалённого экрана
     kbInputRef.current?.focus({ preventScroll: true });
     setCanvasFocused(true);
-    setLiveText('');
+    // Не сбрасываем liveText — поле могло уже содержать текст из activeField.value
 
     // Рассчитываем реальные координаты пикселя в удалённом браузере
     const rect = img.getBoundingClientRect();
-    // object-contain сохраняет пропорции; вычисляем реальный масштаб
+    // object-contain сохраняет пропорции: масштаб = min(scaleX, scaleY)
     const scaleX = REMOTE_W / rect.width;
     const scaleY = REMOTE_H / rect.height;
-    // Учитываем letterbox (если контейнер шире/выше изображения)
-    const scale = Math.max(scaleX, scaleY);
+    // Math.min — изображение вписывается в контейнер (object-fit:contain)
+    const scale = Math.min(scaleX, scaleY);
     const renderedW = REMOTE_W / scale;
     const renderedH = REMOTE_H / scale;
     const offsetX = (rect.width - renderedW) / 2;
@@ -382,7 +383,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       ) {
         void fetchFrame();
       }
-    }, 3500);
+    }, 1200);
     return () => clearInterval(id);
   }, [fetchFrame]);
 
@@ -405,7 +406,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
     const scaleX = REMOTE_W / imgLayout.width;
     const scaleY = REMOTE_H / imgLayout.height;
-    const scale = Math.max(scaleX, scaleY);
+    const scale = Math.min(scaleX, scaleY); // object-fit:contain → min
     const renderedW = REMOTE_W / scale;
     const renderedH = REMOTE_H / scale;
     const offsetX = (imgLayout.width - renderedW) / 2;
@@ -673,6 +674,19 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
                   </button>
                   <span className="shrink-0 text-xs text-amber-200/70">Сброс в 00:00 UTC</span>
                 </>
+              ) : isSessionExpired ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRetryCountdown(null);
+                    setError('');
+                    setImgSrc(null);
+                    void navigate(landingUrl);
+                  }}
+                  className="shrink-0 text-sm text-emerald-300 underline underline-offset-2"
+                >
+                  Обновить сеанс
+                </button>
               ) : (
                 <button
                   type="button"

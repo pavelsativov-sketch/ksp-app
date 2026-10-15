@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { getDb, COL } from "@/lib/mongo";
 import type { Sandbox } from "@vercel/sandbox";
-import { runGitLabCommand } from "@/lib/workspace/gitlab-runner";
 
 const ROOT = "workspace";
 const MAX_FILE_BYTES = 200_000;
@@ -253,49 +252,20 @@ export async function getWorkspaceRuntime(userId: string) {
     },
 
     async runCommand(command: string, timeoutMs = COMMAND_TIMEOUT_MS) {
-      const safeTimeout = Math.min(Math.max(timeoutMs, 1000), COMMAND_TIMEOUT_MS);
-      const result = await runGitLabCommand(userId, command, safeTimeout);
-      const existing = await files.find(
-        { user_id: userId, path: { $regex: "^workspace(?:/|$)" } },
-        { projection: { _id: 0, path: 1, name: 1, updated_at: 1 } },
-      ).limit(500).toArray();
-      const currentByKey = new Map(existing.map((file) => [`${file.path}\n${file.name}`, file]));
-      const nextKeys = new Set(result.files.map((file) => `${file.path}\n${file.name}`));
-      const unchanged = (key: string) => {
-        const baseline = result.sourceVersions[key];
-        const current = currentByKey.get(key);
-        return baseline === undefined ? !current : !!current && current.updated_at?.getTime() === baseline;
-      };
-      const removals = existing.filter((file) => {
-        const key = `${file.path}\n${file.name}`;
-        return !nextKeys.has(key) && result.sourceVersions[key] !== undefined && unchanged(key);
-      });
-      if (removals.length) {
-        await files.deleteMany({ user_id: userId, $or: removals.map(({ path, name }) => ({ path, name })) });
-      }
-      const safeFiles = result.files.filter((file) => unchanged(`${file.path}\n${file.name}`));
-      if (safeFiles.length) {
-        const now = new Date();
-        await files.bulkWrite(safeFiles.map((file) => ({
-          updateOne: {
-            filter: { user_id: userId, path: file.path, name: file.name },
-            update: { $set: { content: file.content, updated_at: now }, $setOnInsert: { user_id: userId, path: file.path, name: file.name, created_at: now } },
-            upsert: true,
-          },
-        })));
-      }
-      return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, cwd: result.cwd };
+      void command; void timeoutMs;
+      // Команды выполняются только в Linux-среде Vercel Sandbox;
+      // Mongo-хранение хранит файлы и снимки, но не исполняет команды.
+      throw new Error("Команды доступны только в Linux-среде (Vercel Sandbox)");
     },
 
     async getSandboxStatus() {
-      const available = Boolean(process.env.GITLAB_TRIGGER_TOKEN && process.env.GITLAB_PROJECT_ID && process.env.APP_URL && process.env.AUTH_SECRET);
       return {
-        available,
-        status: available ? "gitlab-shared-runner" : "runner-not-configured",
+        available: false,
+        status: "local-workspace",
         cwd: "/workspace",
-        timeoutMs: available ? COMMAND_TIMEOUT_MS : 0,
-        vcpus: available ? 2 : 0,
-        reason: available ? undefined : "Linux runner не настроен. Нужны GitLab trigger token, project ID, APP_URL и AUTH_SECRET.",
+        timeoutMs: 0,
+        vcpus: 0,
+        reason: "Linux-среда не установлена: команды выполняются только на Vercel с Vercel Sandbox.",
       };
     },
 

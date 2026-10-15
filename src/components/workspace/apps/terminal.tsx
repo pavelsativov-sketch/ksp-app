@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import { LoaderCircle, TerminalSquare } from "lucide-react";
+import { LoaderCircle, TerminalSquare, Eraser } from "lucide-react";
 
 interface TerminalEntry {
   command: string;
@@ -85,6 +85,17 @@ export function TerminalApp() {
       <header className="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-2 text-[11px] text-white/55">
         <TerminalSquare className="size-4 text-sky-300" aria-hidden="true" />
         <span className="truncate">{status}</span>
+        {entries.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setEntries([])}
+            aria-label="Очистить терминал"
+            title="Очистить вывод (Ctrl+L)"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-white/80"
+          >
+            <Eraser className="size-3" /> Очистить
+          </button>
+        )}
       </header>
       <div className="flex-1 overflow-y-auto p-4" onClick={() => inputRef.current?.focus()}>
         <div className="mb-3 text-xs text-white/40">Файлы рабочей области сохраняются в вашем аккаунте. Команды запускаются в изолированной Linux Sandbox; одна команда может выполняться до 90 секунд, сессия — до 15 минут.</div>

@@ -74,11 +74,16 @@ export const DESKTOP_APPS: DesktopApp[] = [
   },
 ];
 
+/**
+ * Колонка иконок вдоль левого края, как в референсе: вертикальный поток с
+ * переносом в новую колонку по высоте. Раньше был грид сверху-слева, и при
+ * высоком экране справа оставалась пустая ширина, торгающая обои.
+ */
 export function Desktop() {
   const openWindow = useWorkspaceStore((s) => s.openWindow);
 
   return (
-    <div className="flex-1 relative overflow-hidden p-5 grid grid-cols-[repeat(auto-fill,88px)] grid-rows-[repeat(auto-fill,100px)] gap-x-1 gap-y-0 content-start items-start">
+    <div className="absolute inset-0 flex h-full max-h-full flex-col flex-wrap content-start items-start gap-x-1 gap-y-0 p-5">
       {DESKTOP_APPS.map(app => (
         <button
           key={app.id}

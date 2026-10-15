@@ -60,7 +60,7 @@ export function WorkspaceSurface({ showDesktop = true }: { showDesktop?: boolean
   const open = windows.filter((w) => w.isOpen);
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden bg-[#0f0c29]">
+    <div className="relative min-h-0 flex-1 overflow-hidden bg-[#0f0c29] bg-[image:radial-gradient(120%_120%_at_20%_0%,#2a1f5e_0%,#170f3e_45%,#0d0a24_100%)]">
       {showDesktop && <Desktop />}
       {open.map((win) => (
         <Window key={win.id} id={win.id} title={win.title} onClose={() => handleClose(win.id)}>

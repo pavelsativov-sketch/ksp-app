@@ -7,9 +7,7 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "vars": {
     "APP_URL": "https://ksp-app-pi.vercel.app",
-    "VERCEL_ORIGIN": "https://ksp-app-pi.vercel.app",
-    "GITLAB_PROJECT_ID": "87341910",
-    "GITLAB_REF": "main"
+    "VERCEL_ORIGIN": "https://ksp-app-pi.vercel.app"
   },
   "browser": { "binding": "BROWSER" },
   "workflows": [

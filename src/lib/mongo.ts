@@ -16,21 +16,9 @@ declare global {
 async function currentMongoRequestState() {
   const contextual = mongoRequestState();
   if (contextual) return contextual;
-
-  // OpenNext can evaluate the Worker entrypoint and Next server bundle in
-  // separate module graphs, so their AsyncLocalStorage stores are not shared.
-  // Pass the actual request-local state through the Cloudflare context instead
-  // of relying on a global client or a cross-bundle registry lookup.
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const { env } = await getCloudflareContext({ async: true });
-    const state = (env as typeof env & { MONGO_REQUEST_STATE?: ReturnType<typeof mongoRequestState> }).MONGO_REQUEST_STATE;
-    if (state) {
-      return state;
-    }
-  } catch {
-    return undefined;
-  }
+  // Раньше здесь был fallback на Cloudflare context из OpenNext-воркера;
+  // деплой Next.js на Cloudflare удалён, состояние передаётся только
+  // через AsyncLocalStorage внутри одного процесса Next.js.
   return undefined;
 }
 
@@ -41,7 +29,7 @@ export async function getClient(): Promise<MongoClient> {
   const cachedPromise = requestState ? requestState.clientPromise : global.__mongoClientPromise;
   if (!cachedPromise) {
     if (!requestState && process.env.OPEN_NEXT_ORIGIN) {
-      throw new Error("Cloudflare Mongo request context is missing; refusing to reuse a global TCP client");
+      throw new Error("Linux-sandbox Mongo request context is missing; refusing to reuse a global TCP client");
     }
     // Atlas из Казахстана отвечает медленно: 8 с роняло запросы с 500
     // «Server selection timed out». 20 с — с запасом на холодный старт.
@@ -114,7 +102,6 @@ export const COL = {
   vskInspections: "vsk_inspections",
   vskChecklists: "vsk_checklists",
   agentTasks: "agent_tasks",
-  agentRunnerExecutions: "agent_runner_executions",
   agentExecutions: "agent_executions",
   agentBrowserSessions: "agent_browser_sessions",
   agentPermissionRequests: "agent_permission_requests",
@@ -263,8 +250,6 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.agentTasks).createIndex({ user_id: 1, created_at: -1 }, { name: "agent_tasks_user_created" }),
     db.collection(COL.agentTasks).createIndex({ school_id: 1, status: 1 }, { name: "agent_tasks_school_status" }),
     db.collection(COL.agentExecutions).createIndex({ task_id: 1, created_at: -1 }, { name: "agent_executions_task_created" }),
-    db.collection(COL.agentRunnerExecutions).createIndex({ execution_id: 1 }, { unique: true, name: "agent_runner_execution_id_unique" }),
-    db.collection(COL.agentRunnerExecutions).createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: "agent_runner_execution_expiry" }),
     db.collection(COL.agentBrowserSessions).createIndex({ user_id: 1 }, { unique: true, name: "agent_browser_sessions_user_unique" }),
     db.collection(COL.agentPermissionRequests).createIndex({ user_id: 1, status: 1, created_at: -1 }, { name: "agent_permissions_user_status_created" }),
     db.collection(COL.agentPermissionRequests).createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: "agent_permissions_expiry" }),

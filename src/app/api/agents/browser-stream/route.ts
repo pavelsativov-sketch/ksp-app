@@ -196,6 +196,10 @@ async function runAction(userId: string, args: BrowserAction) {
           "Content-Type": "image/jpeg",
           "X-Page-Title": encodeURIComponent(frame.title),
           "X-Page-Url": encodeURIComponent(frame.currentUrl),
+          // Cloudflare Remote Browser не возвращает данные DOM — передаём пустые
+          // значения, чтобы browser.tsx сбросил старую рамку активного поля.
+          "X-Active-Field": encodeURIComponent(JSON.stringify({ isEditable: false, isPassword: false, tag: "", type: "", label: "" })),
+          "X-Auth-Barrier": encodeURIComponent(JSON.stringify({ requiresUserAction: false, kind: null, reason: "" })),
           "Cache-Control": "no-store",
         },
       });

@@ -31,8 +31,13 @@ const securityHeaders = [
       "form-action 'self'",
       "img-src 'self' data: blob: https:",
       "style-src 'self' 'unsafe-inline'",
-      `script-src ${scriptSrc}`,
-      "connect-src 'self' https://api.openai.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.cloudflare.com wss:",
+      // Редактор кода грузит Monaco со своего CDN (@monaco-editor/react
+      // default loader); без этого вкладка «Редактор» висит в «Загрузка…».
+      `script-src ${scriptSrc} https://cdn.jsdelivr.net https://unpkg.com`,
+      // Monaco loader и worker'ы ходят на CDN: разрешаем fetch к нему.
+      "connect-src 'self' https://api.openai.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.cloudflare.com wss: https://cdn.jsdelivr.net https://unpkg.com",
+      // workerSrc у Monaco это blob:-чанок — разрешаем создание воркеров из blob.
+      "worker-src 'self' blob:",
       "font-src 'self' data:",
     ].join("; "),
   },

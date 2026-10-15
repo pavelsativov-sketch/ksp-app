@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FileText, Image as ImageIcon, Music, Film, Archive, Code,
-  LayoutGrid, List, RefreshCw, File, Loader2, Terminal,
+  LayoutGrid, List, RefreshCw, File, Loader2, Terminal, Upload, Pencil,
 } from 'lucide-react';
 import { useWorkspaceStore } from '@/lib/store/workspace';
 
@@ -13,6 +13,13 @@ interface FsItem {
   sizeLabel: string;
   modified: string;
 }
+
+/** Ограничение рабочего файла на сервере: файлов больше не принять. */
+const MAX_FILE_BYTES = 200_000;
+/** Загрузка отдыхает только на текстовых форматах: бинарник в UTF-8-хранилище
+ *  приводит к повреждённому файлу, предупреждаем честно, а не портим данные. */
+const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json', 'py', 'js', 'jsx', 'ts', 'tsx', 'html', 'css', 'xml', 'yml', 'yaml', 'svg', 'ini', 'cfg', 'log'];
+const ACCEPT = TEXT_EXTENSIONS.map((ext) => `.${ext}`).join(',');
 
 /**
  * Файловый менеджер показывает содержимое личного изолированного workspace.
@@ -29,6 +36,9 @@ export function FileManagerApp() {
   const [selected, setSelected] = useState<{ name: string; content: string; truncated: boolean } | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busyOp, setBusyOp] = useState<'upload' | 'rename' | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setFiles(null);
@@ -53,6 +63,77 @@ export function FileManagerApp() {
     return () => clearTimeout(timer);
   }, [load]);
 
+  /** Загрузка педагогом своих файлов: текстовые до 200 КБ, как и на API. */
+  async function uploadFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setBusyOp('upload');
+    setNotice(null);
+    const results: string[] = [];
+    for (const file of Array.from(list)) {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (file.size === 0) { results.push(`${file.name}: пустой файл`); continue; }
+      if (file.size > MAX_FILE_BYTES) { results.push(`${file.name}: больше 200 КБ`); continue; }
+      if (!TEXT_EXTENSIONS.includes(ext)) { results.push(`${file.name}: только текстовые форматы`); continue; }
+      if (files?.some((existing) => existing.name === file.name)
+        && !window.confirm(`Файл «${file.name}» уже существует. Заменить?`)) {
+        results.push(`${file.name}: пропущен`);
+        continue;
+      }
+      try {
+        const content = await file.text();
+        const res = await fetch('/api/agents/sandbox', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file: file.name, content }),
+        });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          results.push(`${file.name}: ${data.error ?? 'не сохранён'}`);
+        } else {
+          results.push(`${file.name}: загружен`);
+        }
+      } catch {
+        results.push(`${file.name}: не удалось прочитать файл`);
+      }
+    }
+    setNotice(results.join(' · ') || null);
+    if (uploadInputRef.current) uploadInputRef.current.value = '';
+    await load();
+    setBusyOp(null);
+  }
+
+  /** Переименование открытого файла: новая запись + удаление старой. */
+  async function renameFile(oldName: string) {
+    const nextName = window.prompt('Новое имя файла:', oldName);
+    if (!nextName || nextName === oldName) return;
+    setBusyOp('rename');
+    setNotice(null);
+    try {
+      const getRes = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(oldName)}`, { cache: 'no-store' });
+      const getData = (await getRes.json()) as { content?: string; truncated?: boolean; error?: string };
+      if (!getRes.ok || getData.content === undefined) throw new Error(getData.error ?? 'Не удалось прочитать файл');
+      if (getData.truncated) {
+        throw new Error('Файл больше 20 КБ в предпросмотре; переименуйте его после перезагрузки страницы');
+      }
+      const putRes = await fetch('/api/agents/sandbox', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: nextName, content: getData.content }),
+      });
+      if (!putRes.ok) {
+        const data = (await putRes.json()) as { error?: string };
+        throw new Error(data.error ?? 'Не удалось сохранить новое имя');
+      }
+      await fetch(`/api/agents/sandbox?file=${encodeURIComponent(oldName)}`, { method: 'DELETE' });
+      setSelected(null);
+      await load();
+      setNotice(`Файл переименован: ${nextName}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка переименования');
+    }
+    setBusyOp(null);
+  }
+
   async function openFile(name: string) {
     setLoadingFile(true);
     setSelected(null);
@@ -74,6 +155,31 @@ export function FileManagerApp() {
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/50">
           /workspace
         </span>
+        {(busyOp || notice) && (
+          <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-emerald-300" role="status">
+            {busyOp && <Loader2 className="size-3 animate-spin" />}
+            {notice}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => uploadInputRef.current?.click()}
+          disabled={busyOp === 'upload'}
+          aria-label="Загрузить файл"
+          title="Загрузить текстовый файл до 200 КБ"
+          className="rounded p-1 hover:bg-white/10 disabled:opacity-40"
+        >
+          {busyOp === 'upload' ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+        </button>
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept={ACCEPT}
+          multiple
+          className="hidden"
+          aria-label="Выбранные файлы"
+          onChange={(event) => void uploadFiles(event.target.files)}
+        />
         <button type="button" onClick={() => setView(view === 'list' ? 'grid' : 'list')} className="rounded p-1 hover:bg-white/10" aria-label="Вид">
           {view === 'list' ? <LayoutGrid className="size-3.5" /> : <List className="size-3.5" />}
         </button>
@@ -140,6 +246,15 @@ export function FileManagerApp() {
               className="rounded px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-white/10"
             >
               В редактор
+            </button>
+            <button
+              type="button"
+              onClick={() => void renameFile(selected.name)}
+              disabled={busyOp === 'rename'}
+              aria-label="Переименовать файл"
+              className="rounded px-1.5 py-0.5 text-[10px] text-white/60 hover:bg-white/10 disabled:opacity-40"
+            >
+              {busyOp === 'rename' ? <Loader2 className="size-3 animate-spin" /> : <Pencil className="size-3" />} Переименовать
             </button>
             <button
               type="button"

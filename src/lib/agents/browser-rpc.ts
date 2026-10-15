@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 
-const BROWSER_RPC_URL = process.env.BROWSER_RPC_URL || "https://cautious-enigma-97rrrw5jp7w92xv7w-3000.app.github.dev/_agent/browser";
+const BROWSER_RPC_URL = process.env.BROWSER_RPC_URL ?? "";
 const encoder = new TextEncoder();
 // The Worker accepts a 256 KB request. IndexedDB snapshots from third-party
 // sites can be several megabytes, so only carry a bounded restore snapshot.
@@ -50,6 +50,7 @@ export async function browserRpc<T = unknown>(
 ): Promise<{ sessionId?: string; currentUrl?: string; pageTitle?: string; result: T; storageState?: unknown; interactionState?: unknown; screenshotBase64?: string }> {
   const secret = process.env.AUTH_SECRET;
   if (!secret || secret.length < 32) throw new Error("AUTH_SECRET is not configured for browser service");
+  if (!BROWSER_RPC_URL) throw new BrowserRpcError("Внешний браузерный сервер не настроен (BROWSER_RPC_URL не задан)", 503);
 
   const { storageState, ...rest } = options;
   const safeStorageState = transferableStorageState(storageState);
