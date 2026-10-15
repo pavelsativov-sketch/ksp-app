@@ -65,15 +65,11 @@ function decryptState(encoded: string): string | null {
 }
 
 type SavedBrowserState = {
-  storageState: Awaited<ReturnType<BrowserContext["storageState"]>>;
+  storageState?: Awaited<ReturnType<BrowserContext["storageState"]>>;
   currentUrl?: string;
   sessionId?: string;
   interactionState?: unknown;
 };
-
-export async function readStoredBrowserState(userId: string): Promise<SavedBrowserState | undefined> {
-  return readStoredState(userId);
-}
 
 async function readStoredState(userId: string): Promise<SavedBrowserState | undefined> {
   const db = await getDb();
@@ -85,31 +81,42 @@ async function readStoredState(userId: string): Promise<SavedBrowserState | unde
     const value = JSON.parse(decoded) as Record<string, unknown>;
     // Old documents contain Playwright StorageState directly.
     if (Array.isArray(value.cookies)) return { storageState: value as SavedBrowserState["storageState"] };
-    if (value.storageState && typeof value.storageState === "object") {
-      return {
-        storageState: value.storageState as SavedBrowserState["storageState"],
-        currentUrl: typeof value.currentUrl === "string" ? value.currentUrl : undefined,
-        sessionId: typeof value.sessionId === "string" ? value.sessionId : undefined,
-        interactionState: value.interactionState,
-      };
-    }
+    const currentUrl = typeof value.currentUrl === "string" ? value.currentUrl : undefined;
+    const sessionId = typeof value.sessionId === "string" ? value.sessionId : undefined;
+    // Сессия Codespaces восстанавливается по sessionId даже без storageState,
+    // поэтому отсутствие кук не должно обнулять весь документ — иначе после
+    // каждой перезагрузки лямбды открывается новая сессия браузера.
+    if (!currentUrl && !sessionId && !value.storageState) return undefined;
+    return {
+      storageState: value.storageState && typeof value.storageState === "object"
+        ? value.storageState as SavedBrowserState["storageState"]
+        : undefined,
+      currentUrl,
+      sessionId,
+      interactionState: value.interactionState,
+    };
   } catch {
     return undefined;
   }
-  return undefined;
 }
 
 export async function persistAgentBrowserSession(userId: string): Promise<void> {
   const session = sessions.get(userId);
   if (!session || session.page.isClosed()) return;
-  const state = await session.context.storageState({ indexedDB: true });
+  const state = await session.context.storageState({ indexedDB: true }).catch(() => undefined);
   const currentUrl = /^https?:\/\//i.test(session.page.url()) ? session.page.url() : undefined;
   const sessionId = session.remote?.sessionId;
-  const interactionState = session.remote?.getInteractionState?.();
+
+  // У remote-сессии storageState приезжает только по явному запросу, и если
+  // runner не смог его собрать — приходит пустым. Затирать им сохранённые
+  // куки нельзя: иначе после рестарта лямбды вход в BilimClass теряется.
+  const prev = await readStoredState(userId).catch(() => undefined);
+  const merged = state ? mergeStorageStates(prev?.storageState, state) : prev?.storageState;
+
   const db = await getDb();
   await db.collection(COL.agentBrowserSessions).updateOne(
     { user_id: userId },
-    { $set: { encrypted_state: encryptState(JSON.stringify({ storageState: state, currentUrl, sessionId, interactionState })), updated_at: new Date() }, $setOnInsert: { created_at: new Date() } },
+    { $set: { encrypted_state: encryptState(JSON.stringify({ storageState: merged, currentUrl: currentUrl ?? prev?.currentUrl, sessionId: sessionId ?? prev?.sessionId, interactionState: session.remote?.getInteractionState?.() ?? prev?.interactionState })), updated_at: new Date() }, $setOnInsert: { created_at: new Date() } },
     { upsert: true },
   );
 }
@@ -155,40 +162,6 @@ function mergeStorageStates(
     cookies: Array.from(cookieMap.values()),
     origins: Array.from(originMap.values()),
   };
-}
-
-/**
- * Сохраняет состояние браузера Vercel Sandbox (куки, localStorage, URL) в MongoDB.
- * Объединяет куки и localStorage по доменам, чтобы авторизация в BilimClass, НОБД и Kundelik
- * сохранялась между перезапусками песочницы.
- */
-export async function persistSandboxBrowserState(
-  userId: string,
-  storageState: unknown,
-  currentUrl: string | undefined,
-): Promise<void> {
-  if (!storageState || typeof storageState !== "object") return;
-  const prev = await readStoredState(userId).catch(() => undefined);
-  const merged = mergeStorageStates(
-    prev?.storageState,
-    storageState as PlaywrightStorageState,
-  );
-  const validUrl = currentUrl && /^https?:\/\//i.test(currentUrl)
-    ? currentUrl
-    : prev?.currentUrl;
-  const state: SavedBrowserState = {
-    storageState: merged,
-    currentUrl: validUrl,
-  };
-  const db = await getDb();
-  await db.collection(COL.agentBrowserSessions).updateOne(
-    { user_id: userId },
-    {
-      $set: { encrypted_state: encryptState(JSON.stringify(state)), updated_at: new Date() },
-      $setOnInsert: { created_at: new Date() },
-    },
-    { upsert: true },
-  );
 }
 
 function reapSessions(now = Date.now()): void {
@@ -238,43 +211,24 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
 
   const stored = await readStoredState(userId).catch(() => undefined);
   if (process.env.VERCEL === "1") {
-    // Сначала пробуем Codespaces runner (быстрый, без лимитов)
+    // Автономный облачный браузер внутри Vercel Sandbox
     try {
+      const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
+      const rpcUrl = await getSandboxBrowserRpcUrl(userId);
       if (stored?.sessionId) {
-        const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now);
+        const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now, rpcUrl);
         if (await remote.remote!.validate()) return remote;
       }
       const created = await createBrowserRpcSession(userId, {
         storageState: stored?.storageState,
         currentUrl: stored?.currentUrl,
+        rpcUrl,
       });
-      return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now);
+      return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl);
     } catch (e) {
-      // Если Codespaces недоступен (503) — переходим на Vercel Sandbox
-      if (!(e instanceof BrowserRpcError) || e.status !== 503) throw e;
-      log.warn("browser-session: Codespaces runner unavailable, falling back to Vercel Sandbox", { userId });
+      log.error("browser-session: Vercel Sandbox runner unavailable", { userId, error: String(e) });
+      throw new BrowserRpcError(e instanceof Error ? e.message : "Облачный браузер запускается в песочнице Vercel. Пожалуйста, подождите несколько секунд и повторите.", 503);
     }
-
-    // Vercel Sandbox fallback — всегда доступен, холодный старт ~3-5 мин
-    try {
-      const { getVercelSandbox } = await import("@/lib/workspace/runtime");
-      const { startSandboxBrowser } = await import("@/lib/agents/browser-sandbox");
-      const sandbox = await getVercelSandbox(userId);
-      if (sandbox) {
-        const page = await startSandboxBrowser(sandbox as never, {
-          storageState: stored?.storageState,
-          currentUrl: stored?.currentUrl,
-        });
-        const ctx = (page as unknown as { context: () => BrowserContext }).context();
-        const br = ctx.browser()!;
-        const session: AgentBrowserSession = { browser: br, context: ctx, page: page as unknown as Page, lastSeen: now };
-        sessions.set(userId, session);
-        return session;
-      }
-    } catch (sandboxErr) {
-      log.error("browser-session: Vercel Sandbox fallback failed", { userId, error: String(sandboxErr) });
-    }
-    throw new BrowserRpcError("Облачный браузер временно недоступен. Запустите Codespaces runner или повторите позже.", 503);
   }
 
   const browser = await launchAgentBrowser();
@@ -297,7 +251,15 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
   return session;
 }
 
-function createRemoteSession(userId: string, sessionId: string, initialUrl: string | undefined, initialStorageState: unknown, initialInteractionState: unknown, now: number): AgentBrowserSession {
+function createRemoteSession(
+  userId: string,
+  sessionId: string,
+  initialUrl: string | undefined,
+  initialStorageState: unknown,
+  initialInteractionState: unknown,
+  now: number,
+  rpcUrl?: string,
+): AgentBrowserSession {
   let currentUrl = initialUrl ?? "about:blank";
   let currentStorageState = initialStorageState;
   let currentInteractionState = initialInteractionState;
@@ -310,13 +272,14 @@ function createRemoteSession(userId: string, sessionId: string, initialUrl: stri
       sessionId,
       currentUrl,
       interactionState: currentInteractionState,
+      rpcUrl,
       ...(allowedOrigin ? { allowedOrigin } : {}),
       ...(captureScreenshot ? { captureScreenshot: true } : {}),
       ...(args ? { args } : {}),
       timeoutMs: action === "navigate" ? 35_000 : 55_000,
     });
     if (response.currentUrl) currentUrl = response.currentUrl;
-    if ("storageState" in response && response.storageState !== undefined) currentStorageState = response.storageState;
+    if ("storageState" in response && response.storageState !== undefined && response.storageState !== null) currentStorageState = response.storageState;
     if ("interactionState" in response && response.interactionState !== undefined) currentInteractionState = response.interactionState;
     return response;
   };
@@ -324,7 +287,7 @@ function createRemoteSession(userId: string, sessionId: string, initialUrl: stri
   const closeRemote = async () => {
     if (!closeRequest) {
       closed = true;
-      closeRequest = browserRpc(userId, "close", { sessionId }).then(() => undefined).catch(() => undefined);
+      closeRequest = browserRpc(userId, "close", { sessionId, rpcUrl }).then(() => undefined).catch(() => undefined);
     }
     await closeRequest;
   };
@@ -332,7 +295,7 @@ function createRemoteSession(userId: string, sessionId: string, initialUrl: stri
   const page = {
     isClosed: () => closed,
     url: () => currentUrl,
-    title: async () => (await send<string>("title")).result,
+    title: async () => (await send<string>("title")).result ?? "",
     screenshot: async (opts: { type: "jpeg"; quality: number }) => (await send<Uint8Array>("screenshot", { quality: opts.quality })).result,
     goto: async (rawUrl: string, opts?: { waitUntil?: string; timeout?: number }) => {
       const target = new URL(rawUrl);
@@ -345,20 +308,24 @@ function createRemoteSession(userId: string, sessionId: string, initialUrl: stri
     reload: async (opts?: { timeout?: number }) => { await send("reload", { timeoutMs: opts?.timeout }); return null; },
     waitForTimeout: async (ms: number) => { await send("wait", { ms }); },
     evaluate: async <R, Arg = never>(fn: ((arg: Arg) => R | Promise<R>) | string, arg?: Arg): Promise<R> => {
+      // Скрипт уходит строкой, аргумент — отдельным полем: без него
+      // разведка элемента под точкой возвращала бы мусор.
       const script = typeof fn === "string" ? fn : fn.toString();
-      return (await send<R>("evaluate", { script, arg })).result;
+      return (await send<R>("evaluate", arg === undefined ? { script } : { script, arg })).result;
     },
     mouse: {
       click: async (x: number, y: number, opts?: { clickCount?: number }) => { await send("click", { x, y, clickCount: opts?.clickCount }); },
       move: async (x: number, y: number) => { await send("move", { x, y }); },
       wheel: async (dx: number, dy: number) => { await send("wheel", { dx, dy }); },
-      down: async () => { await send("down"); },
-      up: async () => { await send("up"); },
+      down: async () => { await send("mouseDown"); },
+      up: async () => { await send("mouseUp"); },
     },
     keyboard: {
       type: async (text: string) => { await send("type", { text }); },
       press: async (key: string) => { await send("press", { key }); },
     },
+    // SSRF-guard ставится на стороне runner'а при создании контекста:
+    // локальные маршруты здесь были бы no-op и ничего не проверяли.
     route: async () => undefined,
     unroute: async () => undefined,
   } as unknown as Page;
@@ -366,7 +333,13 @@ function createRemoteSession(userId: string, sessionId: string, initialUrl: stri
   const context = {
     pages: () => [page],
     newPage: async () => page,
-    storageState: async () => currentStorageState as Awaited<ReturnType<BrowserContext["storageState"]>>,
+    storageState: async () => {
+      // Кэш без запроса был бы всегда пустым: runner отдаёт storageState
+      // только по явному действию, поэтому забираем его здесь.
+      const fresh = await send<unknown>("storageState").then((r) => r.result).catch(() => undefined);
+      if (fresh && typeof fresh === "object") currentStorageState = fresh;
+      return (currentStorageState ?? { cookies: [], origins: [] }) as Awaited<ReturnType<BrowserContext["storageState"]>>;
+    },
     close: closeRemote,
     route: async () => undefined,
     unroute: async () => undefined,

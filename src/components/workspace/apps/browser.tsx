@@ -77,7 +77,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const isRateLimited = /ограничил|подождите \d+ секунд/i.test(error);
   const isSessionExpired = /session expired|сессия истекла|410/i.test(error);
 
-  // Keepalive: пингуем runner каждые 10 мин, чтобы Codespace не засыпал
+  // Keepalive: пингуем runner каждые 10 мин, чтобы песочница оставалась активной
   useEffect(() => {
     const ping = () => void fetch('/api/health/browser-keepalive', { cache: 'no-store' }).catch(() => {});
     ping(); // сразу при открытии
@@ -200,12 +200,17 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     await enqueueAction({ action: 'navigate', url });
   }, [enqueueAction, flushTypedBuffer]);
 
+  // Обратный отсчёт автоповтора живёт в состоянии, а сброс при смене
+  // throttle-ошибки делается прямо во время рендера: синхронный setState
+  // внутри effect вызывал каскадные рендеры.
+  const [wasRateLimited, setWasRateLimited] = useState(isRateLimited);
+  if (wasRateLimited !== isRateLimited) {
+    setWasRateLimited(isRateLimited);
+    setRetryCountdown(isRateLimited ? 15 : null);
+  }
+
   useEffect(() => {
-    if (!isRateLimited) {
-      setRetryCountdown(null);
-      return;
-    }
-    setRetryCountdown(15);
+    if (retryCountdown === null) return;
     const interval = setInterval(() => {
       setRetryCountdown((prev) => {
         if (prev === null || prev <= 1) {
@@ -218,7 +223,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [isRateLimited, navigate, pageUrl, landingUrl]);
+  }, [retryCountdown !== null, navigate, pageUrl, landingUrl]);
 
   const clearSession = useCallback(async () => {
     if (!window.confirm('Завершить внешний сеанс и удалить сохранённые данные входа?')) return;

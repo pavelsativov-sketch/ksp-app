@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Maximize2, Minimize2, X, Bot } from "lucide-react";
 import { AgentSession, StatusDot } from "./agent-session";
 
@@ -36,7 +36,35 @@ const serverSnapshot = null;
 
 /** Активная задача агента (общая для всех страниц через localStorage). */
 export function useActiveAgentTask(): ActiveTask | null {
-  return useSyncExternalStore(subscribe, read, () => serverSnapshot);
+  const task = useSyncExternalStore(subscribe, read, () => serverSnapshot);
+  const taskId = task?.id;
+
+  // localStorage принадлежит браузерному профилю, а не аккаунту Mekty. После
+  // выхода и входа под другим пользователем там может остаться чужая задача.
+  // Сверяем id с серверным списком задач текущего пользователя, чтобы старая
+  // запись не показывала ложный прогресс и не блокировала запуск агента.
+  useEffect(() => {
+    if (!taskId) return;
+    let active = true;
+
+    void fetch("/api/agents/task", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json() as Promise<{ tasks?: Array<{ id?: string }> }>;
+      })
+      .then((data) => {
+        if (!active || !data) return;
+        if (!data.tasks?.some((candidate) => candidate.id === taskId)) {
+          clearActiveAgentTask();
+        }
+      })
+      // A transient network error must not hide an active task.
+      .catch(() => {});
+
+    return () => { active = false; };
+  }, [taskId]);
+
+  return task;
 }
 
 /**

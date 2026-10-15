@@ -1,6 +1,5 @@
 import { createHmac } from "node:crypto";
 
-const BROWSER_RPC_URL = process.env.BROWSER_RPC_URL ?? "";
 const encoder = new TextEncoder();
 // The Worker accepts a 256 KB request. IndexedDB snapshots from third-party
 // sites can be several megabytes, so only carry a bounded restore snapshot.
@@ -46,11 +45,22 @@ export async function browserRpc<T = unknown>(
     captureScreenshot?: boolean;
     args?: Record<string, unknown>;
     timeoutMs?: number;
+    rpcUrl?: string;
   } = {},
 ): Promise<{ sessionId?: string; currentUrl?: string; pageTitle?: string; result: T; storageState?: unknown; interactionState?: unknown; screenshotBase64?: string }> {
   const secret = process.env.AUTH_SECRET;
   if (!secret || secret.length < 32) throw new Error("AUTH_SECRET is not configured for browser service");
-  if (!BROWSER_RPC_URL) throw new BrowserRpcError("Внешний браузерный сервер не настроен (BROWSER_RPC_URL не задан)", 503);
+  
+  let rpcUrl = options.rpcUrl;
+  if (!rpcUrl) {
+    if (process.env.VERCEL === "1") {
+      const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
+      rpcUrl = await getSandboxBrowserRpcUrl(userId);
+    } else {
+      rpcUrl = process.env.BROWSER_RPC_URL ?? "";
+    }
+  }
+  if (!rpcUrl) throw new BrowserRpcError("Браузерная песочница не настроена", 503);
 
   const { storageState, ...rest } = options;
   const safeStorageState = transferableStorageState(storageState);
@@ -61,7 +71,7 @@ export async function browserRpc<T = unknown>(
     .digest();
   let response: Response;
   try {
-    response = await fetch(BROWSER_RPC_URL, {
+    response = await fetch(rpcUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -98,6 +108,6 @@ export async function browserRpc<T = unknown>(
   return payload as { sessionId?: string; currentUrl?: string; pageTitle?: string; result: T; storageState?: unknown; interactionState?: unknown; screenshotBase64?: string };
 }
 
-export async function createBrowserRpcSession(userId: string, state?: Omit<BrowserRpcState, "sessionId">) {
+export async function createBrowserRpcSession(userId: string, state?: Omit<BrowserRpcState, "sessionId"> & { rpcUrl?: string }) {
   return browserRpc<{ sessionId: string; currentUrl?: string }>(userId, "create", state);
 }

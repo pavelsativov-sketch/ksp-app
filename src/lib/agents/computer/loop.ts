@@ -23,7 +23,7 @@ import {
   type SafetyDecision,
 } from "./safety";
 import { bilimClassInstructions, isBilimClassContext } from "@/lib/agents/domain-skills/bilimclass";
-import { detectPageAuthBarrier, type PageAuthBarrier } from "@/lib/agents/browser-sandbox";
+import { detectPageAuthBarrier, type PageAuthBarrier } from "@/lib/agents/browser-dom";
 
 /**
  * Цикл агента «Использование компьютера».

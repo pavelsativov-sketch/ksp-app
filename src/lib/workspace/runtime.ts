@@ -56,14 +56,15 @@ export async function deleteAccountWorkspaceSandbox(userId: string): Promise<voi
   }
 }
 
-async function getAccountSandbox(userId: string): Promise<Sandbox> {
+export async function getAccountSandbox(userId: string): Promise<Sandbox> {
   validateOwner(userId);
   if (!usesVercelSandbox()) throw new Error("Для Linux-среды разверните приложение на Vercel с включённым Vercel Sandbox");
   const files = await ownedFiles(userId);
   const { Sandbox: VercelSandbox } = await import("@vercel/sandbox");
-  const sandbox = await VercelSandbox.getOrCreate({
+  let sandbox = await VercelSandbox.getOrCreate({
     name: sandboxName(userId),
     image: "vercel/sandbox/universal",
+    ports: [3000],
     persistent: true,
     timeout: SANDBOX_TIMEOUT_MS,
     resources: { vcpus: 1 },
@@ -82,6 +83,24 @@ async function getAccountSandbox(userId: string): Promise<Sandbox> {
       }
     },
   });
+
+  // Если песочница была создана ранее без открытого порта 3000 — пересоздаём её с портом
+  const hasPort3000 = (sandbox as unknown as { routes?: Array<{ port: number }> }).routes?.some((r) => r.port === 3000);
+  if (!hasPort3000) {
+    try {
+      await sandbox.delete({ deleteOrphanSnapshots: true });
+    } catch {}
+    sandbox = await VercelSandbox.create({
+      name: sandboxName(userId),
+      image: "vercel/sandbox/universal",
+      ports: [3000],
+      persistent: true,
+      timeout: SANDBOX_TIMEOUT_MS,
+      resources: { vcpus: 1 },
+      keepLastSnapshots: { count: 1 },
+    });
+  }
+
   await sandbox.fs.mkdir(WORKSPACE_ROOT, { recursive: true });
   return sandbox;
 }

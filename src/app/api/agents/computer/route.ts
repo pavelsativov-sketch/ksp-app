@@ -14,18 +14,12 @@ import {
   browserFailure,
   getAgentBrowserSession,
   persistAgentBrowserSession,
-  persistSandboxBrowserState,
-  readStoredBrowserState,
 } from "@/lib/agents/browser-session";
 import {
-  startSandboxBrowser,
-  getSandboxBrowserState,
   inspectActiveField,
   detectPageAuthBarrier,
-  type BrowserSandbox,
   type PageAuthBarrier,
-} from "@/lib/agents/browser-sandbox";
-import { getVercelSandbox } from "@/lib/workspace/runtime";
+} from "@/lib/agents/browser-dom";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,77 +89,8 @@ export async function POST(req: Request) {
   running.set(userId, runState);
   await setControlOwner(userId, "ai").catch(() => {});
 
-  const sandbox = await getVercelSandbox(userId).catch(() => null) as BrowserSandbox | null;
-
   try {
-    if (sandbox) {
-      // ── Vercel Sandbox: Playwright внутри VM ──────────────────────────────
-      const stored = await readStoredBrowserState(userId).catch(() => null);
-      const { isBilimClassContext } = await import("@/lib/agents/domain-skills/bilimclass");
-      const fallbackStartUrl = isBilimClassContext(goal, "")
-        ? "https://www.bilimclass.kz/2026/frontoffice/dashboard"
-        : undefined;
-      const requestedStartUrl =
-        typeof body.startUrl === "string" && body.startUrl.trim()
-          ? body.startUrl.trim()
-          : stored?.currentUrl && stored.currentUrl !== "about:blank"
-            ? stored.currentUrl
-            : fallbackStartUrl;
-
-      let agentPage: AgentPage;
-      try {
-        agentPage = await startSandboxBrowser(sandbox, {
-          storageState: stored?.storageState,
-          currentUrl: requestedStartUrl,
-        });
-      } catch (initErr) {
-        const reason = initErr instanceof Error ? initErr.message : String(initErr);
-        log.error("sandbox browser init failed", { userId, reason });
-        return NextResponse.json(
-          { error: `Не удалось запустить браузер в песочнице: ${reason.slice(0, 200)}`, events },
-          { status: 502 },
-        );
-      }
-
-      const summary = await runComputerUse({
-        page: agentPage,
-        goal,
-        userId,
-        maxTurns: MAX_TURNS,
-        log: async (event) => {
-          events.push(event);
-          if (event.type === "RESUMED") {
-            runState.authBarrier = null;
-            await setControlOwner(userId, "ai").catch(() => {});
-            const st = await getSandboxBrowserState(sandbox).catch(() => null);
-            if (st) {
-              await persistSandboxBrowserState(userId, st.storageState, st.currentUrl).catch(() => {});
-            }
-          }
-          log.info(`[computer-use:sandbox] ${event.message}`, { userId, type: event.type });
-        },
-        checkUrl: async (url) => {
-          const checked = await checkPublicUrl(url);
-          if (!checked.ok) return { ok: false, error: checked.error };
-          return { ok: true, url: checked.url.toString() };
-        },
-        confirm: (action, decision, probe) => waitForConfirmation(userId, action, decision, probe),
-        onAuthBarrier: async (barrier) => {
-          runState.authBarrier = barrier;
-          await setControlOwner(userId, "user");
-        },
-        shouldPause: async () => (await getControlOwner(userId)) === "user",
-      });
-
-      // Сохраняем сессию (куки, localStorage, URL) в MongoDB и оставляем воркер
-      // живым, чтобы учитель мог сразу продолжить в рабочей области ОС без холодного старта
-      const finalState = await getSandboxBrowserState(sandbox);
-      await persistSandboxBrowserState(userId, finalState.storageState, finalState.currentUrl).catch(() => {});
-
-      return NextResponse.json({ ok: true, summary, events });
-    }
-
-    // ── Playwright / Browser Run (фоллбэк без Sandbox) ────────────────────
+    // Один браузер на всю ОС: агент и учитель видят одну и ту же сессию.
     const session = await getAgentBrowserSession(userId);
     const { isBilimClassContext } = await import("@/lib/agents/domain-skills/bilimclass");
     const effectiveStartUrl =
@@ -236,33 +161,6 @@ export async function GET(req: Request) {
   const userId = auth.user.id;
 
   if (new URL(req.url).searchParams.get("action") === "screenshot") {
-    const sandbox = await getVercelSandbox(userId).catch(() => null) as BrowserSandbox | null;
-    if (sandbox) {
-      try {
-        const stored = await readStoredBrowserState(userId).catch(() => null);
-        const page = await startSandboxBrowser(sandbox, {
-          storageState: stored?.storageState,
-          currentUrl: stored?.currentUrl,
-        });
-        const screenshot = await page.screenshot({ type: "jpeg", quality: 75 });
-        const title = await page.title().catch(() => "");
-        const activeField = await inspectActiveField(page);
-        const authBarrier = await detectPageAuthBarrier(page);
-        return new NextResponse(Buffer.from(screenshot), {
-          headers: {
-            "Content-Type": "image/jpeg",
-            "Cache-Control": "no-store",
-            "X-Page-Title": encodeURIComponent(title),
-            "X-Page-Url": encodeURIComponent(page.url()),
-            "X-Active-Field": encodeURIComponent(JSON.stringify(activeField)),
-            "X-Auth-Barrier": encodeURIComponent(JSON.stringify(authBarrier)),
-          },
-        });
-      } catch {
-        return NextResponse.json({ error: "Не удалось получить снимок браузера в песочнице" }, { status: 502 });
-      }
-    }
-
     const session = await getAgentBrowserSession(userId).catch(() => null);
     if (!session || !session.browser.isConnected() || session.page.isClosed()) {
       return NextResponse.json({ error: "Сессия браузера не запущена" }, { status: 404 });

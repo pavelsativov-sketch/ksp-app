@@ -1,5 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
+import net from "node:net";
+import dns from "node:dns/promises";
 import { chromium } from "playwright";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -27,6 +29,144 @@ async function getBrowser() {
     });
   }
   return browserInstance;
+}
+
+// ── SSRF guard ──────────────────────────────────────────────────────────────
+// Каждый запрос страницы проверяется заново: верхнеуровневый navigate уже
+// проверен на стороне приложения, но <img>/fetch/XHR самой страницы могут
+// увести Chromium во внутреннюю сеть (метаданные облака 169.254.169.254,
+// localhost-Mongo и т.п.). Дублируем правила src/lib/agents/ssrf.ts, потому
+// что runner — отдельный процесс и не может импортировать проектный код.
+
+const BLOCKED_V4 = [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.88.99.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+];
+
+function toV4Number(ip) {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return null;
+  let value = 0;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const octet = Number(part);
+    if (octet > 255) return null;
+    value = value * 256 + octet;
+  }
+  return value;
+}
+
+function matchesCidr(ip, cidr, prefix) {
+  const base = toV4Number(cidr);
+  if (base === null) return false;
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return ((ip & mask) >>> 0) === ((base & mask) >>> 0);
+}
+
+function isBlockedAddress(addr) {
+  const type = net.isIP(addr);
+  if (type === 4) {
+    const ip = toV4Number(addr);
+    if (ip === null) return true;
+    return BLOCKED_V4.some(([cidr, prefix]) => matchesCidr(ip, cidr, prefix));
+  }
+  if (type === 6) {
+    const low = addr.toLowerCase().split("%")[0];
+    if (low === "::" || low === "::1") return true;
+    if (/^fe[89ab]/.test(low)) return true;
+    if (/^f[cd]/.test(low)) return true;
+    if (low.startsWith("ff")) return true;
+    if (/::ffff:[0-9a-f]{1,4}:[0-9a-f]{1,4}$/.test(low)) return true;
+    const dotted = low.match(/^::(?:ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/);
+    if (dotted) return isBlockedAddress(dotted[1]);
+    if (low.startsWith("2001:0:") || low.startsWith("2002:")) return true;
+    return false;
+  }
+  return true;
+}
+
+function isLocalHostname(host) {
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal")
+  );
+}
+
+// Короткоживущий кеш DNS: страница делает десятки запросов к одному CDN,
+// а резолвить каждый раз — лишняя задержка на кадр.
+const dnsCache = new Map();
+const DNS_TTL_MS = 30_000;
+
+async function isPublicRequest(rawUrl) {
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!host) return false;
+  if (net.isIP(host)) return !isBlockedAddress(host);
+  if (!/^[a-z0-9.-]+$/.test(host) || isLocalHostname(host)) return false;
+
+  const cached = dnsCache.get(host);
+  const now = Date.now();
+  let addresses;
+  if (cached && now - cached.at < DNS_TTL_MS) {
+    addresses = cached.addresses;
+  } else {
+    try {
+      const resolved = await dns.lookup(host, { all: true });
+      addresses = resolved.map((entry) => entry.address);
+    } catch {
+      addresses = [];
+    }
+    dnsCache.set(host, { at: now, addresses });
+  }
+  if (addresses.length === 0) return false;
+  return !addresses.some(isBlockedAddress);
+}
+
+async function installRequestGuard(context) {
+  await context.route("**/*", async (route) => {
+    if (await isPublicRequest(route.request().url())) return route.continue();
+    return route.abort();
+  });
+}
+
+async function applyStorageState(context, storageState) {
+  if (!storageState || typeof storageState !== "object") return;
+  const state = storageState;
+  if (Array.isArray(state.cookies) && state.cookies.length) {
+    await context.addCookies(state.cookies).catch(() => {});
+  }
+  if (Array.isArray(state.origins) && state.origins.length) {
+    await context.addInitScript((origins) => {
+      for (const origin of origins) {
+        for (const item of origin.localStorage || []) {
+          try {
+            window.localStorage.setItem(item.name, item.value);
+          } catch {}
+        }
+      }
+    }, state.origins);
+  }
 }
 
 // Cleanup stale sessions after 10 min idle
@@ -122,6 +262,10 @@ const server = http.createServer(async (req, res) => {
           javaScriptEnabled: true,
           serviceWorkers: "block",
         });
+        // Куки и localStorage прошлой сессии: без этого вход в BilimClass
+        // приходится повторять после каждого пересоздания сессии.
+        await applyStorageState(context, body.storageState);
+        await installRequestGuard(context);
         const page = await context.newPage();
         await page.setViewportSize({ width: 1280, height: 800 }).catch(() => {});
         sessions.set(id, { context, page, lastActive: Date.now() });
@@ -190,9 +334,23 @@ const server = http.createServer(async (req, res) => {
         await page.goForward({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => {});
       } else if (action === "reload") {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+      } else if (action === "mouseDown") {
+        await page.mouse.down();
+      } else if (action === "mouseUp") {
+        await page.mouse.up();
+      } else if (action === "title") {
+        result = await page.title().catch(() => "");
       } else if (action === "evaluate") {
+        // Скрипт приходит строкой (Playwright-функцию нельзя сериализовать
+        // через JSON), а аргумент `page.evaluate(fn, arg)` терялся — из-за
+        // этого разведка элемента под точкой возвращала ерунду.
         const script = String(args.script ?? "null");
-        result = await page.evaluate(new Function("return (" + script + ")")());
+        const arg = args.arg;
+        result = arg === undefined
+          ? await page.evaluate(new Function(`return (${script})`)())
+          : await page.evaluate(new Function("arg", `return (${script})(arg);`), arg);
+      } else if (action === "storageState") {
+        result = await context.storageState({ indexedDB: true }).catch(() => null);
       } else if (action === "fill") {
         // fill({ selector, value }) — fills input by CSS selector (for auto-login)
         const sel = String(args.selector ?? "");
@@ -229,7 +387,14 @@ const server = http.createServer(async (req, res) => {
         result,
       };
 
-      if (captureScreenshot || action !== "screenshot") {
+      // Скриншот нужен только для действий, меняющих вид страницы. Иначе
+      // каждый служебный вызов (title/evaluate/storageState) платил бы
+      // полсекунды на JPEG в base64.
+      const VISUAL_ACTIONS = new Set([
+        "screenshot", "navigate", "click", "type", "press", "wheel",
+        "back", "forward", "reload", "fill", "mouseDown", "mouseUp",
+      ]);
+      if (captureScreenshot || (action !== "screenshot" && VISUAL_ACTIONS.has(action))) {
         const shot = await page.screenshot({ type: "jpeg", quality: 80 });
         responsePayload.screenshotBase64 = shot.toString("base64");
       }

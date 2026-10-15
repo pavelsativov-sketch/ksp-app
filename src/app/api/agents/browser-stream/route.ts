@@ -9,7 +9,7 @@ import {
   getAgentBrowserSession,
   persistAgentBrowserSession,
 } from "@/lib/agents/browser-session";
-import { inspectActiveField, detectPageAuthBarrier } from "@/lib/agents/browser-sandbox";
+import { inspectActiveField, detectPageAuthBarrier } from "@/lib/agents/browser-dom";
 import { tryAutoLogin, KNOWN_LOGIN_SITES } from "@/lib/agents/browser-autologin";
 
 export const runtime = "nodejs";
@@ -61,10 +61,6 @@ async function authorize() {
   }
   return { userId: auth.user.id } as const;
 }
-
-// Пустые заглушки для active-field когда DOM недоступен (remote-сессия)
-const EMPTY_ACTIVE_FIELD = { isEditable: false, isPassword: false, tag: "", type: "", label: "" };
-const EMPTY_AUTH_BARRIER = { requiresUserAction: false, kind: null, reason: "" };
 
 async function runAction(userId: string, args: BrowserAction) {
   const action = args.action ?? "screenshot";
@@ -136,15 +132,22 @@ async function runAction(userId: string, args: BrowserAction) {
         }
       }
 
+      // Runner умеет отдавать DOM через `evaluate`, поэтому рамка активного
+      // поля и баннер авторизации работают и на удалённой сессии. Раньше
+      // здесь были константы EMPTY_* — оверлей ввода и подсказка «войдите
+      // сами» не появлялись никогда.
+      const [activeField, authBarrier] = await Promise.all([
+        inspectActiveField(session.page),
+        detectPageAuthBarrier(session.page),
+      ]);
+
       return new NextResponse(new Uint8Array(autoFrame.screenshot), {
         headers: {
           "Content-Type": "image/jpeg",
           "X-Page-Title": encodeURIComponent(autoFrame.title),
           "X-Page-Url": encodeURIComponent(autoFrame.currentUrl),
-          // Remote runner не возвращает DOM-данные — отправляем пустые значения
-          // чтобы browser.tsx сбросил старую рамку активного поля.
-          "X-Active-Field": encodeURIComponent(JSON.stringify(EMPTY_ACTIVE_FIELD)),
-          "X-Auth-Barrier": encodeURIComponent(JSON.stringify(EMPTY_AUTH_BARRIER)),
+          "X-Active-Field": encodeURIComponent(JSON.stringify(activeField)),
+          "X-Auth-Barrier": encodeURIComponent(JSON.stringify(authBarrier)),
           "Cache-Control": "no-store",
         },
       });
