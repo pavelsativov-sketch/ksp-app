@@ -125,15 +125,6 @@ export async function clearAgentBrowserSession(userId: string): Promise<void> {
       await browserRpc(userId, "close", { sessionId: stored.sessionId }).catch(() => {});
     }
   }
-  try {
-    const { getVercelSandbox } = await import("@/lib/workspace/runtime");
-    const { closeSandboxBrowser } = await import("@/lib/agents/browser-sandbox");
-    const sandbox = await getVercelSandbox(userId).catch(() => null);
-    if (sandbox) {
-      await closeSandboxBrowser(sandbox as never).catch(() => {});
-      try { await (sandbox as { fs?: { unlink?: (p: string) => Promise<void> } }).fs?.unlink?.("/tmp/mekty-browser-state.json"); } catch {}
-    }
-  } catch {}
   const db = await getDb();
   await db.collection(COL.agentBrowserSessions).deleteOne({ user_id: userId });
 }

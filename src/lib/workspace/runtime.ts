@@ -34,7 +34,7 @@ const COMMAND_TIMEOUT_MS = 90_000;
 
 function usesVercelSandbox(): boolean {
   if (process.env.WORKSPACE_RUNTIME === "off") return false;
-  return process.env.WORKSPACE_RUNTIME === "vercel-sandbox" || process.env.VERCEL === "1";
+  return process.env.WORKSPACE_RUNTIME === "vercel-sandbox";
 }
 
 function sandboxName(userId: string): string {

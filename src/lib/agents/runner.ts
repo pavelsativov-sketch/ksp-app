@@ -151,47 +151,19 @@ export async function runAgentTask(
             return 'Остановлено пользователем';
           }
           await log({ type: 'RESUMED', message: 'Управление возвращено агенту. Продолжаю.' });
-          // После паузы агент должен увидеть актуальный URL и содержимое страницы,
-          // на которой учитель ввёл логин/пароль в рабочей области ОС.
+          // После паузы агент должен увидеть актуальный URL — браузер работает через Codespaces runner.
           try {
-            const { getVercelSandbox } = await import('@/lib/workspace/runtime');
-            const { startSandboxBrowser, getSandboxBrowserState } = await import('@/lib/agents/browser-sandbox');
-            const { persistSandboxBrowserState, readStoredBrowserState, getAgentBrowserSession } = await import('@/lib/agents/browser-session');
+            const { getAgentBrowserSession } = await import('@/lib/agents/browser-session');
             const { readInteractables } = await import('@/lib/agents/computer/screen');
-            const sandbox = await getVercelSandbox(userId).catch(() => null);
-            if (sandbox) {
-              const stored = await readStoredBrowserState(userId).catch(() => null);
-              const page = await startSandboxBrowser(sandbox, {
-                storageState: stored?.storageState,
-                currentUrl: stored?.currentUrl,
-              });
-              const currentUrl = page.url();
-              const title = await page.title().catch(() => '');
-              const content = (await page.evaluate(() => {
-                const doc = window.document.cloneNode(true) as Document;
-                doc.querySelectorAll('script, style, nav, footer, iframe').forEach((el) => el.remove());
-                return (doc.body?.innerText ?? '').slice(0, 1500);
-              }).catch(() => '')) as string;
-              const interactables = await readInteractables(page as never);
-              const st = await getSandboxBrowserState(sandbox);
-              await persistSandboxBrowserState(userId, st.storageState, st.currentUrl).catch(() => {});
+            const browserSess = await getAgentBrowserSession(userId).catch(() => null);
+            if (browserSess) {
+              const currentUrl = browserSess.page.url();
+              const interactables = await readInteractables(browserSess.page as never);
               if (currentUrl && /^https?:\/\//i.test(currentUrl)) {
                 messages.push({
                   role: 'user',
-                  content: `Управление возвращено агенту после действий учителя в рабочей области ОС. Текущая страница: ${currentUrl}${title ? ` («${title}»)` : ''}.\nВидимый текст:\n${content}\nКликабельные элементы (interactables):\n${interactables}\nПродолжай выполнять исходную задачу с этой точки (используй browserClick или browserNavigate).`,
+                  content: `Управление возвращено агенту. Пока вы работали вручную, текущая страница: ${currentUrl}.\nКликабельные элементы (interactables):\n${interactables}\nПродолжай выполнять исходную задачу с этой точки (используй browserClick или browserNavigate).`,
                 });
-              }
-            } else {
-              const browserSess = await getAgentBrowserSession(userId).catch(() => null);
-              if (browserSess) {
-                const currentUrl = browserSess.page.url();
-                const interactables = await readInteractables(browserSess.page as never);
-                if (currentUrl && /^https?:\/\//i.test(currentUrl)) {
-                  messages.push({
-                    role: 'user',
-                    content: `Управление возвращено агенту. Пока вы работали вручную, текущая страница: ${currentUrl}.\nКликабельные элементы (interactables):\n${interactables}\nПродолжай выполнять исходную задачу с этой точки (используй browserClick или browserNavigate).`,
-                  });
-                }
               }
             }
           } catch { /* браузер мог ещё не открыться — некритично */ }
