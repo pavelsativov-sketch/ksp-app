@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut,
-  ExternalLink, Lock, Play,
+  ExternalLink, Lock, Play, KeyRound, Check,
 } from 'lucide-react';
 
 const BASE = '/api/agents/browser-stream';
@@ -49,6 +49,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [liveText, setLiveText] = useState('');
   const [clickPing, setClickPing] = useState<{ x: number; y: number; id: number } | null>(null);
   const [handingOver, setHandingOver] = useState(false);
+  const [credDialog, setCredDialog] = useState(false);
+  const [credUsername, setCredUsername] = useState('');
+  const [credPassword, setCredPassword] = useState('');
+  const [credSaving, setCredSaving] = useState(false);
+  const [credSaved, setCredSaved] = useState(false);
 
   const [imgLayout, setImgLayout] = useState<{ width: number; height: number } | null>(null);
 
@@ -511,7 +516,91 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         >
           НОБД
         </button>
+        {/* Кнопка сохранения учётных данных для текущего сайта */}
+        <div className="ml-auto flex items-center">
+          <button
+            type="button"
+            title="Сохранить логин/пароль для авто-входа на этом сайте"
+            onClick={() => {
+              const domain = (() => { try { return new URL(pageUrl || 'https://bilimclass.kz').hostname.replace(/^www\./, ''); } catch { return 'bilimclass.kz'; } })();
+              setCredUsername('');
+              setCredPassword('');
+              setCredSaved(false);
+              setCredDialog(true);
+              // pre-fill domain hint in title
+              void domain;
+            }}
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-amber-300/70 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/15 transition-colors"
+          >
+            <KeyRound className="w-3 h-3" />
+            <span>Пароль</span>
+          </button>
+        </div>
       </div>
+
+      {/* Модальное окно сохранения учётных данных */}
+      {credDialog && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setCredDialog(false); }}>
+          <div className="bg-[#1e1e32] border border-white/10 rounded-xl shadow-2xl p-5 w-80 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-medium">
+                <KeyRound className="w-4 h-4 text-amber-400" />
+                Авто-вход
+              </div>
+              <button type="button" onClick={() => setCredDialog(false)} className="text-white/30 hover:text-white/70">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[11px] text-white/50 leading-relaxed">
+              Сохрани логин и пароль — браузер будет автоматически входить на этом сайте.
+              Данные хранятся зашифрованными.
+            </p>
+            <div className="text-[11px] text-white/40 font-mono truncate">
+              {(() => { try { return new URL(pageUrl || 'https://bilimclass.kz').hostname.replace(/^www\./, ''); } catch { return 'bilimclass.kz'; } })()}
+            </div>
+            <input
+              type="text"
+              placeholder="Логин (email или ИИН)"
+              value={credUsername}
+              onChange={e => setCredUsername(e.target.value)}
+              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-blue-500/50"
+              autoComplete="username"
+            />
+            <input
+              type="password"
+              placeholder="Пароль"
+              value={credPassword}
+              onChange={e => setCredPassword(e.target.value)}
+              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-blue-500/50"
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              disabled={credSaving || !credUsername || !credPassword}
+              onClick={async () => {
+                const domain = (() => { try { return new URL(pageUrl || 'https://bilimclass.kz').hostname.replace(/^www\./, ''); } catch { return 'bilimclass.kz'; } })();
+                setCredSaving(true);
+                try {
+                  const res = await fetch('/api/agents/browser-credentials', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain, username: credUsername, password: credPassword }),
+                  });
+                  if (res.ok) {
+                    setCredSaved(true);
+                    setTimeout(() => setCredDialog(false), 1500);
+                  }
+                } finally {
+                  setCredSaving(false);
+                }
+              }}
+              className="flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-medium text-sm transition-colors"
+            >
+              {credSaved ? <><Check className="w-4 h-4" /> Сохранено!</> : credSaving ? 'Сохранение...' : <><KeyRound className="w-4 h-4" /> Сохранить</>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Viewport — реальный скриншот Playwright с прямым вводом мыши и клавиатуры */}
       <div
