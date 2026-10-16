@@ -43,6 +43,14 @@ async function getBrowser() {
   }).then((browser) => {
     browserInstance = browser;
     browserLaunching = null;
+    // Браузер упал и поднялся заново: все прошлые сессии принадлежали старому
+    // процессу и больше не работают. Забываем их, чтобы следующий запрос
+    // честно получил 410 и переподключился, вместо того чтобы биться в
+    // мёртвый контекст.
+    for (const [id, stale] of sessions) {
+      sessions.delete(id);
+      void stale.context.close().catch(() => {});
+    }
     return browser;
   }, (error) => {
     browserLaunching = null;
@@ -420,9 +428,26 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify(responsePayload));
     } catch (err) {
-      console.error(\`[RUNNER ERROR] Action \${action} failed:\`, err);
+      const message = (err && err.message) || String(err);
+      console.error(\`[RUNNER ERROR] Action \${action} failed:\`, message);
+
+      // Страница или сам браузер умерли: Chromium падает под нагрузкой,
+      // песочница засыпает, процесс убивает система. Держать такую сессию
+      // бессмысленно — каждое следующее действие будет падать точно так же,
+      // и вкладка учителя останется мёртвой навсегда. Удаляем сессию и
+      // отвечаем 410: этот код во всей системе означает «сеанс завершён,
+      // создай новый», поэтому вкладка переподключается сама.
+      const browserGone =
+        /has been closed|has been disconnected|Target page, context or browser|Connection closed|Protocol error|WebSocket/i.test(message);
+      if (browserGone) {
+        sessions.delete(sessionId);
+        void context.close().catch(() => {});
+        res.writeHead(410, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "Session expired or not found", status: 410 }));
+      }
+
       res.writeHead(502, { "Content-Type": "application/json" });
-      return res.end(JSON.stringify({ error: err.message || "Action failed", status: 502 }));
+      return res.end(JSON.stringify({ error: message || "Action failed", status: 502 }));
     }
   });
 });

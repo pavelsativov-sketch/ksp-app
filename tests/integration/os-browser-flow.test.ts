@@ -73,6 +73,9 @@ function loadRunnerScript(): string {
 // Валидный ObjectId (24 hex). Собираем конструктивно: предыдущая версия была
 // на символ длиннее и проходила только потому, что Mongo здесь подменена.
 const USER = `651f${"0".repeat(18)}aa`;
+// Отдельный пользователь для проверки смерти браузера: тест нарочно убивает
+// сессию, и общую трогать нельзя.
+const USER_CRASH = `651f${"0".repeat(18)}bb`;
 let runner: ReturnType<typeof spawn> | null = null;
 
 /**
@@ -275,6 +278,25 @@ describe.skipIf(!chromiumAvailable)("ОС: пароль учителя не ут
     // Маскируется только пароль: логин интерфейс показывает честно.
     expect(field.isPassword).toBe(false);
     expect(field.value).toBe("teacher_ivanov");
+  }, 90_000);
+
+  it("после смерти браузера сессия честно просит переподключиться", async () => {
+    const session = await getAgentBrowserSession(USER_CRASH);
+
+    // Убиваем контекст — так же, как это делает упавший Chromium.
+    await session.context.close().catch(() => {});
+
+    // Держать мёртвую сессию нельзя: каждое следующее действие падало бы так
+    // же, и вкладка учителя оставалась бы сломанной навсегда. Раннер должен
+    // убрать сессию и ответить 410 — этот код вся система читает как «сеанс
+    // завершён, создай новый».
+    await expect(session.remote!.performUiAction("type", { text: "a" }))
+      .rejects.toMatchObject({ status: 410 });
+
+    // И новый сеанс после этого обязан работать.
+    const fresh = await getAgentBrowserSession(USER_CRASH);
+    const frame = await fresh.remote!.performUiAction("screenshot", {});
+    expect(frame.screenshot.length).toBeGreaterThan(1000);
   }, 90_000);
 });
 
