@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Star, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TimeAgo } from "@/components/ksp/time-ago";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
 interface Reviewer {
@@ -27,28 +28,6 @@ interface Props {
   initialCount: number;
   isOwner: boolean;
   canReview: boolean;
-}
-
-function timeAgo(iso: string, locale: string): string {
-  const date = new Date(iso);
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const minutes = Math.floor(diff / 60_000);
-  const hours = Math.floor(diff / 3_600_000);
-  const days = Math.floor(diff / 86_400_000);
-
-  if (locale === "kk") {
-    if (minutes < 1) return "жаңа ғана";
-    if (minutes < 60) return `${minutes} мин бұрын`;
-    if (hours < 24) return `${hours} сағ бұрын`;
-    if (days < 30) return `${days} күн бұрын`;
-    return date.toLocaleDateString("kk-KZ");
-  }
-  if (minutes < 1) return "только что";
-  if (minutes < 60) return `${minutes} мин назад`;
-  if (hours < 24) return `${hours} ч назад`;
-  if (days < 30) return `${days} дн назад`;
-  return date.toLocaleDateString("ru-RU");
 }
 
 function getInitial(name: string): string {
@@ -224,7 +203,7 @@ export function ReviewSection({ planId, initialReviews, initialAverage, initialC
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold">{displayName(review)}</span>
                         <StarRating value={review.rating} readonly />
-                        <span className="text-xs text-muted-foreground">{timeAgo(review.created_at, locale)}</span>
+                        <span className="text-xs text-muted-foreground"><TimeAgo iso={review.created_at} locale={locale} /></span>
                       </div>
                       <p className="mt-1 text-sm whitespace-pre-wrap">{review.feedback}</p>
                     </div>

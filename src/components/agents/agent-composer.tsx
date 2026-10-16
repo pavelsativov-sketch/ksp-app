@@ -52,7 +52,8 @@ export function AgentComposer() {
         body: JSON.stringify({ prompt: text }),
       });
       if (res.status === 401) {
-        router.push("/login?next=/school");
+        setPending(false);
+        router.push("/login?next=/school/workspace");
         return;
       }
       const data = (await res.json()) as { taskId?: string; error?: string };

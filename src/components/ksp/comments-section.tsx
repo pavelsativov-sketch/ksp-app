@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { MessageCircle, Reply, Trash2, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TimeAgo } from "@/components/ksp/time-ago";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
 interface Author {
@@ -25,28 +26,6 @@ interface Props {
   planId: string;
   initialComments: Comment[];
   isOwner: boolean;
-}
-
-function timeAgo(iso: string, locale: string): string {
-  const date = new Date(iso);
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const minutes = Math.floor(diff / 60_000);
-  const hours = Math.floor(diff / 3_600_000);
-  const days = Math.floor(diff / 86_400_000);
-
-  if (locale === "kk") {
-    if (minutes < 1) return "жаңа ғана";
-    if (minutes < 60) return `${minutes} мин бұрын`;
-    if (hours < 24) return `${hours} сағ бұрын`;
-    if (days < 30) return `${days} күн бұрын`;
-    return date.toLocaleDateString("kk-KZ");
-  }
-  if (minutes < 1) return "только что";
-  if (minutes < 60) return `${minutes} мин назад`;
-  if (hours < 24) return `${hours} ч назад`;
-  if (days < 30) return `${days} дн назад`;
-  return date.toLocaleDateString("ru-RU");
 }
 
 function getInitial(name: string): string {
@@ -206,7 +185,6 @@ function canDelete(): boolean {
                   <CommentItem
                     comment={comment}
                     locale={locale}
-                    timeAgo={timeAgo}
                     displayName={displayName}
                     onReply={() => setReplyTo(comment.id)}
                     onDelete={() => handleDelete(comment.id)}
@@ -218,7 +196,6 @@ function canDelete(): boolean {
                       <CommentItem
                         comment={reply}
                         locale={locale}
-                        timeAgo={timeAgo}
                         displayName={displayName}
                         onReply={() => setReplyTo(reply.id)}
                         onDelete={() => handleDelete(reply.id)}
@@ -262,7 +239,6 @@ function canDelete(): boolean {
 function CommentItem({
   comment,
   locale,
-  timeAgo,
   displayName,
   onReply,
   onDelete,
@@ -271,7 +247,6 @@ function CommentItem({
 }: {
   comment: Comment;
   locale: string;
-  timeAgo: (iso: string, locale: string) => string;
   displayName: (c: Comment) => string;
   onReply: () => void;
   onDelete: () => void;
@@ -285,7 +260,7 @@ function CommentItem({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold">{displayName(comment)}</span>
-            <span className="text-xs text-muted-foreground">{timeAgo(comment.created_at, locale)}</span>
+            <span className="text-xs text-muted-foreground"><TimeAgo iso={comment.created_at} locale={locale} /></span>
           </div>
           <p className="mt-1 text-sm whitespace-pre-wrap">{comment.text}</p>
           <div className="mt-2 flex items-center gap-3">

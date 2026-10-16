@@ -1,14 +1,37 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Copy, Check, Printer, Sparkles, FileSpreadsheet, ShieldAlert } from "lucide-react";
 
+/** Окно в полминуты: внутри снимок не меняется, лишних перерисовок нет. */
+const DAY_TICK_MS = 30_000;
+
+function subscribeDayTick(onChange: () => void) {
+  const timer = setInterval(onChange, DAY_TICK_MS);
+  return () => clearInterval(timer);
+}
+
+function getDayTick(): number {
+  return Math.floor(Date.now() / DAY_TICK_MS);
+}
+
 export function VskSpravkaClient() {
   const [inspectionType, setInspectionType] = useState("Посещение и анализ уроков педагогов");
   const [target, setTarget] = useState("Учителя естественно-математического цикла (5–9 классы)");
-  const [date, setDate] = useState(new Date().toLocaleDateString("ru-RU"));
+  // Дата приходит только от часов браузера: вычисленная в useState на
+  // сервере дата расходилась с браузерной с полуночи UTC до пяти утра по
+  // Астане — React падал с ошибкой гидратации 418, а справка скатывалась
+  // на день назад. Серверное значение — пустое, далее useSyncExternalStore
+  // сам перерисовывает поле под клиентскую дату.
+  const [inboxDate, setInboxDate] = useState<string | null>(null);
+  const dateTick = useSyncExternalStore(
+    subscribeDayTick,
+    getDayTick,
+    () => null,
+  );
+  const date = inboxDate ?? (dateTick === null ? "" : new Date().toLocaleDateString("ru-RU"));
   const [purpose, setPurpose] = useState("Определение соответствия поурочного планирования требованиям ГОСО, эффективность использования формативного оценивания");
   const [notes, setNotes] = useState("Большинство педагогов используют критериальное оценивание. У двух молодых специалистов выявлены затруднения с дифференциацией заданий на этапе закрепления.");
 
@@ -94,11 +117,12 @@ export function VskSpravkaClient() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-muted-foreground">Сроки / Дата проведения проверки</label>
+            <label htmlFor="vsk-date" className="text-xs font-semibold text-muted-foreground">Сроки / Дата проведения проверки</label>
             <input
+              id="vsk-date"
               type="text"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => setInboxDate(e.target.value)}
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-rose-500"
             />
           </div>

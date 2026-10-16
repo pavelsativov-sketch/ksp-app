@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { Locale } from "@/lib/i18n/dictionaries";
 import type { AppNotificationView } from "@/lib/notification-types";
 import { notificationCopy } from "@/lib/notification-copy";
+import { TimeAgo } from "@/components/ksp/time-ago";
 
 export function NotificationCenter({
   initialNotifications,
@@ -61,8 +62,6 @@ export function NotificationCenter({
     })();
   }
 
-  const dateLocale = locale === "kk" ? "kk-KZ" : "ru-RU";
-
   return <section aria-labelledby="notifications-list-title" className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 id="notifications-list-title" className="sr-only">{copy.title}</h2>
@@ -85,9 +84,9 @@ export function NotificationCenter({
             <span className={`mt-1.5 size-2 shrink-0 rounded-full ${item.read_at ? "bg-muted-foreground/30" : "bg-primary"}`} aria-hidden="true" />
             <span className="min-w-0 flex-1">
               <span className="block break-words font-semibold">{copy.kinds[item.kind]}</span>
-              <time dateTime={item.created_at} className="mt-1 block text-xs text-muted-foreground">
-                {copy.createdAt}: {new Date(item.created_at).toLocaleString(dateLocale)}
-              </time>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {copy.createdAt}: <TimeAgo iso={item.created_at} locale={locale} />
+              </span>
             </span>
             <span className="sr-only">{item.read_at ? "" : (locale === "kk" ? "Оқылмаған" : "Непрочитано")}</span>
           </span>
