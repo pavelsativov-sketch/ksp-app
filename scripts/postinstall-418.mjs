@@ -12,6 +12,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { rmSync } from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
@@ -133,10 +134,27 @@ results.push(patchFile(files[3], appIdxAnchor, appIdxGate));
 const patched = results.filter((r) => r.state === "patched").length;
 const already = results.filter((r) => r.state === "already").length;
 const failed = results.filter((r) => r.state === "anchor-fail").length;
+
+/* Кэш webpack (.next/cache) переживает смену файлов next: модуль compiled
+   react-dom может переехать в новый билд без пересборки — это и погубило
+   первые прод-деплои (правленый файл на диске, страница собирается из
+   устаревшего скомпилированного артефакта). Воркараунды ставятся в
+   postinstall — к моменту билда кэш нужно получить чистым. */
+let purged = 0;
+const nextCache = path.join(root, ".next");
+try {
+  rmSync(nextCache, { recursive: true, force: true });
+  purged = 1;
+} catch (e) {
+  console.warn("postinstall-418: не удалось удалить .next:", String(e).slice(0, 120));
+}
+
 for (const r of results) {
   console.log(`postinstall-418: ${r.rel} -> ${r.state}`);
 }
 if (failed > 0) {
   console.warn("postinstall-418: предупреждение — часть файлов не удалось пропатчить.");
 }
-console.log(`postinstall-418: пропатчено ${patched}, уже были ${already}, сбои ${failed}.`);
+console.log(
+  `postinstall-418: пропатчено ${patched}, уже были ${already}, сбои ${failed}, кэш .next очищен ${purged}.`,
+);
