@@ -6,12 +6,33 @@
  * этого бэкенда в проекте больше нет, и учителю показывался текст про
  * чужой сервис, которого он никогда не видел.
  */
+/**
+ * Приводит ошибку к читаемому виду.
+ *
+ * Ошибки здесь приходят от нескольких слоёв: от раннера в песочнице, от
+ * serverless-обвязки и от самого браузера. Часть из них — не экземпляры
+ * Error, а обычные объекты. Прежнее `String(error)` давало в логе
+ * «[object Object]», и по журналу было невозможно понять, что случилось:
+ * причина терялась целиком.
+ */
+export function describeBrowserError(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  if (error && typeof error === "object") {
+    const source = error as { message?: unknown; error?: unknown; reason?: unknown };
+    const parts = [source.message, source.error, source.reason]
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+    if (parts.length) return parts.join(" · ");
+    try {
+      return JSON.stringify(error).slice(0, 300);
+    } catch {
+      return "объект ошибки без полей";
+    }
+  }
+  return String(error);
+}
+
 export function browserFailure(error: unknown): { message: string; status: number } {
-  const detail = error instanceof Error
-    ? error.message
-    : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-      ? error.message
-      : String(error);
+  const detail = describeBrowserError(error);
   const status = typeof error === "object" && error !== null && "status" in error
     ? (error as { status?: unknown }).status
     : undefined;

@@ -16,6 +16,8 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { dismissFirstRunDialog } from "./lib/prod-helpers.mjs";
 import { resolve } from "node:path";
 import { chromium } from "@playwright/test";
 
@@ -26,6 +28,9 @@ const REPORT = resolve(process.cwd(), "node_modules", ".cache", "smoke-productio
 /** Учебная страница с полями логина и пароля. Форму не отправляем. */
 const FORM_URL = "https://the-internet.herokuapp.com/login";
 const VIEWPORT = { width: 1280, height: 800 };
+const PROBE_FILE = "os-probe.txt";
+const PROBE_TEXT = "Проверка рабочей области ОС";
+const EDITED_TEXT = "Изменено редактором";
 
 const steps = [];
 
@@ -40,6 +45,27 @@ function account() {
   const first = data.accounts?.[0];
   if (!first) throw new Error(`в ${ACCOUNTS} нет аккаунтов`);
   return first;
+}
+
+/**
+ * Регистрирует свежего тестового учителя.
+ *
+ * Повторные прогоны подряд упираются в троттлинг входа, и проверка падала бы
+ * не из-за ОС, а из-за слишком частых попыток. Свой аккаунт на каждый прогон
+ * снимает вопрос: TEST_RUN_ID входит в почту, поэтому новый прогон — новый
+ * учитель.
+ */
+function seedFreshAccount() {
+  const runId = `p${Date.now().toString(36)}`;
+  const result = spawnSync(process.execPath, ["scripts/seed-test-accounts.mjs", "1", BASE_URL], {
+    env: { ...process.env, TEST_RUN_ID: runId },
+    encoding: "utf8",
+    timeout: 180_000,
+  });
+  if (result.status !== 0 && !result.stdout?.includes("создан")) {
+    throw new Error(`не удалось завести тестового учителя: ${(result.stderr || result.stdout || "").slice(-200)}`);
+  }
+  return account();
 }
 
 function parseHeader(value) {
@@ -60,13 +86,17 @@ function median(values) {
 }
 
 async function main() {
-  const creds = account();
+  void account();
   console.log(`Дымовая проверка ОС: ${BASE_URL}\n`);
 
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
   const pageErrors = [];
+  // React сначала пишет в консоль подробности (сравнение серверного и
+  // клиентского HTML и стек компонентов), а уже потом бросает #418. Без
+  // консоли ошибка нечитаема: в проде у неё есть только ссылка на сайт React.
+  const consoleErrors = [];
 
   // Каждый запрос вкладки браузера к бэкенду — с временем ответа. Именно эти
   // задержки чувствует учитель, поэтому меряем их, а не время работы скрипта.
@@ -77,6 +107,12 @@ async function main() {
   let lastPageUrl;
 
   page.on("pageerror", (e) => pageErrors.push(String(e.message).slice(0, 140)));
+  page.on("console", (msg) => {
+    if (msg.type() !== "error" && msg.type() !== "warning") return;
+    const text = msg.text();
+    if (!/hydrat|did not match|418|server rendered|validat/i.test(text)) return;
+    consoleErrors.push(text.replace(/\s+/g, " ").slice(0, 600));
+  });
   page.on("request", (req) => {
     if (req.url().includes("/api/agents/browser-stream")) pending.set(req, Date.now());
   });
@@ -109,17 +145,30 @@ async function main() {
 
   try {
     // ── 1. Вход настоящим тестовым учителем ──
-    await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.fill('input[type="email"], input[name="email"]', creds.email);
-    await page.fill('input[type="password"]', creds.password);
-    await Promise.all([
-      page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 90_000 }),
-      page.click('button[type="submit"]'),
-    ]);
-    step("вход тестовым учителем", true, page.url().replace(BASE_URL, "") || "/");
+    let creds = account();
+    let entered = false;
+    for (let attempt = 1; attempt <= 2 && !entered; attempt++) {
+      await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await page.fill('input[type="email"], input[name="email"]', creds.email);
+      await page.fill('input[type="password"]', creds.password);
+      entered = await Promise.all([
+        page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 45_000 }).then(() => true).catch(() => false),
+        page.click('button[type="submit"]').catch(() => {}),
+      ]).then(([ok]) => ok);
+      if (!entered && attempt === 1) {
+        // Вход не прошёл — скорее всего, троттлинг после частых прогонов.
+        // Берём нового учителя и пробуем ещё раз.
+        console.log("  вход не прошёл, заводим свежего тестового учителя...");
+        creds = seedFreshAccount();
+      }
+    }
+    step("вход тестовым учителем", entered, page.url().replace(BASE_URL, "") || "/");
+    if (!entered) throw new Error("не удалось войти тестовым учителем");
 
     // ── 2. Вкладка «Браузер» и первый кадр ──
     await page.goto(`${BASE_URL}/school/workspace`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    // У нового учителя поверх страницы висит приветственное окно.
+    await dismissFirstRunDialog(page);
     await page.getByRole("tab", { name: /браузер/i }).click({ timeout: 30_000 });
 
     // Холодная песочница ставит Playwright, Chromium и системные библиотеки —
@@ -281,7 +330,9 @@ async function main() {
     const worst = durations[durations.length - 1] ?? 0;
     const errors = typed.filter((c) => c.status !== 200);
     step("ввод пароля без ошибок", errors.length === 0,
-      typed.length ? `запросов ${typed.length}, ошибок ${errors.length}` : "запросов не было");
+      typed.length
+        ? `запросов ${typed.length}, ошибок ${errors.length}${errors.length ? ` · ${errors.slice(0, 2).map((c) => `${c.status}: ${c.body}`).join(" | ")}` : ""}`
+        : "запросов не было");
     step("ввод пароля отзывчив", worst > 0 && worst < 5000,
       `медиана ${medianMs} мс, худший ${worst} мс · кадр сам по себе ${baselineMedian} мс, опрос вкладки ${pollMedian} мс · всего ${Date.now() - pollStart} мс`);
 
@@ -289,7 +340,77 @@ async function main() {
     const leaked = typed.some((c) => String(c.field?.value ?? "").includes("Demo"));
     step("пароль не показан в поле ввода", !leaked);
 
-    step("без ошибок в странице", pageErrors.length === 0, pageErrors.slice(0, 2).join("; "));
+    // ── 7. Остальные приложения ОС ──
+    // Терминал, файлы и редактор работают поверх той же песочницы, что и
+    // браузер. Проверяем их связку целиком: команда в терминале, загрузка
+    // файла, правка в редакторе и чтение результата обратно в терминале.
+    // Так видно, что все три приложения видят одну и ту же файловую систему.
+    const openTab = async (name) => {
+      await page.getByRole("tab", { name: new RegExp(name, "i") }).click({ timeout: 30_000 });
+      await page.waitForTimeout(1500);
+    };
+
+    /** Вводит команду в терминал и возвращает текст окна терминала. */
+    const runCommand = async (command) => {
+      const input = page.getByLabel("Команда Linux");
+      await input.waitFor({ state: "visible", timeout: 30_000 });
+      await input.fill(command);
+      await input.press("Enter");
+      // Ждём, пока в выводе появится ожидаемая метка команды.
+      const term = page.getByLabel("Linux-терминал");
+      await term.getByText(command, { exact: false }).first()
+        .waitFor({ state: "attached", timeout: 60_000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      return (await term.innerText()).replace(/\s+/g, " ").trim();
+    };
+
+    await openTab("Терминал");
+    const termOut = await runCommand("echo MEKTY_OS_READY");
+    step("терминал выполняет команды", termOut.includes("MEKTY_OS_READY"),
+      termOut.slice(-90));
+
+    await openTab("Файлы");
+    const upload = page.getByLabel("Выбранные файлы");
+    await upload.waitFor({ state: "attached", timeout: 30_000 });
+    await upload.setInputFiles({ name: PROBE_FILE, mimeType: "text/plain", buffer: Buffer.from(PROBE_TEXT, "utf8") });
+    const fileShown = await page.getByText(PROBE_FILE, { exact: false }).first()
+      .waitFor({ state: "visible", timeout: 60_000 }).then(() => true).catch(() => false);
+    step("файл загружается в рабочую область", fileShown, PROBE_FILE);
+
+    // Терминалем читаем, что файл действительно оказался на диске песочницы.
+    await openTab("Терминал");
+    const catOut = await runCommand(`cat /vercel/sandbox/workspace/${PROBE_FILE}`);
+    step("файл виден в терминале", catOut.includes(PROBE_TEXT), catOut.slice(-90));
+
+    await openTab("Редактор");
+    // Файл открывается из окна рабочей области; в редакторе он должен
+    // показать то же содержимое, что и терминал.
+    const editorText = await page.evaluate(async () => {
+      const res = await fetch("/api/agents/sandbox?file=" + encodeURIComponent("os-probe.txt"), { cache: "no-store" });
+      const data = await res.json();
+      return { status: res.status, content: String(data.content ?? "") };
+    });
+    step("редактор читает файл из песочницы",
+      editorText.status === 200 && editorText.content.includes(PROBE_TEXT),
+      editorText.content.slice(0, 60));
+
+    // Сохраняем через API и перепроверяем в терминале: редактор и терминал
+    // обязаны видеть один и тот же диск.
+    const saved = await page.evaluate(async ({ file, text }) => {
+      const res = await fetch("/api/agents/sandbox", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ file, content: text }),
+      });
+      return { status: res.status, body: (await res.text()).slice(0, 160) };
+    }, { file: PROBE_FILE, text: EDITED_TEXT });
+    step("редактор сохраняет файл", saved.status === 200, `HTTP ${saved.status} ${saved.body}`);
+    await openTab("Терминал");
+    const afterEdit = await runCommand(`cat /vercel/sandbox/workspace/${PROBE_FILE}`);
+    step("правка редактора видна в терминале", afterEdit.includes(EDITED_TEXT), afterEdit.slice(-90));
+
+    step("без ошибок в странице", pageErrors.length === 0 && consoleErrors.length === 0,
+      [...pageErrors, ...consoleErrors].slice(0, 2).join(" | "));
   } catch (err) {
     step("сценарий прерван", false, err instanceof Error ? err.message.slice(0, 220) : String(err));
   } finally {

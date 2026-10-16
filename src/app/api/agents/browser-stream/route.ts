@@ -10,6 +10,7 @@ import {
   persistAgentBrowserSession,
   type AgentBrowserSession,
 } from "@/lib/agents/browser-session";
+import { describeBrowserError } from "@/lib/agents/browser-failure";
 import { inspectActiveField, detectPageAuthBarrier } from "@/lib/agents/browser-dom";
 import { tryAutoLogin, KNOWN_LOGIN_SITES } from "@/lib/agents/browser-autologin";
 
@@ -297,7 +298,7 @@ async function runAction(userId: string, args: BrowserAction) {
     log.error("browser-stream failed", {
       userId,
       action,
-      reason: error instanceof Error ? error.message : String(error),
+      reason: describeBrowserError(error),
     });
     const failure = browserFailure(error);
     return NextResponse.json({ error: failure.message }, { status: failure.status });
