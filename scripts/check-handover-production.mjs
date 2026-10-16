@@ -332,7 +332,12 @@ async function main() {
     await page.waitForTimeout(1200);
     // Маску судим по заголовкам ответов во время набора пароля: в поле
     // видно только точки (и сокращение «…»), настоящего пароля нет нигде.
-    const pwKeystrokes = calls.slice(pwTypingAt).filter((c) => c.method === "POST");
+    const pwKeystrokes = calls
+      .slice(pwTypingAt)
+      .filter((c) => c.method === "POST")
+      // Маска — свойство телеметрии именно поля пароля; ответы, пришедшие до
+      // фактического фокуса пароля, отражают ещё активное поле логина.
+      .filter((c) => c.field && (c.field.isPassword === true || /password|парол/i.test(String(c.field.label ?? ""))));
     const pwValues = [...new Set(pwKeystrokes.map((c) => String(c.field?.value ?? "")))].filter(Boolean);
     const pwForeign = pwValues.filter((v) => !/^[•…]+$/.test(v));
     const pwMasked = pwForeign.length === 0;

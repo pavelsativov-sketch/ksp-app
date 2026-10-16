@@ -45,7 +45,12 @@ async function main() {
       if (msg.type() !== "error" && msg.type() !== "warning") return;
       const text = msg.text();
       if (!PATTERN.test(text)) return;
-      findings.push({ where: page.url().replace(BASE_URL, ""), text: text.replace(/\s+/g, " ").slice(0, 700) });
+      let where = page.url().replace(BASE_URL, "");
+      try {
+        const loc = msg.location();
+        if (loc?.url) where += ` [src: ${loc.url.replace(/^https?:\/\/[^/]+/, "").slice(0, 60)}]`;
+      } catch { /* нет места — не беда */ }
+      findings.push({ where, text: text.replace(/\s+/g, " ").slice(0, 700) });
     });
     page.on("pageerror", (e) => {
       if (!PATTERN.test(String(e.message))) return;
