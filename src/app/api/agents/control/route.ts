@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getControlOwner, setControlOwner } from "@/lib/agents/session";
+import { resurrectStalePausedTask } from "@/lib/agents/orchestrator";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 /** Владелец управления рабочей средой: пользователь или AI-агент. */
 export async function GET() {
@@ -30,5 +32,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "control должен быть 'user' или 'ai'" }, { status: 400 });
   }
   await setControlOwner(auth.user.id, body.control);
+  if (body.control === "ai") {
+    // Живой раннер сам увидит смену владельца. Мёртвый — отсюда перезапускаем:
+    // так «Готово — продолжить с ИИ» работает и после долгой паузы учителя.
+    await resurrectStalePausedTask(auth.user.id).catch(() => null);
+  }
   return NextResponse.json({ ok: true, control: body.control }, { headers: { "Cache-Control": "no-store" } });
 }

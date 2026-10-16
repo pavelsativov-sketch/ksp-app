@@ -25,10 +25,21 @@ export async function setControlOwner(userId: string, owner: "user" | "ai"): Pro
 }
 
 /** Pause agent work while the account owner controls the shared workspace. */
-export async function waitForControl(userId: string, isStopped: () => Promise<boolean>): Promise<"resumed" | "stopped"> {
+export async function waitForControl(
+  userId: string,
+  isStopped: () => Promise<boolean>,
+  /** Пока задача стоит на паузе, бьём редко: запись в БД не чаще раза в 10 секунд. */
+  heartbeat?: () => Promise<void>,
+): Promise<"resumed" | "stopped"> {
+  let lastBeat = 0;
   for (;;) {
     if (await isStopped()) return "stopped";
     if (await getControlOwner(userId) === "ai") return "resumed";
+    const now = Date.now();
+    if (heartbeat && now - lastBeat > 10_000) {
+      lastBeat = now;
+      await heartbeat().catch(() => {}); // пауза не должна ломаться из-за сбоя записи
+    }
     await new Promise((resolve) => setTimeout(resolve, 800));
   }
 }

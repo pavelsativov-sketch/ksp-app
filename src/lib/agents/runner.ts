@@ -72,7 +72,24 @@ export async function runAgentTask(
     );
   };
 
+  // Сердцебиение: «пока статус running, раннер жив». Если серверлесс-функция
+  // гибнет по лимиту 300 с (в т.ч. пока агент ждёт учителя на паузе),
+  // heartbeat_at перестаёт обновляться — orchestrator считает задачу
+  // зомби и освобождает слот. Без него задача-зомби навсегда держала бы
+  // AGENT_TASK_ALREADY_RUNNING, и агент становился недоступен для учителя.
+  const beat = async () => {
+    try {
+      await agentTasks.updateOne(
+        { _id: new ObjectId(taskId), status: 'running' },
+        { $set: { heartbeat_at: new Date() } },
+      );
+    } catch {
+      // сбой записи не должен валить выполнение задачи
+    }
+  };
+
   try {
+    await beat(); // раннер поднялся — фиксируем жизнь до медленной проверки песочницы
     const workspace = await getWorkspaceRuntime(userId);
     const shellAvailable = (await workspace.getSandboxStatus()).available;
     const activeTools = shellAvailable
@@ -137,6 +154,7 @@ export async function runAgentTask(
         }
 
         // Пользователь мог нажать «Остановить» — статус в БД меняется на stopped.
+        await beat(); // каждый виток цикла рапортует, что раннер жив
         const current = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
         if (current && current.status !== 'running') {
           await log({ type: 'END', message: 'Остановлено пользователем' });
@@ -151,7 +169,7 @@ export async function runAgentTask(
           const outcome = await waitForControl(userId, async () => {
             const t = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
             return !!t && t.status !== 'running';
-          });
+          }, beat);
           if (outcome === 'stopped') {
             await log({ type: 'END', message: 'Остановлено пользователем' });
             await finish('stopped', { result: 'Остановлено пользователем' });
@@ -186,6 +204,7 @@ export async function runAgentTask(
           tool_choice: 'auto',
           temperature: 0.2,
         });
+        await beat(); // долгий вызов модели позади — подтверждаем жизнь
 
         const message = response.choices[0]?.message;
         if (!message) throw new Error('Модель не вернула ответ');
@@ -246,6 +265,7 @@ export async function runAgentTask(
               resultStr = JSON.stringify({ success: false, error: e instanceof Error ? e.message : 'tool failed' });
             }
           }
+          await beat(); // каждый сделанный шаг инструмента — подтверждение жизни
           await log({ type: 'TOOL_RESULT', message: humanToolResult(name, resultStr), data: { tool: name, result: resultStr } });
           if (name === 'browserNavigate' || name === 'browserClick' || name === 'browserType') {
             try {
