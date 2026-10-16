@@ -108,7 +108,12 @@ export async function inspectActiveField(page: { evaluate: (fn: any, arg?: any) 
         label: fieldLabel.replace(/\s+/g, " ").slice(0, 80),
         name,
         placeholder: ph,
-        value: val,
+        // Значение поля пароля наружу не отдаём. Оно уезжает в браузер
+        // учителя в заголовке ответа, попадает в состояние React и в журнал
+        // сети — то есть лежит открытым текстом там, где его видно при
+        // открытых инструментах разработчика. Интерфейсу хватает длины:
+        // он рисует точки по ней.
+        value: isPassword ? "•".repeat(val.length) : val,
         box,
       };
     }) as never);

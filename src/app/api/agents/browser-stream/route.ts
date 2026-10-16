@@ -15,7 +15,11 @@ import { tryAutoLogin, KNOWN_LOGIN_SITES } from "@/lib/agents/browser-autologin"
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Первый запрос по вкладке «Браузер» поднимает песочницу с нуля: ставит
+// Playwright, Chromium и системные библиотеки, затем ждёт раннер. На холодной
+// песочнице это минуты, а не секунды — 60 с тут гарантированно обрывали
+// подготовку на полпути, и учитель получал вечное «Запускаю браузер…».
+export const maxDuration = 300;
 
 /**
  * Браузер рабочей области ОС.

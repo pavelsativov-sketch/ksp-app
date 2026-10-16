@@ -32,14 +32,36 @@ const WORKSPACE_ROOT = "/vercel/sandbox/workspace";
 const SANDBOX_TIMEOUT_MS = 15 * 60_000;
 const COMMAND_TIMEOUT_MS = 90_000;
 
+/**
+ * Регион песочницы.
+ *
+ * По умолчанию Vercel кладёт песочницу в iad1 (США), а функции проекта живут
+ * в bom1 — из vercel.json. Каждое действие учителя в браузере ОС идёт по кругу
+ * «браузер → функция в bom1 → песочница в iad1 → Chromium → кадр назад», то
+ * есть через Атлантику дважды. На замере это давало ~2 секунды на кадр, и
+ * ввод пароля ощущался как «тупит». Ставим песочницу рядом с функциями.
+ *
+ * Меняется переменной окружения, если развёртывание переедет.
+ */
+const SANDBOX_REGION = (process.env.SANDBOX_REGION ?? "bom1") as "bom1";
+
 function usesVercelSandbox(): boolean {
   if (process.env.WORKSPACE_RUNTIME === "off") return false;
   return process.env.WORKSPACE_RUNTIME === "vercel-sandbox" || process.env.VERCEL === "1";
 }
 
+/**
+ * Имя песочницы включает регион.
+ *
+ * Песочница восстанавливается из своего снапшота, а снапшот хранит регион
+ * создания. Поэтому песочница, однажды поднятая в iad1, возвращалась туда же
+ * и после смены SANDBOX_REGION — getOrCreate находил её по имени и молча
+ * игнорировал новый регион. Регион в имени заставляет сменить регион значит
+ * поднять действительно новую песочницу.
+ */
 function sandboxName(userId: string): string {
   const suffix = createHash("sha256").update(userId).digest("hex").slice(0, 32);
-  return `mekty-ws-${suffix}`;
+  return `mekty-ws-${SANDBOX_REGION}-${suffix}`;
 }
 
 /** Best-effort cleanup for the persistent VM when the account is deleted. */
@@ -64,6 +86,7 @@ export async function getAccountSandbox(userId: string): Promise<Sandbox> {
   let sandbox = await VercelSandbox.getOrCreate({
     name: sandboxName(userId),
     image: "vercel/sandbox/universal",
+    region: SANDBOX_REGION,
     ports: [3000],
     persistent: true,
     timeout: SANDBOX_TIMEOUT_MS,
@@ -93,6 +116,7 @@ export async function getAccountSandbox(userId: string): Promise<Sandbox> {
     sandbox = await VercelSandbox.create({
       name: sandboxName(userId),
       image: "vercel/sandbox/universal",
+      region: SANDBOX_REGION,
       ports: [3000],
       persistent: true,
       timeout: SANDBOX_TIMEOUT_MS,

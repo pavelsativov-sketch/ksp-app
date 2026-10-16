@@ -228,6 +228,56 @@ describe.skipIf(!chromiumAvailable)("ОС: сессия браузера", () =>
   }, 60_000);
 });
 
+describe.skipIf(!chromiumAvailable)("ОС: пароль учителя не утекает", () => {
+  /** Ставит в страницу форму входа и фокусирует нужное поле. */
+  async function openLoginAndFocus(
+    session: Awaited<ReturnType<typeof getAgentBrowserSession>>,
+    field: "login" | "password",
+  ) {
+    await session.page.evaluate((which: string) => {
+      document.body.innerHTML = `
+        <label>Логин <input name="login" style="padding:8px"></label>
+        <label>Пароль <input name="password" type="password" style="padding:8px"></label>
+      `;
+      const target = document.querySelector(which === "password" ? 'input[type="password"]' : 'input[name="login"]') as HTMLInputElement | null;
+      target?.focus();
+    }, field);
+  }
+
+  it("разведка поля пароля отдаёт точки, а не сам пароль", async () => {
+    const { inspectActiveField } = await import("@/lib/agents/browser-dom");
+    const session = await getAgentBrowserSession(USER);
+
+    await openLoginAndFocus(session, "password");
+    await session.remote!.performUiAction("type", { text: "DemoPass-2026" });
+    await session.page.waitForTimeout(500);
+
+    const field = await inspectActiveField(session.page);
+
+    // Поле должно оказаться тем самым паролем — иначе тест ничего не проверяет.
+    expect(field.isPassword, "нужно попасть в поле пароля").toBe(true);
+    // Разведка уезжает учителю в заголовке X-Active-Field, то есть в
+    // состояние React и в журнал сети. Открытым текстом там быть не должно.
+    expect(field.value ?? "", "пароль утекает в разведке").not.toContain("DemoPass");
+    expect(field.value).toBe("•".repeat("DemoPass-2026".length));
+  }, 90_000);
+
+  it("логин при этом остаётся читаемым", async () => {
+    const { inspectActiveField } = await import("@/lib/agents/browser-dom");
+    const session = await getAgentBrowserSession(USER);
+
+    await openLoginAndFocus(session, "login");
+    await session.remote!.performUiAction("type", { text: "teacher_ivanov" });
+    await session.page.waitForTimeout(500);
+
+    const field = await inspectActiveField(session.page);
+
+    // Маскируется только пароль: логин интерфейс показывает честно.
+    expect(field.isPassword).toBe(false);
+    expect(field.value).toBe("teacher_ivanov");
+  }, 90_000);
+});
+
 describe.skipIf(!chromiumAvailable)("ОС: агент и учитель в одной сессии", () => {
   it("действие агента видно в сессии учителя", async () => {
     const { browserTools } = await import("@/lib/agents/tools/browser");

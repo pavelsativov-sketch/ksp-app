@@ -68,6 +68,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const typeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInitialUrlRef = useRef(initialUrl?.trim() || '');
   const canvasFocusedRef = useRef(false);
+  // Пока учитель правит адрес, кадры не должны затирать его ввод. Раньше
+  // acceptFrame подставлял адрес страницы в поле при КАЖДОМ ответе, включая
+  // фоновый опрос раз в 1,2 с: набираешь адрес — текст прыгает назад, и
+  // переход невозможно завершить. Это и выглядело как «тормозит».
+  const addressFocusedRef = useRef(false);
 
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
@@ -129,7 +134,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
     setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
     if (title) setPageTitle(title);
-    if (currentUrl) { setPageUrl(currentUrl); setInputUrl(currentUrl); }
+    if (currentUrl) {
+      setPageUrl(currentUrl);
+      // Адрес в поле обновляем только когда учитель его не правит.
+      if (!addressFocusedRef.current) setInputUrl(currentUrl);
+    }
     setError('');
     return currentUrl;
   }, []);
@@ -491,12 +500,20 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         {/* URL Bar */}
         <form
           className="flex-1 flex items-center h-8 bg-[#313147] rounded-full px-3 gap-2 border border-transparent focus-within:border-blue-500/50 transition-all"
-          onSubmit={e => { e.preventDefault(); void navigate(inputUrl); }}
+          onSubmit={e => {
+            e.preventDefault();
+            // После перехода поле должно снова следить за страницей, поэтому
+            // снимаем фокус: иначе адрес останется тем, что учитель ввёл.
+            (e.currentTarget.querySelector('input') as HTMLInputElement | null)?.blur();
+            void navigate(inputUrl);
+          }}
         >
           <Shield className="w-3.5 h-3.5 text-green-400 shrink-0" />
           <input
             value={inputUrl}
             onChange={e => setInputUrl(e.target.value)}
+            onFocus={() => { addressFocusedRef.current = true; }}
+            onBlur={() => { addressFocusedRef.current = false; }}
             className="flex-1 bg-transparent text-[12px] text-white/80 outline-none"
             placeholder="Введите адрес или поисковый запрос..."
           />
