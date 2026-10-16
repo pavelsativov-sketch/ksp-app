@@ -1,17 +1,39 @@
 /**
- * Живая проверка Codespaces runner'а: поднимает его и прогоняет действия,
- * которые школа ОС шлёт из вкладки «Браузер» и из агента.
+ * Живая проверка браузерного раннера рабочей области ОС.
  *
- * Запуск:
- *   node scripts/check-runner.mjs
- *   AUTH_SECRET=<32+ символа> node scripts/check-runner.mjs
+ * Поднимает ТОТ САМЫЙ раннер, который едет в Vercel Sandbox
+ * (`src/lib/agents/sandbox-runner-code.ts`), и прогоняет через него
+ * действия, которые реально шлёт приложение. Раньше скрипт проверял
+ * отдельную копию `scripts/browser-runner-node.mjs`, которая нигде не
+ * запускалась — проверка проходила, а production-код оставался непроверенным.
  *
- * Секрет нужен только для локального прогона; в Codespaces он уже задан в
- * окружении и скрипт пойдёт по нему.
+ * Запуск:  node scripts/check-runner.mjs
  */
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+
+/**
+ * Достаём RUNNER_SCRIPT из TypeScript-модуля, не импортируя его: иначе Node
+ * требует --experimental-strip-types и предупреждает о модуле без
+ * "type": "module". Экранирование шаблонной строки вычисляем тем же движком,
+ * что и компилятор, — иначе в раннер попадут литеральные `\`` и `\${`.
+ */
+function loadRunnerScript() {
+  const file = path.join(process.cwd(), "src", "lib", "agents", "sandbox-runner-code.ts");
+  const source = readFileSync(file, "utf8");
+  const marker = "RUNNER_SCRIPT = `";
+  const start = source.indexOf(marker);
+  if (start === -1) throw new Error(`в ${file} не найдено объявление RUNNER_SCRIPT`);
+  const body = source.slice(start + marker.length, source.lastIndexOf("`"));
+  const script = new Function(`return \`${body}\`;`)();
+  if (!script.includes("server.listen") || !script.includes("verifySignature")) {
+    throw new Error("извлечённый раннер выглядит неполным — проверьте sandbox-runner-code.ts");
+  }
+  return script;
+}
 
 const SECRET = process.env.AUTH_SECRET || crypto.randomBytes(24).toString("hex");
 const PORT = process.env.RUNNER_PORT || "3111";
@@ -37,7 +59,14 @@ function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
 }
 
-const child = spawn(process.execPath, ["scripts/browser-runner-node.mjs"], {
+// Файл кладём внутрь node_modules: раннер импортирует `playwright`, и Node
+// должен найти его, поднимаясь по node_modules вверх от расположения файла.
+const runnerDir = path.join(process.cwd(), "node_modules", ".cache", "mekty-runner");
+mkdirSync(runnerDir, { recursive: true });
+const runnerFile = path.join(runnerDir, "runner.mjs");
+writeFileSync(runnerFile, loadRunnerScript(), "utf8");
+
+const child = spawn(process.execPath, [runnerFile], {
   env: { ...process.env, PORT, AUTH_SECRET: SECRET },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -46,17 +75,29 @@ child.stdout.on("data", (d) => { runnerLog += d; });
 child.stderr.on("data", (d) => { runnerLog += d; });
 
 try {
-  for (let i = 0; i < 40; i++) {
+  let started = false;
+  let warm = false;
+  for (let i = 0; i < 60; i++) {
     try {
-      if ((await fetch(`${URL_BASE}/health`)).ok) break;
+      const res = await fetch(`${URL_BASE}/health`);
+      if (res.ok) {
+        started = true;
+        const health = await res.json();
+        // Прогрев Chromium при старте: без него первое действие учителя
+        // платит несколько секунд на запуск браузера.
+        if (health.chromiumReady) { warm = true; break; }
+      }
     } catch { /* ещё не поднялся */ }
     await sleep(500);
   }
+  check("раннер из sandbox-runner-code.ts поднимается", started);
+  check("Chromium прогревается при старте раннера", warm);
+  if (!started) throw new Error(`runner не ответил на /health.\n${runnerLog.slice(-1500)}`);
 
   const created = await rpc({ action: "create", userId: "probe-user" });
   const sessionId = created.sessionId;
   check("create возвращает sessionId", Boolean(sessionId), sessionId);
-  if (!sessionId) throw new Error("нет sessionId — дальнейшие проверки бессмысленны");
+  if (!sessionId) throw new Error("нет sessionId");
 
   const title = await rpc({ action: "title", sessionId, args: {} });
   check("title отвечает строкой", typeof title.result === "string", JSON.stringify(title.result));
@@ -71,7 +112,17 @@ try {
   check("служебный storageState не тащит скриншот", !state.screenshotBase64);
 
   const noArg = await rpc({ action: "evaluate", sessionId, args: { script: "() => document.title" } });
-  check("evaluate без аргумента", noArg.result === "Example Domain", JSON.stringify(noArg.result));
+  check("evaluate: исходник функции без аргумента", noArg.result === "Example Domain", JSON.stringify(noArg.result));
+
+  // Строка-выражение (IIFE), а не исходник функции. Именно так приходит
+  // INTERACTABLES_SCRIPT: раньше раннер выполнял его в Node, где document не
+  // существует, и агент получал пустой список кликабельных элементов.
+  const iife = await rpc({
+    action: "evaluate",
+    sessionId,
+    args: { script: "(() => { const a = document.querySelectorAll('a'); return a.length + ' ссылок'; })()" },
+  });
+  check("evaluate: строковое выражение (IIFE)", iife.result === "1 ссылок", JSON.stringify(iife.result));
 
   const withArg = await rpc({
     action: "evaluate",
@@ -87,6 +138,8 @@ try {
     JSON.stringify(withArg.result),
   );
 
+  // inspectActiveField / detectPageAuthBarrier из browser-dom.ts работают
+  // поверх этих же вызовов — проверяем, что DOM реально доступен.
   const active = await rpc({
     action: "evaluate",
     sessionId,
@@ -99,6 +152,10 @@ try {
 
   const plainShot = await rpc({ action: "screenshot", sessionId, args: {} });
   check("screenshot без флага отдаёт JPEG", plainShot.image === true && plainShot.bytes > 1000, `${plainShot.bytes} bytes`);
+
+  const mouseDown = await rpc({ action: "mouseDown", sessionId, args: {} });
+  const mouseUp = await rpc({ action: "mouseUp", sessionId, args: {} });
+  check("mouseDown/mouseUp поддержаны (drag)", mouseDown.ok === true && mouseUp.ok === true);
 
   const ssrf = await rpc({
     action: "evaluate",

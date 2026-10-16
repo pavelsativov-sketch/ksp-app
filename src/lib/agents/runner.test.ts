@@ -2,19 +2,23 @@ import { describe, expect, it } from "vitest";
 
 // ── Регулярка классификации ошибок браузера ─────────────────────────────────
 // Скопирована из runner.ts: если там меняется — тест сигнализирует об этом.
-const HARD_LIMIT_RE = /daily.{0,30}limit|time limit exceeded|10 minutes per day|достигнут дневной лимит/i;
+// Жёсткая остановка — только когда браузер не поднять в принципе.
+const HARD_LIMIT_RE = /не установился|не удалось запустить браузер/i;
 
 function isBrowserHardLimit(errorMsg: string): boolean {
   return HARD_LIMIT_RE.test(errorMsg);
 }
 
 describe("browser error classification — hard vs soft", () => {
-  it("classifies Cloudflare daily limit as hard", () => {
-    expect(isBrowserHardLimit("browser time limit exceeded for today")).toBe(true);
-    expect(isBrowserHardLimit("daily browser time limit reached")).toBe(true);
-    expect(isBrowserHardLimit("достигнут дневной лимит Cloudflare Browser Run")).toBe(true);
-    expect(isBrowserHardLimit("10 minutes per day exceeded")).toBe(true);
-    expect(isBrowserHardLimit("Daily limit has been reached for this account")).toBe(true);
+  it("stops the agent only when the browser cannot be provisioned at all", () => {
+    expect(isBrowserHardLimit("Браузер рабочей области не установился. Обратитесь к администратору.")).toBe(true);
+    expect(isBrowserHardLimit("Не удалось запустить браузер в песочнице")).toBe(true);
+  });
+
+  it("treats a still-warming sandbox as soft — the agent should retry", () => {
+    expect(isBrowserHardLimit("Браузер рабочей области запускается. Это занимает около минуты")).toBe(false);
+    expect(isBrowserHardLimit("Сеанс браузера завершён. Обновите сеанс")).toBe(false);
+    expect(isBrowserHardLimit("Слишком много обращений к браузеру")).toBe(false);
   });
 
   it("classifies navigation errors as soft — agent should continue", () => {
@@ -27,9 +31,8 @@ describe("browser error classification — hard vs soft", () => {
     expect(isBrowserHardLimit("")).toBe(false);
   });
 
-  it("is case-insensitive for English error strings", () => {
-    expect(isBrowserHardLimit("DAILY LIMIT EXCEEDED")).toBe(true);
-    expect(isBrowserHardLimit("Time Limit Exceeded for today")).toBe(true);
+  it("is case-insensitive", () => {
+    expect(isBrowserHardLimit("БРАУЗЕР РАБОЧЕЙ ОБЛАСТИ НЕ УСТАНОВИЛСЯ")).toBe(true);
   });
 });
 

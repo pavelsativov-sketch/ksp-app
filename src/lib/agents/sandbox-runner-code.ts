@@ -22,22 +22,33 @@ if (!SECRET || SECRET.length < 20) {
 }
 
 let browserInstance = null;
+// Промис запуска: прогрев при старте и первый \`create\` могут прийти
+// одновременно. Без общего промиса Chromium поднимался бы дважды —
+// два тяжёлых процесса вместо одного.
+let browserLaunching = null;
 const sessions = new Map();
 
 async function getBrowser() {
-  if (!browserInstance || !browserInstance.isConnected()) {
-    console.log("[RUNNER] Launching Chromium instance in Vercel Sandbox...");
-    browserInstance = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-      ],
-    });
-  }
-  return browserInstance;
+  if (browserInstance && browserInstance.isConnected()) return browserInstance;
+  if (browserLaunching) return browserLaunching;
+  console.log("[RUNNER] Launching Chromium instance in Vercel Sandbox...");
+  browserLaunching = chromium.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+    ],
+  }).then((browser) => {
+    browserInstance = browser;
+    browserLaunching = null;
+    return browser;
+  }, (error) => {
+    browserLaunching = null;
+    throw error;
+  });
+  return browserLaunching;
 }
 
 const BLOCKED_V4 = [
@@ -207,6 +218,10 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({
       status: "ok",
       runner: "Vercel Sandbox Browser Runner",
+      // Прогретый ли Chromium: до этого первое действие учителя платит
+      // несколько секунд на запуск браузера.
+      chromiumReady: Boolean(browserInstance && browserInstance.isConnected()),
+      chromiumLaunching: Boolean(browserLaunching),
       activeSessions: sessions.size,
       uptime: process.uptime(),
       memory: process.memoryUsage(),
@@ -312,13 +327,14 @@ const server = http.createServer(async (req, res) => {
         }
       } else if (action === "click") {
         await page.mouse.click(Number(args.x ?? 0), Number(args.y ?? 0), {
+          button: String(args.button ?? "left"),
           clickCount: Number(args.clickCount ?? 1),
         });
         await page.waitForTimeout(150);
       } else if (action === "type") {
         const text = String(args.text ?? "");
         if (text) {
-          await page.keyboard.type(text, { delay: 10 });
+          await page.keyboard.type(text, { delay: Number(args.delay ?? 10) });
         }
         await page.waitForTimeout(100);
       } else if (action === "press") {
@@ -345,9 +361,18 @@ const server = http.createServer(async (req, res) => {
       } else if (action === "evaluate") {
         const script = String(args.script ?? "null");
         const arg = args.arg;
-        result = arg === undefined
-          ? await page.evaluate(new Function(\`return (\${script})\`)())
-          : await page.evaluate(new Function("arg", \`return (\${script})(arg);\`), arg);
+        // Скрипт приходит строкой и бывает двух видов:
+        //   "() => document.title"            — исходник функции;
+        //   "(() => { ... })()"               — готовое выражение (INTERACTABLES_SCRIPT).
+        // Оба нужно выполнить в странице, а не в Node: здесь document не
+        // существует. Playwright сериализует переданную функцию и зовёт её
+        // уже в странице, поэтому скрипт сам не вызываем — определяем вид
+        // и вызываем только если это функция.
+        const wrapper = new Function("arg", \`
+          const __mektyScript = (\${script});
+          return typeof __mektyScript === "function" ? __mektyScript(arg) : __mektyScript;
+        \`);
+        result = await page.evaluate(wrapper, arg);
       } else if (action === "storageState") {
         result = await context.storageState({ indexedDB: true }).catch(() => null);
       } else if (action === "fill") {
@@ -408,5 +433,12 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(\`Listening on http://0.0.0.0:\${PORT}\`);
   console.log(\`Endpoint: http://0.0.0.0:\${PORT}/_agent/browser\`);
   console.log(\`=======================================================\`);
+  // Chromium поднимаем сразу, а не лениво на первом \`create\`. Первый
+  // переход учителя иначе платит ~10 с на запуск браузера, хотя песочница
+  // давно прогрета. Общий промис getBrowser не даёт запустить дважды.
+  void getBrowser().then(
+    () => console.log("[RUNNER] Chromium is warm."),
+    (err) => console.error("[RUNNER] Chromium warm-up failed:", err && err.message ? err.message : err),
+  );
 });
 `;

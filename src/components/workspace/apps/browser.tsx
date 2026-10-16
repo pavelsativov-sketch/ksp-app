@@ -72,12 +72,14 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
   const landingUrl = initialUrl?.trim() || 'https://www.google.com';
-  const dailyQuotaBlocked = /дневн.{0,30}лимит/i.test(error);
-  const isInstalling = /устанавливается|запускается.*мин|failed to start/i.test(error);
-  const isRateLimited = /ограничил|подождите \d+ секунд/i.test(error);
-  const isSessionExpired = /session expired|сессия истекла|410/i.test(error);
+  // Песочница поднимает Chromium с нуля: это занимает около минуты, и всё
+  // это время вкладка сама повторяет попытку подключения.
+  const isWarmingUp = /запускается|устанавливается|подождите|не установился/i.test(error);
+  const isThrottled = /слишком много обращений|подождите минуту/i.test(error);
+  const isSessionExpired = /сеанс браузера завершён|session expired|сессия истекла/i.test(error);
+  const isRetryable = isWarmingUp || isThrottled;
 
-  // Keepalive: пингуем runner каждые 10 мин, чтобы песочница оставалась активной
+  // Keepalive: пингуем песочницу каждые 10 мин, чтобы она не остыла между занятиями
   useEffect(() => {
     const ping = () => void fetch('/api/health/browser-keepalive', { cache: 'no-store' }).catch(() => {});
     ping(); // сразу при открытии
@@ -203,14 +205,15 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   // Обратный отсчёт автоповтора живёт в состоянии, а сброс при смене
   // throttle-ошибки делается прямо во время рендера: синхронный setState
   // внутри effect вызывал каскадные рендеры.
-  const [wasRateLimited, setWasRateLimited] = useState(isRateLimited);
-  if (wasRateLimited !== isRateLimited) {
-    setWasRateLimited(isRateLimited);
-    setRetryCountdown(isRateLimited ? 15 : null);
+  const [wasRetryable, setWasRetryable] = useState(isRetryable);
+  if (wasRetryable !== isRetryable) {
+    setWasRetryable(isRetryable);
+    setRetryCountdown(isRetryable ? (isThrottled ? 60 : 15) : null);
   }
 
+  const countdownActive = retryCountdown !== null;
   useEffect(() => {
-    if (retryCountdown === null) return;
+    if (!countdownActive) return;
     const interval = setInterval(() => {
       setRetryCountdown((prev) => {
         if (prev === null || prev <= 1) {
@@ -223,7 +226,9 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [retryCountdown !== null, navigate, pageUrl, landingUrl]);
+    // countdownActive вместо самого countdown: значение меняется каждую
+    // секунду, и с ним в зависимостях эффект перезапускался бы ежесекундно.
+  }, [countdownActive, navigate, pageUrl, landingUrl]);
 
   const clearSession = useCallback(async () => {
     if (!window.confirm('Завершить внешний сеанс и удалить сохранённые данные входа?')) return;
@@ -304,9 +309,13 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     if (!chars) return;
     typeBufferRef.current += chars;
     if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
+    // Пока очередь не разгрузилась, ждём дольше и копим буквы: один запрос
+    // с «DemoPass-2026» дешевле десяти запросов по одной букве, а на экране
+    // текст всё равно появляется мгновенно за счёт live-оверлея.
+    const busy = pendingCountRef.current > 0;
     typeTimerRef.current = setTimeout(() => {
       flushTypedBuffer();
-    }, 40);
+    }, busy ? 250 : 40);
   }, [flushTypedBuffer]);
 
   const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
@@ -737,15 +746,15 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           </div>
         )}
 
-        {isInstalling && (
+        {isWarmingUp && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#090b12] gap-4 px-8 text-center z-10">
             <div className="relative w-14 h-14">
               <div className="absolute inset-0 rounded-full border-[3px] border-blue-500/20" />
               <div className="absolute inset-0 rounded-full border-[3px] border-blue-400 border-t-transparent animate-spin" />
             </div>
             <div>
-              <p className="text-white/80 font-semibold text-sm">Устанавливаю браузер…</p>
-              <p className="text-white/45 text-xs mt-1.5">Первый запуск занимает ~5 минут. Обновите страницу через минуту.</p>
+              <p className="text-white/80 font-semibold text-sm">Запускаю браузер…</p>
+              <p className="text-white/45 text-xs mt-1.5">Первый запуск поднимает личный браузер и занимает около минуты. Повтор произойдёт автоматически.</p>
             </div>
             <button type="button" onClick={() => { setError(''); void fetchFrame(); }}
               className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
@@ -753,22 +762,17 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             </button>
           </div>
         )}
-        {!isInstalling && error && (
+        {!isWarmingUp && error && (
           <div className={`absolute z-10 flex justify-center px-3 ${imgSrc ? 'left-3 right-3 top-3' : 'inset-0 items-center bg-[#090b12]'}`}>
             <div className={`flex max-w-full items-center gap-3 rounded-lg border border-amber-300/20 bg-[#151722]/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
               <p className="min-w-0 flex-1 text-sm text-white/75">
                 {retryCountdown !== null
-                  ? `Подготовка браузера... Автоматическое подключение через ${retryCountdown} сек.`
+                  ? (isThrottled
+                      ? `Слишком много обращений к браузеру. Повтор через ${retryCountdown} сек.`
+                      : `Подготовка браузера... Автоматическое подключение через ${retryCountdown} сек.`)
                   : error}
               </p>
-              {dailyQuotaBlocked ? (
-                <>
-                  <button type="button" onClick={openExternally} className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-sky-300/25 bg-sky-300/10 px-2.5 py-1.5 text-xs font-medium text-sky-200 hover:bg-sky-300/20">
-                    <ExternalLink className="size-3.5" /> Открыть сайт отдельно
-                  </button>
-                  <span className="shrink-0 text-xs text-amber-200/70">Сброс в 00:00 UTC</span>
-                </>
-              ) : isSessionExpired ? (
+              {isSessionExpired ? (
                 <button
                   type="button"
                   onClick={() => {

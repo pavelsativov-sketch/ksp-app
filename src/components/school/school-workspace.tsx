@@ -74,15 +74,10 @@ export function SchoolWorkspace({
   const [browserUrl, setBrowserUrl] = useState<string | undefined>(initialUrl);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Фоновый прогрев песочницы и браузера при входе в рабочую область, чтобы
-  // первый запрос учителя не ждал холодного старта.
-  useEffect(() => {
-    void fetch("/api/agents/browser-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "warmup" }),
-    }).catch(() => {});
-  }, []);
+  // Прогревать браузер здесь было незачем: действие "warmup" роут отклонял
+  // как неизвестное (400), но успевал запустить персональную песочницу —
+  // то есть платили за холодный старт все, кто открыл /school, даже не
+  // открывая вкладку «Браузер». Прогрев делает сам BrowserApp при монтировании.
 
   // «В редактор» из файл-менеджера: в двухпанельной раскладке редактор — это
   // вкладка, а не окно, поэтому переключаем вкладку. Реагируем на хранилище

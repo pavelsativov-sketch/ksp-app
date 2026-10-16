@@ -4,7 +4,15 @@ import path from "node:path";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "tests/unit/**/*.test.ts",
+      "tests/unit/**/*.test.tsx",
+      // Поднимает настоящий Chromium и гоняет ОС end-to-end (~$10 с).
+      // Ловит рассогласование между приложением и браузерным раннером.
+      "tests/integration/**/*.test.ts",
+    ],
     exclude: ["node_modules", ".next", "tests/e2e/**"],
     globals: false,
     pool: "forks",

@@ -1,7 +1,6 @@
 import type { Browser, BrowserContext, Page } from "playwright";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { getDb, COL } from "@/lib/mongo";
-import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { browserRpc, BrowserRpcError, createBrowserRpcSession } from "@/lib/agents/browser-rpc";
 import { log } from "@/lib/logger";
 export { browserFailure } from "@/lib/agents/browser-failure";
@@ -17,6 +16,8 @@ export interface AgentBrowserSession {
 export interface RemoteBrowserSession {
   validate: () => Promise<boolean>;
   sessionId: string;
+  /** Когда последний раз реально проверяли живость сессии (см. VALIDATE_INTERVAL_MS). */
+  lastValidatedAt: number;
   getInteractionState: () => unknown;
   performUiAction: (action: string, args?: Record<string, unknown>, allowedOrigin?: string) => Promise<{ screenshot: Uint8Array; title: string; currentUrl: string }>;
 }
@@ -24,20 +25,6 @@ export interface RemoteBrowserSession {
 const SESSION_TTL_MS = 5 * 60_000;
 const sessions = new Map<string, AgentBrowserSession>();
 const opening = new Map<string, Promise<AgentBrowserSession>>();
-
-/** Запуск стандартного Playwright Chromium (в Vercel Sandbox или локально в Node.js). */
-export async function launchAgentBrowser(): Promise<Browser> {
-  const { chromium } = await import("playwright");
-  return chromium.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-    ],
-  });
-}
 
 function storageKey(): Buffer {
   const secret = process.env.AUTH_SECRET;
@@ -71,6 +58,15 @@ type SavedBrowserState = {
   interactionState?: unknown;
 };
 
+/**
+ * Сохранённое состояние браузера пользователя: куки/localStorage, текущий
+ * адрес и id сессии в песочнице. Именно его читает createAgentBrowserSession,
+ * чтобы не открывать новую сессию браузера после перезапуска процесса.
+ */
+export async function readStoredBrowserState(userId: string): Promise<SavedBrowserState | undefined> {
+  return readStoredState(userId);
+}
+
 async function readStoredState(userId: string): Promise<SavedBrowserState | undefined> {
   const db = await getDb();
   const doc = await db.collection(COL.agentBrowserSessions).findOne({ user_id: userId }, { projection: { encrypted_state: 1 } });
@@ -83,7 +79,7 @@ async function readStoredState(userId: string): Promise<SavedBrowserState | unde
     if (Array.isArray(value.cookies)) return { storageState: value as SavedBrowserState["storageState"] };
     const currentUrl = typeof value.currentUrl === "string" ? value.currentUrl : undefined;
     const sessionId = typeof value.sessionId === "string" ? value.sessionId : undefined;
-    // Сессия Codespaces восстанавливается по sessionId даже без storageState,
+    // Сессия в песочнице восстанавливается по sessionId даже без storageState,
     // поэтому отсутствие кук не должно обнулять весь документ — иначе после
     // каждой перезагрузки лямбды открывается новая сессия браузера.
     if (!currentUrl && !sessionId && !value.storageState) return undefined;
@@ -173,6 +169,17 @@ function reapSessions(now = Date.now()): void {
   }
 }
 
+/**
+ * Как недавно проверять, что сессия в песочнице жива.
+ *
+ * Раньше validate() дёргал раннер на КАЖДЫЙ запрос, включая ввод каждой
+ * буквы пароля: один символ стоил лишнего круговогоtrip'а к удалённой
+ * песочнице — при проклавиатуре это и было причиной «тупит». Теперь проверка
+ * идёт не чаще раза в VALIDATE_INTERVAL_MS; если сессия всё-таки протухла,
+ * действие вернёт 410, и вкладка переподключится.
+ */
+const VALIDATE_INTERVAL_MS = 15_000;
+
 /** Один настоящий браузерный контекст на пользователя, общий для UI и агента. */
 export async function getAgentBrowserSession(userId: string): Promise<AgentBrowserSession> {
   if (!userId || userId.length > 128) throw new Error("Invalid browser session owner");
@@ -181,9 +188,12 @@ export async function getAgentBrowserSession(userId: string): Promise<AgentBrows
 
   const current = sessions.get(userId);
   if (current && current.browser.isConnected() && !current.page.isClosed()) {
-    if (current.remote && !await current.remote.validate()) {
+    const lastCheck = current.remote?.lastValidatedAt ?? 0;
+    const recentlyChecked = now - lastCheck < VALIDATE_INTERVAL_MS;
+    if (current.remote && !recentlyChecked && !await current.remote.validate()) {
       sessions.delete(userId);
     } else {
+      if (current.remote) current.remote.lastValidatedAt = now;
       current.lastSeen = now;
       return current;
     }
@@ -210,49 +220,44 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
   }
 
   const stored = await readStoredState(userId).catch(() => undefined);
-  if (process.env.VERCEL === "1") {
-    // Автономный облачный браузер внутри Vercel Sandbox
-    try {
-      const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
-      const rpcUrl = await getSandboxBrowserRpcUrl(userId);
-      if (stored?.sessionId) {
-        const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now, rpcUrl);
-        if (await remote.remote!.validate()) return remote;
-        sessions.delete(userId);
-      }
-      const created = await createBrowserRpcSession(userId, {
-        storageState: stored?.storageState,
-        currentUrl: stored?.currentUrl,
-        rpcUrl,
-      });
-      return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl);
-    } catch (e) {
-      log.error("browser-session: Vercel Sandbox runner unavailable", { userId, error: String(e) });
-      throw new BrowserRpcError(e instanceof Error ? e.message : "Облачный браузер запускается в песочнице Vercel. Пожалуйста, подождите несколько секунд и повторите.", 503);
-    }
+
+  // Браузер рабочей области существует только в персональной Vercel Sandbox.
+  // Раньше здесь была ветка «Chromium в процессе Node», чтобы ОС работала
+  // при `npm run dev`: она создавала второй браузер с другим поведением
+  // (другой SSRF-контур, без общего состояния с агентом) и только размывала
+  // смысл единой сессии. Локально браузер проверяется отдельно —
+  // `node scripts/check-runner.mjs` и `tests/integration/os-browser-flow.test.ts`.
+  if (process.env.VERCEL !== "1") {
+    throw new BrowserRpcError(
+      "Браузер рабочей области доступен только на Vercel. Разверните приложение на Vercel.",
+      503,
+    );
   }
 
-  const browser = await launchAgentBrowser();
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    javaScriptEnabled: true,
-    serviceWorkers: "block",
-    ...(stored?.storageState ? { storageState: stored.storageState } : {}),
-  });
-  const page = await context.newPage();
-  if (stored?.currentUrl) {
-    const checked = await checkPublicUrl(stored.currentUrl);
-    if (checked.ok) {
-      await installRequestGuard(page);
-      await page.goto(checked.url.toString(), { waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => {});
+  try {
+    const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
+    const rpcUrl = await getSandboxBrowserRpcUrl(userId);
+    if (stored?.sessionId) {
+      const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now, rpcUrl);
+      if (await remote.remote!.validate()) return remote;
+      sessions.delete(userId);
     }
+    const created = await createBrowserRpcSession(userId, {
+      storageState: stored?.storageState,
+      currentUrl: stored?.currentUrl,
+      rpcUrl,
+    });
+    return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl);
+  } catch (e) {
+    log.error("browser-session: Vercel Sandbox runner unavailable", { userId, error: String(e) });
+    throw new BrowserRpcError(
+      e instanceof Error ? e.message : "Облачный браузер временно недоступен. Попробуйте ещё раз.",
+      503,
+    );
   }
-  const session = { browser, context, page, lastSeen: now };
-  sessions.set(userId, session);
-  return session;
 }
 
-function createRemoteSession(
+  function createRemoteSession(
   userId: string,
   sessionId: string,
   initialUrl: string | undefined,
@@ -266,6 +271,7 @@ function createRemoteSession(
   let currentInteractionState = initialInteractionState;
   let closed = false;
   let closeRequest: Promise<void> | undefined;
+  let lastValidatedAt = 0;
 
   const send = async <T,>(action: string, args?: Record<string, unknown>, allowedOrigin?: string, captureScreenshot = false) => {
     if (closed && action !== "close") throw new BrowserRpcError("Browser session is closed", 410);
@@ -315,14 +321,17 @@ function createRemoteSession(
       return (await send<R>("evaluate", arg === undefined ? { script } : { script, arg })).result;
     },
     mouse: {
-      click: async (x: number, y: number, opts?: { clickCount?: number }) => { await send("click", { x, y, clickCount: opts?.clickCount }); },
+      click: async (x: number, y: number, opts?: { button?: string; clickCount?: number }) => {
+        // button нужен Computer-Use: без него правый клик молча превращался в левый.
+        await send("click", { x, y, button: opts?.button ?? "left", clickCount: opts?.clickCount });
+      },
       move: async (x: number, y: number) => { await send("move", { x, y }); },
       wheel: async (dx: number, dy: number) => { await send("wheel", { dx, dy }); },
       down: async () => { await send("mouseDown"); },
       up: async () => { await send("mouseUp"); },
     },
     keyboard: {
-      type: async (text: string) => { await send("type", { text }); },
+      type: async (text: string, opts?: { delay?: number }) => { await send("type", { text, delay: opts?.delay }); },
       press: async (key: string) => { await send("press", { key }); },
     },
     // SSRF-guard ставится на стороне runner'а при создании контекста:
@@ -372,11 +381,13 @@ function createRemoteSession(
         try {
           const status = await send<{ open: boolean; url: string }>("status");
           currentUrl = status?.result?.url || currentUrl;
+          lastValidatedAt = Date.now();
           return Boolean(status?.result?.open);
         } catch {
           return false;
         }
       },
+      lastValidatedAt: 0,
     },
   };
   sessions.set(userId, session);

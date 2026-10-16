@@ -34,9 +34,13 @@ yarn-error.log*
 .env*
 !.env.example
 
-# cloudflare / opennext
-/.open-next/
-/.wrangler/
+# Разовые отладочные скрипты с зашитыми учётными данными production.
+# Не коммитить: в них лежит живой пароль и почта владельца.
+scripts/inspect-now.mjs
+scripts/run-direct.mjs
+scripts/test-clean-launch.mjs
+scripts/test-direct-launch.mjs
+scripts/verify-prod-live-browser.mjs
 
 # vercel
 .vercel

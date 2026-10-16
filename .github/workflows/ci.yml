@@ -28,6 +28,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Install Playwright browser
+        # Нужен интеграционному набору ОС: он поднимает настоящий Chromium
+        # и гоняет приложение против браузерного раннера.
+        run: npx playwright install --with-deps chromium
+
       - name: Unit tests
         run: npm test
 

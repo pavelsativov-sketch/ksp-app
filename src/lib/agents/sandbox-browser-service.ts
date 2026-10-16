@@ -1,5 +1,6 @@
 import { getAccountSandbox } from "@/lib/workspace/runtime";
 import { RUNNER_SCRIPT } from "@/lib/agents/sandbox-runner-code";
+import { BrowserRpcError } from "@/lib/agents/browser-rpc";
 import { log } from "@/lib/logger";
 
 interface RunnerCacheEntry {
@@ -62,40 +63,70 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
     );
     await sandbox.fs.writeFile("/tmp/runner.mjs", RUNNER_SCRIPT, "utf8");
 
-    // 3. Проверяем наличие установленного Playwright
-    const checkPw = await sandbox.runCommand({
+    // 3. Устанавливаем Playwright + Chromium ровно один раз на песочницу.
+    // Установка идёт под атомарным mkdir-локом прямо в песочнице: без него
+    // два параллельных запроса (например, keepalive и первое действие
+    // учителя) запускали `npm i` в один /tmp и портили node_modules.
+    const INSTALL_SCRIPT = `
+set -u
+READY=/tmp/pw-ready
+LOCK=/tmp/pw-lock
+# Песочницы, поднятые до появления маркера, уже имеют Playwright —
+# не заставляем их переустанавливать Chromium заново.
+if [ ! -f "$READY" ] && [ -d /tmp/node_modules/playwright ]; then touch "$READY"; fi
+if [ ! -f "$READY" ]; then
+  if mkdir "$LOCK" 2>/dev/null; then
+    cd /tmp
+    npm init -y >/dev/null 2>&1
+    npm i playwright@1.63.0 >/tmp/pw-install.log 2>&1
+    npx playwright install chromium >>/tmp/pw-install.log 2>&1
+    if [ -d /tmp/node_modules/playwright ]; then touch "$READY"; fi
+    rmdir "$LOCK" 2>/dev/null
+  else
+    # Уже устанавливает другой процесс — ждём его маркер.
+    for i in $(seq 1 90); do
+      [ -f "$READY" ] && break
+      sleep 2
+    done
+  fi
+fi
+[ -f "$READY" ] && echo READY || echo NOT_READY
+`;
+
+    const install = await sandbox.runCommand({
       cmd: "bash",
-      args: ["-lc", "cd /tmp && node -e \"require('playwright'); process.exit(0);\" 2>/dev/null"],
-      timeoutMs: 5000,
+      args: ["-lc", INSTALL_SCRIPT],
+      timeoutMs: 200_000,
     }).catch(() => null);
 
-    if (!checkPw || checkPw.exitCode !== 0) {
-      log.info("sandbox-browser: Installing Playwright & Chromium...", { userId });
-      await sandbox.runCommand({
-        cmd: "bash",
-        args: [
-          "-lc",
-          "cd /tmp && npm init -y >/dev/null 2>&1 && npm i playwright@1.63.0 >/dev/null 2>&1 && npx playwright install chromium >/dev/null 2>&1",
-        ],
-        timeoutMs: 90_000,
-      });
+    if (!install || !(await install.stdout()).includes("READY")) {
+      let installLog = "";
+      try {
+        const logRes = await sandbox.runCommand({ cmd: "tail", args: ["-n", "40", "/tmp/pw-install.log"], timeoutMs: 5000 });
+        installLog = (await logRes.stdout()).slice(-800);
+      } catch {}
+      log.error("sandbox-browser: Playwright install failed", { userId, installLog });
+      throw new Error("Браузер рабочей области не установился. Обратитесь к администратору.");
     }
 
-    // 4. Запускаем runner в фоновом режиме на порту 3000
+    // 4. Запускаем runner в фоновом режиме на порту 3000. `pkill` бьёт
+    // только по нашим процессам и не трогает lock-файл установки.
     await sandbox.runCommand({
       cmd: "bash",
       args: [
         "-lc",
-        "pkill -f 'runner.mjs' || true; cd /tmp && nohup node /tmp/runner.mjs > /tmp/runner.log 2>&1 &",
+        "pkill -f 'runner.mjs' >/dev/null 2>&1 || true; cd /tmp && nohup node /tmp/runner.mjs > /tmp/runner.log 2>&1 &",
       ],
       detached: true,
     });
 
-    // 5. Ожидаем готовности runner'а (до 20 секунд)
+    // 5. Ожидаем готовности runner'а. Chromium раннер поднимает сам при старте,
+// поэтому ждать приходится только Node-процесс. Первый запуск песочницы
+// (установка Playwright) занимает минуты — про это честно пишем в ошибке.
     const startTime = Date.now();
     let ready = false;
-    while (Date.now() - startTime < 20_000) {
-      await new Promise((r) => setTimeout(r, 500));
+    while (Date.now() - startTime < 45_000) {
+      await new Promise((r) => setTimeout(r, 1000));
       const ok = await fetch(`${domainUrl}/health`, {
         signal: AbortSignal.timeout(1500),
         cache: "no-store",
@@ -112,10 +143,13 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
       let runnerLog = "";
       try {
         const logRes = await sandbox.runCommand({ cmd: "cat", args: ["/tmp/runner.log"], timeoutMs: 3000 });
-        runnerLog = await logRes.stdout();
+        runnerLog = (await logRes.stdout()).slice(-800);
       } catch {}
       log.error("sandbox-browser: Runner failed to start", { userId, runnerLog });
-      throw new Error(`Браузер в Vercel Sandbox запускается. Пожалуйста, подождите несколько секунд и повторите.`);
+      throw new BrowserRpcError(
+        "Браузер рабочей области запускается. Это занимает около минуты — соединение повторится автоматически.",
+        503,
+      );
     }
 
     log.info("sandbox-browser: Runner is ready and listening!", { userId, domainUrl });

@@ -29,7 +29,6 @@ vi.mock("@/lib/workspace/runtime", () => ({
   getWorkspaceRuntime: async () => ({
     getSandboxStatus: async () => ({ available: true }),
   }),
-  getVercelSandbox: async () => null,
 }));
 
 const mockBrowserNavigate = vi.fn(async ({ url }: { url: string }) => ({

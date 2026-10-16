@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { checkPublicUrl } from "@/lib/agents/ssrf";
@@ -8,6 +8,7 @@ import {
   clearAgentBrowserSession,
   getAgentBrowserSession,
   persistAgentBrowserSession,
+  type AgentBrowserSession,
 } from "@/lib/agents/browser-session";
 import { inspectActiveField, detectPageAuthBarrier } from "@/lib/agents/browser-dom";
 import { tryAutoLogin, KNOWN_LOGIN_SITES } from "@/lib/agents/browser-autologin";
@@ -17,15 +18,15 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Браузер рабочей области ОС — прямой Playwright через Codespaces runner.
+ * Браузер рабочей области ОС.
  *
  * Архитектура:
- *   Vercel (edge) → этот роут → BROWSER_RPC_URL (Codespaces 16GB) → Chromium.
+ *   Vercel serverless → этот роут → персональная Vercel Sandbox
+ *   → раннер из sandbox-runner-code.ts → Chromium.
  *
- * Cloudflare Browser Run и Vercel Sandbox убраны:
- *   - Cloudflare: 10 мин/день, виснет, нет DOM-инспекции.
- *   - Vercel Sandbox: getOrCreate() висит несколько секунд даже при ошибке.
- *   - Codespaces 16GB: без лимитов, мгновенный старт, полный Playwright.
+ * Codespaces runner и Cloudflare Browser Run выведены. Сессия общая с
+ * агентом: `getAgentBrowserSession` — единственная точка входа, поэтому
+ * действия агента видны учителю на этом же экране.
  */
 
 function searchUrl(raw: string): string {
@@ -62,15 +63,65 @@ async function authorize() {
   return { userId: auth.user.id } as const;
 }
 
+/**
+ * Что реально меняет состояние страницы, а что — нет.
+ *
+ * Раньше на КАЖДОЕ действие вкладки уходило 5 запросов в удалённую песочницу:
+ * validate сессии, само действие со скриншотом, вычитка storageState и две
+ * DOM-разведки. При вводе пароля (десятки нажатий) это давало ощущение
+ * «тупит». Теперь:
+ *   - живость сессии проверяется не чаще раза в 15 с (browser-session.ts);
+ *   - storageState сохраняется только там, где реально меняются куки;
+ *   - активное поле и барьер авторизации перечитываются после действий,
+ *     меняющих страницу или фокус, и берутся из кэша при вводе текста.
+ */
+const PERSIST_ACTIONS = new Set(["navigate", "click", "key", "back", "forward", "reload"]);
+const REFRESH_DOM_ACTIONS = new Set(["navigate", "click", "key", "back", "forward", "reload"]);
+const DOM_CACHE_TTL_MS = 2_000;
+
+interface DomProbe {
+  activeField: Awaited<ReturnType<typeof inspectActiveField>>;
+  authBarrier: Awaited<ReturnType<typeof detectPageAuthBarrier>>;
+}
+const domCache = new Map<string, { probe: DomProbe; at: number }>();
+
+async function readDomProbe(userId: string, session: AgentBrowserSession, refresh: boolean): Promise<DomProbe> {
+  const cached = domCache.get(userId);
+  if (!refresh && cached && Date.now() - cached.at < DOM_CACHE_TTL_MS) return cached.probe;
+  const [activeField, authBarrier] = await Promise.all([
+    inspectActiveField(session.page),
+    detectPageAuthBarrier(session.page),
+  ]);
+  const probe = { activeField, authBarrier };
+  domCache.set(userId, { probe, at: Date.now() });
+  return probe;
+}
+
+/**
+ * Сохранение состояния сессии после ответа клиенту.
+ *
+ * На Vercel используется after(): функция продолжает жить и делает работу
+ * уже после того, как учитель получил кадр. Вне request-контекста (тесты,
+ * локальный запуск) after() бросает — тогда просто запускаем промис.
+ */
+function persistInBackground(userId: string): void {
+  const work = () => persistAgentBrowserSession(userId).catch(() => undefined);
+  try {
+    after(work);
+  } catch {
+    void work();
+  }
+}
+
 async function runAction(userId: string, args: BrowserAction) {
   const action = args.action ?? "screenshot";
 
   try {
-    // Единственный backend — Codespaces runner через BROWSER_RPC_URL
+    // Единственный backend — раннер в персональной Vercel Sandbox
     const session = await getAgentBrowserSession(userId);
 
     if (session.remote) {
-      // ── Remote path: всё через browserRpc → Codespaces ──────────────────
+      // ── Remote path: всё через browserRpc → песочница ───────────────────
       let remoteAction = action;
       let remoteArgs: Record<string, unknown> = {};
       let allowedOrigin: string | undefined;
@@ -109,7 +160,10 @@ async function runAction(userId: string, args: BrowserAction) {
       }
 
       const frame = await session.remote.performUiAction(remoteAction, remoteArgs, allowedOrigin);
-      if (action !== "screenshot") await persistAgentBrowserSession(userId);
+      // Куки меняются не на каждый символ, а при переходе и отправке формы.
+      // Вычитка storageState медленная, поэтому она уходит в фон и не держит
+      // ответ: иначе клик по «Войти» подвисал на сотни миллисекунд.
+      if (PERSIST_ACTIONS.has(action)) persistInBackground(userId);
 
       // Авто-вход: если перешли на страницу входа известного сайта — заполняем форму автоматически
       let autoFrame = frame;
@@ -133,13 +187,14 @@ async function runAction(userId: string, args: BrowserAction) {
       }
 
       // Runner умеет отдавать DOM через `evaluate`, поэтому рамка активного
-      // поля и баннер авторизации работают и на удалённой сессии. Раньше
-      // здесь были константы EMPTY_* — оверлей ввода и подсказка «войдите
-      // сами» не появлялись никогда.
-      const [activeField, authBarrier] = await Promise.all([
-        inspectActiveField(session.page),
-        detectPageAuthBarrier(session.page),
-      ]);
+      // поля и баннер авторизации работают и на удалённой сессии. При вводе
+      // текста фокус не меняется — берём недавнее значение, чтобы не гонять
+      // ещё два запроса на каждую букву.
+      const { activeField, authBarrier } = await readDomProbe(
+        userId,
+        session,
+        REFRESH_DOM_ACTIONS.has(action),
+      );
 
       return new NextResponse(new Uint8Array(autoFrame.screenshot), {
         headers: {
@@ -282,6 +337,8 @@ export async function POST(req: Request) {
 export async function DELETE() {
   const auth = await authorize();
   if ("response" in auth) return auth.response;
+  // Кэш DOM принадлежит конкретной сессии: после выхода из неё он не нужен.
+  domCache.delete(auth.userId);
   await clearAgentBrowserSession(auth.userId);
   return NextResponse.json({ ok: true });
 }

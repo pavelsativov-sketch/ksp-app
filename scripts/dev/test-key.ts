@@ -1,21 +1,37 @@
 import OpenAI from "openai";
 
-async function checkKey() {
-  const keys = [
-    { name: "OpenAI", url: "https://api.openai.com/v1" },
-    { name: "DeepSeek", url: "https://api.deepseek.com" },
-    { name: "OpenRouter", url: "https://openrouter.ai/api/v1" }
-  ];
+/**
+ * Проверка ключа одного из AI-провайдеров.
+ *
+ * Ключ берётся из переменной окружения: раньше он был зашит прямо в файл
+ * и попал в git вместе с живым значением.
+ *
+ * Запуск: OPENAI_API_KEY=sk-... node --experimental-strip-types scripts/dev/test-key.ts
+ */
+const key = process.env.OPENAI_API_KEY;
+if (!key) {
+  console.error("Не задана OPENAI_API_KEY — задайте её в окружении и повторите.");
+  process.exit(1);
+}
 
-  for (const k of keys) {
+const endpoints = [
+  { name: "OpenAI", url: "https://api.openai.com/v1" },
+  { name: "DeepSeek", url: "https://api.deepseek.com" },
+  { name: "OpenRouter", url: "https://openrouter.ai/api/v1" },
+];
+
+async function checkKey() {
+  for (const endpoint of endpoints) {
     try {
-      const client = new OpenAI({ apiKey: "sk_ba1ce2cd9b48cb38c0b8f1b0275bd49a463c9d06ad85b0a994d5f4444706e88b", baseURL: k.url });
+      const client = new OpenAI({ apiKey: key, baseURL: endpoint.url });
       const res = await client.models.list();
-      console.log(`Success with ${k.name}, models: ${res.data.length}`);
+      console.log(`Success with ${endpoint.name}, models: ${res.data.length}`);
       return;
-    } catch (e: any) {
-      console.log(`Failed with ${k.name}: ${e.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`Failed with ${endpoint.name}: ${message}`);
     }
   }
 }
-checkKey();
+
+void checkKey();

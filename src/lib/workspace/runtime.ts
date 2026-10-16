@@ -220,16 +220,6 @@ async function ownedFiles(userId: string) {
   return (await getDb()).collection<WorkspaceFileDoc>(COL.workspaceFiles);
 }
 
-/**
- * Возвращает raw Vercel Sandbox для использования браузером агента.
- * Возвращает null если Vercel Sandbox не настроен (локальная разработка,
- * Cloudflare Workers или другие среды).
- */
-export async function getVercelSandbox(userId: string): Promise<Sandbox | null> {
-  if (!usesVercelSandbox()) return null;
-  return getAccountSandbox(userId);
-}
-
 /** Persistent account workspace stored in the application's MongoDB database. */
 export async function getWorkspaceRuntime(userId: string) {
   if (usesVercelSandbox()) return makeVercelRuntime(userId);

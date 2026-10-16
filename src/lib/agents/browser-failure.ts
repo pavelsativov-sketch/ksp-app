@@ -1,4 +1,11 @@
-/** Translate remote browser errors into stable, user-facing API failures. */
+/**
+ * Перевод ошибок браузера рабочей области в понятный учителю ответ.
+ *
+ * Браузер живёт в персональной Vercel Sandbox. Раньше здесь ветвились
+ * ошибки Cloudflare Browser Run (дневной лимит 10 минут, троттлинг) —
+ * этого бэкенда в проекте больше нет, и учителю показывался текст про
+ * чужой сервис, которого он никогда не видел.
+ */
 export function browserFailure(error: unknown): { message: string; status: number } {
   const detail = error instanceof Error
     ? error.message
@@ -9,23 +16,33 @@ export function browserFailure(error: unknown): { message: string; status: numbe
     ? (error as { status?: unknown }).status
     : undefined;
 
-  if (/browser time limit exceeded for today|daily.{0,20}(browser )?(time )?limit|10 minutes per day|достигнут дневной лимит/i.test(detail)) {
+  // Сессия в песочнице протухла (10 минут без действий) либо её закрыли.
+  // Это не поломка: нужен новый сеанс, вкладка умеет переподключаться.
+  if (status === 410 || /session expired|сессия истекла|closed/i.test(detail)) {
     return {
-      message: "Достигнут дневной лимит Cloudflare Browser Run: 10 минут. Он сбрасывается в 00:00 UTC.",
+      message: "Сеанс браузера завершён. Обновите сеанс, чтобы продолжить с того же места.",
+      status: 410,
+    };
+  }
+
+  // Слишком много запросов к браузеру — это наш собственный rate limit.
+  // Проверяем ДО ветки прогрева: текст про «подождите минуту» иначе
+  // попал бы в неё вместе со статусом 503 вместо 429.
+  if (status === 429 || /rate.?limit|too many requests|слишком много обращений/i.test(detail)) {
+    return {
+      message: "Слишком много обращений к браузеру. Подождите минуту и повторите.",
       status: 429,
     };
   }
-  if (status === 429 || /rate.?limit|too many browsers|too many requests|ограничил создание новой сессии/i.test(detail)) {
-    return {
-      message: "Cloudflare временно ограничил создание новой сессии браузера. Подождите 20 секунд или используйте уже открытую сессию.",
-      status: 429,
-    };
+
+  // Песочница прогревается: первый запуск поднимает Chromium. Текст
+  // показываем как есть — вкладка браузера по нему включает автоповтор.
+  if (/запускается|устанавливается|не установился|песочниц/i.test(detail)) {
+    return { message: detail, status: 503 };
   }
-  if (/запускается|подождите|sandbox/i.test(detail)) {
-    return {
-      message: detail,
-      status: 503,
-    };
-  }
-  return { message: "Облачный браузер временно недоступен. Попробуйте ещё раз позже.", status: 503 };
+
+  return {
+    message: "Браузер рабочей области временно недоступен. Попробуйте ещё раз через минуту.",
+    status: 503,
+  };
 }

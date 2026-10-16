@@ -1,9 +1,10 @@
 import { createHmac } from "node:crypto";
 
 const encoder = new TextEncoder();
-// The Worker accepts a 256 KB request. IndexedDB snapshots from third-party
-// sites can be several megabytes, so only carry a bounded restore snapshot.
-// A live Browser Run session keeps the complete state remotely.
+// Раннер принимает тело до 256 КБ. Снимки IndexedDB со сторонних сайтов
+// бывают на несколько мегабайт, поэтому в запрос восстанавливаемой сессии
+// переносим только ограниченный кусок состояния. Сама живая сессия целиком
+// остаётся в песочнице.
 const MAX_TRANSFERRED_STORAGE_CHARS = 96_000;
 
 export interface BrowserRpcState {
@@ -50,17 +51,21 @@ export async function browserRpc<T = unknown>(
 ): Promise<{ sessionId?: string; currentUrl?: string; pageTitle?: string; result: T; storageState?: unknown; interactionState?: unknown; screenshotBase64?: string }> {
   const secret = process.env.AUTH_SECRET;
   if (!secret || secret.length < 32) throw new Error("AUTH_SECRET is not configured for browser service");
-  
+
+  // Единственный источник адреса — персональная Vercel Sandbox. Раньше здесь
+  // был ещё запасной путь `BROWSER_RPC_URL` на внешний раннер; он остался от
+  // Codespaces, на Vercel всё равно не читался и только путал при развёртывании.
   let rpcUrl = options.rpcUrl;
   if (!rpcUrl) {
-    if (process.env.VERCEL === "1") {
-      const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
-      rpcUrl = await getSandboxBrowserRpcUrl(userId);
-    } else {
-      rpcUrl = process.env.BROWSER_RPC_URL ?? "";
+    if (process.env.VERCEL !== "1") {
+      throw new BrowserRpcError(
+        "Облачный браузер рабочей области доступен только на Vercel.",
+        503,
+      );
     }
+    const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
+    rpcUrl = await getSandboxBrowserRpcUrl(userId);
   }
-  if (!rpcUrl) throw new BrowserRpcError("Браузерная песочница не настроена", 503);
 
   const { storageState, ...rest } = options;
   const safeStorageState = transferableStorageState(storageState);
