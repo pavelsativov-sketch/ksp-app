@@ -717,7 +717,6 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         />
 
         {!imgSrc && !error && (
-          {/* Первый кадр: сервер поднимает личный браузер в песочнице. */}
           <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3 px-8 text-center">
             <div className="w-10 h-10 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-white/80 font-semibold text-sm">Запускаю браузер…</p>
