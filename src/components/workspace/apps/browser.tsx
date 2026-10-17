@@ -427,7 +427,10 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         if (trimmed) {
           await navigate(trimmed);
         } else {
-          await navigate('https://www.google.com');
+          const restoredUrl = await fetchFrame();
+          if (restoredUrl === 'about:blank' || !restoredUrl) {
+            await navigate('https://www.google.com');
+          }
         }
       })();
       return;
@@ -686,10 +689,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           setCanvasFocused(true);
         }}
       >
-        {/* Скрытый input: перехватывает ввод с клавиатуры после клика на
-            скриншот. Пользователь кликает на поле логина/пароля → Playwright
-            фокусирует поле в удалённом браузере → ввод направляется напрямую
-            в Playwright через keyboard.type / keyboard.press.
+        {/*
+          Скрытый input: перехватывает ввод с клавиатуры после клика на
+          скриншот. Пользователь кликает на поле логина/пароля → Playwright
+          фокусирует поле в удалённом браузере → ввод направляется напрямую
+          в Playwright через keyboard.type / keyboard.press.
         */}
         <input
           ref={kbInputRef}
