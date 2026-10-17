@@ -188,8 +188,7 @@ export async function postQuizEvent(
 export interface QuizEvent {
   seq: number;
   event: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any;
+  payload: unknown;
   createdAt: string;
 }
 

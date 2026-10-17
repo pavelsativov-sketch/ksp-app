@@ -29,12 +29,21 @@ export async function getPlanForUser(userId: string): Promise<UserPlanUsage> {
   const now = new Date();
   const { start, end } = utcMonthWindow(now);
   const monthFilter = { user_id: userId, createdAt: { $gte: start, $lt: end } };
-  const [user, used, assistUsed, imagesUsed] = await Promise.all([
-    db.collection<UserBillingFields>(COL.users).findOne({ _id: id }),
-    db.collection(COL.aiEvents).countDocuments({ ...monthFilter, task: "generation" }),
-    db.collection(COL.aiEvents).countDocuments({ ...monthFilter, task: "assist" }),
-    db.collection(COL.aiEvents).countDocuments({ ...monthFilter, task: "image" }),
-  ]);
+  const user = await db.collection<UserBillingFields>(COL.users).findOne({ _id: id });
+  const db = await getDb();
+  const events = await db.collection(COL.aiEvents).aggregate([
+    { $match: monthFilter },
+    {
+      $group: {
+        _id: "$task",
+        count: { $sum: 1 },
+      },
+    },
+  ]).toArray();
+  const usageMap = Object.fromEntries(events.map((e) => [e._id, e.count]));
+  const used = usageMap["generation"] ?? 0;
+  const assistUsed = usageMap["assist"] ?? 0;
+  const imagesUsed = usageMap["image"] ?? 0;
   if (!user) throw new Error("Billing user not found");
   const plan = effectivePlan(user, now);
   const limits = PLANS[plan].limits;

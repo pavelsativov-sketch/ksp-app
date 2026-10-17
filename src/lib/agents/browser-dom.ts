@@ -32,8 +32,7 @@ export interface ActiveFieldInfo {
  * Определяет, какое поле ввода сейчас в фокусе на странице в браузере ОС.
  * Позволяет пользователю вводить логин и пароль напрямую с клавиатуры на экране ОС.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function inspectActiveField(page: { evaluate: (fn: any, arg?: any) => Promise<any> }): Promise<ActiveFieldInfo> {
+export async function inspectActiveField(page: { evaluate: (fn: () => unknown, arg?: unknown) => Promise<unknown> }): Promise<ActiveFieldInfo> {
   try {
     const info = await page.evaluate((() => {
       let el = document.activeElement as HTMLElement | null;
@@ -132,8 +131,7 @@ export interface PageAuthBarrier {
  * Проверяет, есть ли на странице форма входа (логин/пароль), CAPTCHA или 2FA/СМС-код,
  * требующие ручного ввода пользователем в рабочей области ОС.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function detectPageAuthBarrier(page: { evaluate: (fn: any, arg?: any) => Promise<any> }): Promise<PageAuthBarrier> {
+export async function detectPageAuthBarrier(page: { evaluate: (fn: () => unknown, arg?: unknown) => Promise<unknown> }): Promise<PageAuthBarrier> {
   try {
     const res = await page.evaluate((() => {
       const isVisible = (el: Element | null) => {

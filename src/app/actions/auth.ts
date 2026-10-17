@@ -143,7 +143,8 @@ export async function updateProfileAction(
       { _id: new ObjectId(user.id) },
       { $set: { full_name: parsed.data.fullName } },
     );
-  } catch {
+  } catch (error) {
+    log.error("updateProfileAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось сохранить. Попробуйте позже." };
   }
   revalidatePath("/profile");
@@ -185,7 +186,8 @@ export async function changePasswordAction(
       email: user.email,
       fullName: user.fullName,
     });
-  } catch {
+  } catch (error) {
+    log.error("changePasswordAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось сменить пароль. Попробуйте позже." };
   }
   revalidatePath("/profile");
@@ -335,7 +337,8 @@ export async function deleteAccountAction(
       .catch(() => log.warn("Не удалось удалить Linux-среду удалённого аккаунта", { userId: user.id }));
     await import("@/lib/agents/browser-session").then(({ clearAgentBrowserSession }) => clearAgentBrowserSession(user.id)).catch(() => {});
     await clearSession();
-  } catch {
+  } catch (error) {
+    log.error("deleteAccountAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось удалить аккаунт. Попробуйте позже." };
   }
   revalidatePath("/", "layout");
@@ -401,7 +404,7 @@ export async function requestPasswordResetAction(
       }
     }
   } catch (error) {
-    console.error("requestPasswordResetAction failed", error);
+    log.error("requestPasswordResetAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось создать запрос. Повторите попытку позже." };
   }
   return { info: "Если такой email зарегистрирован, письмо со ссылкой отправлено." };
@@ -456,7 +459,7 @@ export async function resetPasswordAction(
     });
     await clearSession();
   } catch (error) {
-    console.error("resetPasswordAction failed", error);
+    log.error("resetPasswordAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось сбросить пароль. Повторите попытку позже." };
   }
   revalidatePath("/", "layout");

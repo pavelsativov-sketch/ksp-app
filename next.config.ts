@@ -54,6 +54,13 @@ const nextConfig: NextConfig = {
     "pdfjs-dist",
     "playwright",
     "playwright-core",
+    // Трассировка Respan (src/instrumentation.ts) патчит классы SDK openai в
+    // рантайме. Если Next вкомпилирует свою копию openai в чанк, инстанс в
+    // роутах окажется другим объектом и трейсы не появятся. Выносим оба пакета
+    // в нативный require, чтобы у серверного кода и инструментатора был один
+    // и тот же модуль.
+    "openai",
+    "@respan/respan",
   ],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
