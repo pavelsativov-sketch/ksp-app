@@ -97,6 +97,29 @@ export async function listAgentTasks(userId: string, limit = 20) {
 }
 
 /**
+ * Есть ли у учителя задача агента, которая действительно ещё едет.
+ *
+ * Панель владения рабочей областью спрашивает об этом, когда в базе значится
+ * «владеет ИИ»: запись могла остаться от задачи, раннер которой погиб по
+ * таймауту серверлес-функции. Зомби считаем мёртвой задачей — иначе чип
+ * «AI работает» горел бы у учителя indefinitely.
+ */
+export async function hasLiveAgentTask(userId: string): Promise<boolean> {
+  try {
+    const db = await getDb();
+    const active = await db.collection(COL.agentTasks).findOne(
+      { user_id: new ObjectId(userId), status: 'running' },
+      { projection: { _id: 1, heartbeat_at: 1, updated_at: 1, created_at: 1 } },
+    );
+    if (!active) return false;
+    return !runningTaskIsStale(active, Date.now());
+  } catch {
+    // База недоступна — не отнимаем управление у учителя на догадке.
+    return true;
+  }
+}
+
+/**
  * Учитель вернул управление ИИ, а раннер задачи тем временем умер от лимита
  * серверлесс-функции (heartbeat почти не обновляется). Если так — честно
  * перезапускаем выполнение той же задачи: пометка в журнале и новый раннер,

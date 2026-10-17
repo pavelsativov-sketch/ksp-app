@@ -3,7 +3,7 @@ import { getDb, COL } from '@/lib/mongo';
 import { tools } from './tools';
 import OpenAI from 'openai';
 import { executeWithFallback } from '@/lib/ai/providers';
-import { getControlOwner, waitForControl } from './session';
+import { getControlOwner, releaseControlToUser, waitForControl } from './session';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
 import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
 
@@ -70,6 +70,10 @@ export async function runAgentTask(
       { _id: new ObjectId(taskId) },
       { $set: { status, updatedAt: new Date(), ...patch } },
     );
+    // Задача окончена — общая рабочая область возвращается учителю. Иначе
+    // панель навсегда оставляла «AI РАБОТАЕТ» и кнопку «Забрать управление
+    // себе», хотя управлять было уже некому.
+    await releaseControlToUser(userId).catch(() => {});
   };
 
   // Сердцебиение: «пока статус running, раннер жив». Если серверлесс-функция

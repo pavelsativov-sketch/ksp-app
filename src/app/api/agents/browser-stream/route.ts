@@ -301,7 +301,10 @@ async function runAction(userId: string, args: BrowserAction) {
       reason: describeBrowserError(error),
     });
     const failure = browserFailure(error);
-    return NextResponse.json({ error: failure.message }, { status: failure.status });
+    return NextResponse.json(
+      { error: failure.message, ...(failure.starting ? { starting: true } : {}) },
+      { status: failure.status },
+    );
   }
 }
 

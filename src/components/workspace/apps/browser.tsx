@@ -94,6 +94,14 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
 
   const acceptFrame = useCallback(async (res: Response) => {
+    // 202 — песочница ещё поднимается (Chromium ставится на холодной сессии).
+    // Это не ошибка: показываем то же состояние прогрева и ждём следующий
+    // кадр, который вкладка запрашивает сама.
+    if (res.status === 202) {
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      setError(data.error ?? 'Браузер запускается…');
+      return undefined;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => ({})) as { error?: string };
       throw new Error(data.error ?? `HTTP ${res.status}`);

@@ -6,13 +6,20 @@ function validUserId(userId: string): ObjectId {
   return new ObjectId(userId);
 }
 
-/** Current owner of the authenticated workspace controls. */
+/**
+ * Кто владеет рабочей областью прямо сейчас (как записано в базе).
+ *
+ * Прежде здесь отсутствующая строка читалась как «ai». Итог был такой: у
+ * учителя без задач в панели горело «AI РАБОТАЕТ» и предлагалось «Забрать
+ * управление себе», хотя управлять было некому. Отсутствие записи — это не
+ * задача агента, значит по умолчанию управляет учитель.
+ */
 export async function getControlOwner(userId: string): Promise<"user" | "ai"> {
   const row = await (await getDb()).collection(COL.agentControls).findOne(
     { user_id: validUserId(userId) },
     { projection: { owner: 1 } },
   );
-  return row?.owner === "user" ? "user" : "ai";
+  return row?.owner === "ai" ? "ai" : "user";
 }
 
 export async function setControlOwner(userId: string, owner: "user" | "ai"): Promise<void> {
@@ -22,6 +29,19 @@ export async function setControlOwner(userId: string, owner: "user" | "ai"): Pro
     { $set: { owner, updated_at: now }, $setOnInsert: { created_at: now } },
     { upsert: true },
   );
+}
+
+/**
+ * Вернуть управление учителю после окончания задачи.
+ *
+ * Агент водит браузером и песочницей только пока задача жива; после финала
+ * (completed/failed/stopped) общая среда остаётся под рукой учителя, и
+ * панель перестаёт утверждать, что «AI работает». На паузе у входа в
+ * авторизацию управление уже отдано учителю отдельно (runner.ts), поэтому
+ * здесь мы его только подтверждаем.
+ */
+export async function releaseControlToUser(userId: string): Promise<void> {
+  if (await getControlOwner(userId) === "ai") await setControlOwner(userId, "user");
 }
 
 /** Pause agent work while the account owner controls the shared workspace. */

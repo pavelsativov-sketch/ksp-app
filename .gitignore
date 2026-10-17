@@ -63,3 +63,5 @@ tests/e2e-screenshots/
 *.zip
 plan.md
 manus-webdev.json
+# Локальная раздача Monaco (собирается скриптом copy-monaco.mjs из node_modules)
+public/monaco/

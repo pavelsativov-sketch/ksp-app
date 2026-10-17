@@ -21,7 +21,12 @@ describe("browser service failures", () => {
     const detail = "Браузер рабочей области запускается. Это занимает около минуты";
     const failure = browserFailure({ message: detail, status: 503 });
 
-    expect(failure.status).toBe(503);
+    // 202, а не 503: песочница ещё поднимается — это не ошибка сервиса.
+    // Раньше вкладка честно показывала spinner прогрева, но браузер писал в
+    // консоль «Failed to load resource: 503», и в логах CDN висела ошибка при
+    // нормальном состоянии системы.
+    expect(failure.status).toBe(202);
+    expect(failure.starting).toBe(true);
     expect(failure.message).toBe(detail);
   });
 
@@ -42,7 +47,7 @@ describe("browser service failures", () => {
       [{ message: "browser time limit exceeded for today" }, 503],
       [{ message: "10 minutes per day", status: 429 }, 429],
       [{ message: "Session expired", status: 410 }, 410],
-      [{ message: "Браузер запускается. Подождите." }, 503],
+      [{ message: "Браузер запускается. Подождите." }, 202],
       [new Error(""), 503],
     ];
 

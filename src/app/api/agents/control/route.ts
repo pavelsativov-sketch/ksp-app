@@ -1,18 +1,29 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getControlOwner, setControlOwner } from "@/lib/agents/session";
-import { resurrectStalePausedTask } from "@/lib/agents/orchestrator";
+import { hasLiveAgentTask, resurrectStalePausedTask } from "@/lib/agents/orchestrator";
+import { resolveControlOwner } from "@/lib/agents/lease";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Владелец управления рабочей средой: пользователь или AI-агент. */
+/**
+ * Владелец управления рабочей средой: пользователь или AI-агент.
+ *
+ * Значение сверяем с фактом: если в базе значится «ai», но живой задачи нет
+ * (раннер погиб по таймауту либо запись протухла), управление возвращаем
+ * учителю и запоминаем это. Без такой сверки панель «AI работает» с кнопкой
+ * «Забрать управление себе» висела у учителя часами после задачи.
+ */
 export async function GET() {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const stored = await getControlOwner(auth.user.id);
+  const owner = resolveControlOwner(stored, await hasLiveAgentTask(auth.user.id));
+  if (owner !== stored) await setControlOwner(auth.user.id, owner).catch(() => {});
   return NextResponse.json(
-    { control: await getControlOwner(auth.user.id) },
+    { control: owner },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

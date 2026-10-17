@@ -31,7 +31,7 @@ export function describeBrowserError(error: unknown): string {
   return String(error);
 }
 
-export function browserFailure(error: unknown): { message: string; status: number } {
+export function browserFailure(error: unknown): { message: string; status: number; starting?: boolean } {
   const detail = describeBrowserError(error);
   const status = typeof error === "object" && error !== null && "status" in error
     ? (error as { status?: unknown }).status
@@ -56,10 +56,14 @@ export function browserFailure(error: unknown): { message: string; status: numbe
     };
   }
 
-  // Песочница прогревается: первый запуск поднимает Chromium. Текст
-  // показываем как есть — вкладка браузера по нему включает автоповтор.
+  // Песочница прогревается: первый запуск поднимает Chromium. Раньше это
+  // уходило учителю как 503 — вкладка показывала spinner «Запускаю браузер…»,
+  // а в консоли и в логах CDN оставалась красная строка Failed to load
+  // resource: 503 при совершенно нормальном состоянии системы. Теперь это
+  // ответ «принято, но ещё готовимся» (202): вкладка крутит тот же
+  // автоматический повтор, но браузер не считает это ошибкой.
   if (/запускается|устанавливается|не установился|песочниц/i.test(detail)) {
-    return { message: detail, status: 503 };
+    return { message: detail, status: 202, starting: true };
   }
 
   return {

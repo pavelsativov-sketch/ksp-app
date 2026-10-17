@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STALE_RUNNING_MS, runningTaskIsStale } from "@/lib/agents/lease";
+import { STALE_RUNNING_MS, resolveControlOwner, runningTaskIsStale } from "@/lib/agents/lease";
 
 // ── Сцена из живого прогона (hv10, прод) ──────────────────────────────────
 // Агент дошёл до формы входа и встал на паузу; учитель заполнял форму
@@ -47,5 +47,29 @@ describe("аренда жизни задачи агента (lease.ts)", () => {
     // Худший легальный зазор: медленный вызов модели (~2 мин суммарно
     // со следующими шагами). Порог 3 минуты обязан его переживать.
     expect(STALE_RUNNING_MS).toBeGreaterThanOrEqual(2.5 * 60_000);
+  });
+});
+
+// ── Сцена из пользовательского прогона школьной ОС (прод) ──────────────────
+// После завершённой задачи агента панель верхнего рельса продолжала гореть
+// «AI РАБОТАЕТ» и предлагать «Забрать управление себе»: в базе не было строки
+// вовсе, а отсутствующая запись читалась как «владеет ИИ».
+describe("владение рабочей областью (resolveControlOwner)", () => {
+  it("без строки в базе управляет учитель, а не ИИ", () => {
+    expect(resolveControlOwner(undefined, false)).toBe("user");
+    expect(resolveControlOwner(undefined, true)).toBe("user");
+  });
+
+  it("протухшая запись «ИИ» без живой задачи возвращается учителю", () => {
+    // Раннер погиб по таймауту серверлесс-функции: задачи нет, а запись осталась.
+    expect(resolveControlOwner("ai", false)).toBe("user");
+  });
+
+  it("с живой задачей управление остаётся у ИИ", () => {
+    expect(resolveControlOwner("ai", true)).toBe("ai");
+  });
+
+  it("учитель может забрать управление и при живой задаче (пауза на входе)", () => {
+    expect(resolveControlOwner("user", true)).toBe("user");
   });
 });

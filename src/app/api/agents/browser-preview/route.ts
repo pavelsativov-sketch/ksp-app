@@ -57,6 +57,14 @@ export async function GET(req: Request) {
       reason: error instanceof Error ? error.message : String(error),
     });
     const failure = browserFailure(error);
-    return NextResponse.json({ error: failure.message, title: checked.url.toString(), content: "" }, { status: failure.status });
+    return NextResponse.json(
+      {
+        error: failure.message,
+        title: checked.url.toString(),
+        content: "",
+        ...(failure.starting ? { starting: true } : {}),
+      },
+      { status: failure.status },
+    );
   }
 }

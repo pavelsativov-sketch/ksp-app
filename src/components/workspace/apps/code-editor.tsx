@@ -1,9 +1,19 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from "react";
-import Editor, { type OnMount, type Monaco } from "@monaco-editor/react";
+import Editor, { loader, type OnMount, type Monaco } from "@monaco-editor/react";
 import { FileCode, Loader2, Save, FilePlus } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/store/workspace";
+
+/**
+ * Monaco раздаём сами, из public/monaco/vs (копия делается скриптом
+ * copy-monaco.mjs при установке и перед сборкой).
+ *
+ * Раньше редактор тянулся с jsdelivr, и в школах с ограниченным интернетом
+ * вкладка «Редактор» не открывалась вовсе. Путь указываем до любой отрисовки
+ * редактора: загрузчик AMD читает его в момент первого mount.
+ */
+loader.config({ paths: { vs: "/monaco/vs" } });
 
 interface OpenFile {
   name: string;

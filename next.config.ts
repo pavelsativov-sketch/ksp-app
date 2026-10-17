@@ -30,11 +30,11 @@ const securityHeaders = [
       "frame-ancestors 'self'",
       "form-action 'self'",
       "img-src 'self' data: blob: https:",
-      // Monaco со CDN приходит одним листом стилей, а внутри него — свои
-      // шрифты (codicon) относительными ссылками, то есть с того же CDN.
-      // Без jsdelivr в style-src редактор оставался без стилей: ни нумерации
-      // строк, ни миникарты, вёрстка едет и ввод текста искажается.
-      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+      // Monaco больше не приходит с CDN: редактор раздаётся из public/monaco/vs
+      // (собирает scripts/copy-monaco.mjs), поэтому для стилей и шрифтов
+      // хватает 'self'. Прежний список разрешал jsdelivr/unpkg — это больше не
+      // нужно, и внешний источник кода в редакторе убран.
+      "style-src 'self' 'unsafe-inline'",
       // Редактор кода грузит Monaco со своего CDN (@monaco-editor/react
       // default loader); без этого вкладка «Редактор» висит в «Загрузка…».
       `script-src ${scriptSrc} https://cdn.jsdelivr.net https://unpkg.com`,
@@ -42,8 +42,8 @@ const securityHeaders = [
       "connect-src 'self' https://api.openai.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.cloudflare.com wss: https://cdn.jsdelivr.net https://unpkg.com",
       // workerSrc у Monaco это blob:-чанок — разрешаем создание воркеров из blob.
       "worker-src 'self' blob:",
-      // Шрифты Monaco (codicon) приходят с того же CDN, что и его стили.
-      "font-src 'self' data: https://cdn.jsdelivr.net https://unpkg.com",
+      // Шрифты Monaco (codicon) теперь приходят с нашего домена (public/monaco/vs).
+      "font-src 'self' data:",
     ].join("; "),
   },
 ];

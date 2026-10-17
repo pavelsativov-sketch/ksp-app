@@ -22,6 +22,9 @@ vi.mock("@/lib/mongo", () => ({
 vi.mock("@/lib/agents/session", () => ({
   getControlOwner: vi.fn().mockResolvedValue("ai"),
   setControlOwner: vi.fn().mockResolvedValue(undefined),
+  // Финал задачи возвращает управление учителю — проверяем, что раннер
+  // действительно это делает (панель перестаёт гореть «AI работает»).
+  releaseControlToUser: vi.fn().mockResolvedValue(undefined),
   waitForControl: vi.fn().mockResolvedValue("resumed"),
 }));
 
@@ -261,5 +264,11 @@ describe("Агент в /school (runAgentTask) — обучение работе
     const endEvent = events.find((e) => e.type === "END");
     expect(endEvent?.message).toContain("Кнопка 3 «Перейти в журнал урока»");
     expect(endEvent?.message).toContain("Провести урок");
+
+    // 5. Финал задачи возвращает управление рабочей областью учителю:
+    // иначе в панели остаётся «AI РАБОТАЕТ» и «Забрать управление себе»
+    // после того, как агент уже всё сделал.
+    const { releaseControlToUser } = await import("@/lib/agents/session");
+    expect(releaseControlToUser).toHaveBeenCalledWith(userId);
   });
 });

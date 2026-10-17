@@ -26,7 +26,8 @@
     "e2e:accounts": "node scripts/seed-test-accounts.mjs",
     "e2e:reset-limits": "node scripts/reset-test-rate-limits.mjs",
     "e2e:ci": "node scripts/reset-test-rate-limits.mjs && playwright test",
-    "postinstall": "node scripts/postinstall-418.mjs"
+    "postinstall": "node scripts/postinstall-418.mjs && node scripts/copy-monaco.mjs",
+    "prebuild": "node scripts/copy-monaco.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
