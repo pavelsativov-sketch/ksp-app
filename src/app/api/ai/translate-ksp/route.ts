@@ -20,12 +20,7 @@ const translateSchema = z.object({
   subject: z.string().trim().min(1).max(200),
   title: z.string().max(500).optional(),
   section: z.string().max(500).optional(),
-  content: z.object({
-    topic: z.string().min(1).max(500),
-    stages: z.any().optional(),
-    lessonObjectives: z.any().optional(),
-    evaluation: z.any().optional(),
-  }),
+  content: z.record(z.string(), z.any()),
 });
 
 /**
