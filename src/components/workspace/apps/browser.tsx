@@ -54,6 +54,12 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [credPassword, setCredPassword] = useState('');
   const [credSaving, setCredSaving] = useState(false);
   const [credSaved, setCredSaved] = useState(false);
+  // Ожидание первого кадра. Пока ответа нет, сервер поднимает песочницу —
+  // это минуты, и вкладка обязана об этом говорить («Запускаю браузер…» с
+  // секундами ожидания), а не показывать немой спиннер.
+  const [waiting, setWaiting] = useState(false);
+  const [waitSec, setWaitSec] = useState(0);
+  const waitingRef = useRef(false);
 
   const [imgLayout, setImgLayout] = useState<{ width: number; height: number } | null>(null);
 
@@ -83,6 +89,28 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const isThrottled = /слишком много обращений|подождите минуту/i.test(error);
   const isSessionExpired = /сеанс браузера завершён|session expired|сессия истекла/i.test(error);
   const isRetryable = isWarmingUp || isThrottled;
+
+  // Ожидание первого кадра: считаем секунды, чтобы учитель видел, что
+  // процесс идёт. Счётчик живёт в состоянии (никаких часов в рендере).
+  const beginWait = useCallback(() => {
+    if (waitingRef.current) return;
+    waitingRef.current = true;
+    setWaiting(true);
+    setWaitSec(0);
+  }, []);
+  const endWait = useCallback(() => {
+    if (!waitingRef.current) return;
+    waitingRef.current = false;
+    setWaiting(false);
+    setWaitSec(0);
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (waitingRef.current) setWaitSec((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Keepalive: пингуем песочницу каждые 10 мин, чтобы она не остыла между занятиями
   useEffect(() => {
@@ -148,13 +176,15 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       if (!addressFocusedRef.current) setInputUrl(currentUrl);
     }
     setError('');
+    endWait();
     return currentUrl;
-  }, []);
+  }, [endWait]);
 
   const fetchFrame = useCallback(async () => {
     if (pendingCountRef.current > 0 || typeBufferRef.current) return undefined;
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
+    if (!imgSrc) beginWait();
     try {
       const res = await fetch(`${BASE}?action=screenshot`, { signal: abortRef.current.signal, cache: 'no-store' });
       return await acceptFrame(res);
@@ -163,10 +193,11 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       if (!isAbort) setError(e instanceof Error ? e.message : String(e));
       return undefined;
     }
-  }, [acceptFrame]);
+  }, [acceptFrame, beginWait]);
 
   const enqueueAction = useCallback((params: Record<string, string>) => {
     pendingCountRef.current += 1;
+    if (!imgSrc) beginWait();
     const isNavigation = !params.action || ['navigate', 'reload', 'back', 'forward'].includes(params.action);
     if (isNavigation) setLoading(true);
     setError('');
@@ -686,9 +717,23 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         />
 
         {!imgSrc && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3">
+          /* Первый кадр: сервер поднимает личный браузер в песочнице. Раньше
+             здесь был голый спиннер «Загрузка безопасного браузера…», из-за
+             которого минуту ожидания выглядели как зависание. Теперь видно,
+             что идёт подготовка, сколько уже ждём и что будет дальше. */
+          <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3 px-8 text-center">
             <div className="w-10 h-10 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-white/55 text-sm">Загрузка безопасного браузера…</p>
+            <p className="text-white/80 font-semibold text-sm">Запускаю браузер…</p>
+            <p className="text-white/55 text-sm">
+              {waitSec < 90
+                ? 'Поднимаю личный браузер в защищённой среде — обычно около минуты. Повтор произойдёт автоматически.'
+                : 'Первый запуск ставит браузер с нуля и может занять несколько минут. Повтор произойдёт автоматически.'}
+            </p>
+            {waiting && waitSec >= 5 && <p className="text-white/35 text-xs">ждём {waitSec} с…</p>}
+            <button type="button" onClick={() => { setError(''); void fetchFrame(); }}
+              className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
+              Проверить снова
+            </button>
           </div>
         )}
 
