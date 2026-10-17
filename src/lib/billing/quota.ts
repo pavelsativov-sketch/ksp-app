@@ -30,7 +30,6 @@ export async function getPlanForUser(userId: string): Promise<UserPlanUsage> {
   const { start, end } = utcMonthWindow(now);
   const monthFilter = { user_id: userId, createdAt: { $gte: start, $lt: end } };
   const user = await db.collection<UserBillingFields>(COL.users).findOne({ _id: id });
-  const db = await getDb();
   const events = await db.collection(COL.aiEvents).aggregate([
     { $match: monthFilter },
     {
