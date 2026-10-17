@@ -65,3 +65,7 @@ plan.md
 manus-webdev.json
 # Локальная раздача Monaco (собирается скриптом copy-monaco.mjs из node_modules)
 public/monaco/
+# Служебный каталог рантайма локальной машины: 136 МБ, в деплой не годится
+.freebuff/
+dev-os-check.log
+dev-os-check.pid
