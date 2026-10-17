@@ -427,10 +427,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         if (trimmed) {
           await navigate(trimmed);
         } else {
-          const restoredUrl = await fetchFrame();
-          if (restoredUrl === 'about:blank' || !restoredUrl) {
-            await navigate('https://www.google.com');
-          }
+          await navigate('https://www.google.com');
         }
       })();
       return;
@@ -689,11 +686,10 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           setCanvasFocused(true);
         }}
       >
-        {/*
-          Скрытый input: перехватывает ввод с клавиатуры после клика на
-          скриншот. Пользователь кликает на поле логина/пароля → Playwright
-          фокусирует поле в удалённом браузере → ввод направляется напрямую
-          в Playwright через keyboard.type / keyboard.press.
+        {/* Скрытый input: перехватывает ввод с клавиатуры после клика на
+            скриншот. Пользователь кликает на поле логина/пароля → Playwright
+            фокусирует поле в удалённом браузере → ввод направляется напрямую
+            в Playwright через keyboard.type / keyboard.press.
         */}
         <input
           ref={kbInputRef}
@@ -717,23 +713,16 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         />
 
         {!imgSrc && !error && (
-          /* Первый кадр: сервер поднимает личный браузер в песочнице. Раньше
-             здесь был голый спиннер «Загрузка безопасного браузера…», из-за
-             которого минуту ожидания выглядели как зависание. Теперь видно,
-             что идёт подготовка, сколько уже ждём и что будет дальше. */
-          <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3 px-8 text-center">
+          {/* Первый кадр: сервер поднимает личный браузер в песочнице. */}
+          <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3 px-8 text-center" data-browser>
             <div className="w-10 h-10 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-white/80 font-semibold text-sm">Запускаю браузер…</p>
             <p className="text-white/55 text-sm">
               {waitSec < 90
-                ? 'Поднимаю личный браузер в защищённой среде — обычно около минуты. Повтор произойдёт автоматически.'
-                : 'Первый запуск ставит браузер с нуля и может занять несколько минут. Повтор произойдёт автоматически.'}
+                ? 'Поднимаю личный браузер в защищённой среде — обычно около минуты.'
+                : 'Первый запуск ставит браузер с нуля и может занять несколько минут.'}
             </p>
             {waiting && waitSec >= 5 && <p className="text-white/35 text-xs">ждём {waitSec} с…</p>}
-            <button type="button" onClick={() => { setError(''); void fetchFrame(); }}
-              className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
-              Проверить снова
-            </button>
           </div>
         )}
 

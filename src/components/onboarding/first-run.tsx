@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useState, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useSyncExternalStore, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { Sparkles, ArrowRight, ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +64,7 @@ const completedStore = {
 
 export function FirstRunOnboarding() {
   const router = useRouter();
+  const pathname = usePathname();
   const completed = useSyncExternalStore(
     completedStore.subscribe,
     completedStore.getSnapshot,
@@ -71,6 +72,14 @@ export function FirstRunOnboarding() {
   );
   const [dismissed, setDismissed] = useState(false);
   const [step, setStep] = useState(0);
+  
+  // Automatically dismiss onboarding when navigating to important pages
+  useEffect(() => {
+    if (pathname.startsWith('/school') || pathname.startsWith('/workspace')) {
+      setDismissed(true);
+    }
+  }, [pathname]);
+  
   const open = !completed && !dismissed;
 
   function markCompleted() {
