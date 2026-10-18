@@ -1,14 +1,15 @@
 /**
  * Запускает тот же Playwright RPC-раннер, что использует Vercel Sandbox,
  * внутри GitHub Codespaces. Это временная тестовая альтернатива, а не
- * публичный browser-as-a-service: запросы принимаются только с AUTH_SECRET.
+ * публичный browser-as-a-service: запросы принимаются только с отдельным
+ * BROWSER_RPC_SECRET, который не совпадает с AUTH_SECRET приложения.
  */
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 32) {
-  throw new Error("Нужен AUTH_SECRET длиной не менее 32 символов. Получите его в Codespace через `vercel env pull`.");
+if (!process.env.BROWSER_RPC_SECRET || process.env.BROWSER_RPC_SECRET.length < 32) {
+  throw new Error("Нужен BROWSER_RPC_SECRET длиной не менее 32 символов. Не используйте AUTH_SECRET приложения.");
 }
 
 function loadRunnerScript() {

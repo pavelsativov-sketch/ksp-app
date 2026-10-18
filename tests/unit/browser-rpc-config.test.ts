@@ -24,6 +24,7 @@ describe("browserRpc configuration", () => {
     getSandboxBrowserRpcUrl.mockClear();
     delete process.env.VERCEL;
     delete process.env.BROWSER_RPC_URL;
+    delete process.env.BROWSER_RPC_SECRET;
   });
 
   it("refuses to sign a request without a long enough AUTH_SECRET", async () => {
@@ -85,6 +86,24 @@ describe("browserRpc configuration", () => {
     const timestamp = headers["x-mekty-timestamp"];
     const expected = createHmac("sha256", Buffer.from(AUTH_SECRET))
       .update(`${timestamp}.${rawBody}`)
+      .digest("base64url");
+    expect(headers["x-mekty-signature"]).toBe(expected);
+  });
+
+  it("uses a dedicated runner secret when it is configured", async () => {
+    const runnerSecret = "runner-secret-that-is-definitely-longer-than-32-chars";
+    process.env.BROWSER_RPC_SECRET = runnerSecret;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, result: { open: true } }), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await browserRpc("user-1", "status", { rpcUrl: RPC_URL, sessionId: "s-1" });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    const expected = createHmac("sha256", Buffer.from(runnerSecret))
+      .update(`${headers["x-mekty-timestamp"]}.${init.body as string}`)
       .digest("base64url");
     expect(headers["x-mekty-signature"]).toBe(expected);
   });

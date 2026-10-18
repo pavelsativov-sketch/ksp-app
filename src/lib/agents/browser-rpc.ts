@@ -49,8 +49,10 @@ export async function browserRpc<T = unknown>(
     rpcUrl?: string;
   } = {},
 ): Promise<{ sessionId?: string; currentUrl?: string; pageTitle?: string; result: T; storageState?: unknown; interactionState?: unknown; screenshotBase64?: string }> {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 32) throw new Error("AUTH_SECRET is not configured for browser service");
+  // Внешний тестовый runner получает отдельный ключ. Основной AUTH_SECRET
+  // остаётся внутри Vercel и продолжает обслуживать обычную Sandbox.
+  const secret = process.env.BROWSER_RPC_SECRET || process.env.AUTH_SECRET;
+  if (!secret || secret.length < 32) throw new Error("AUTH_SECRET or BROWSER_RPC_SECRET is not configured for browser service");
 
   // Единственный источник адреса — персональная Vercel Sandbox. Раньше здесь
   // был ещё запасной путь `BROWSER_RPC_URL` на внешний раннер; он остался от

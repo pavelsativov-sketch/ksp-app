@@ -15,7 +15,7 @@ try {
 } catch {}
 
 const PORT = parseInt(process.env.PORT || config.port || "3000", 10);
-const SECRET = process.env.AUTH_SECRET || config.secret;
+const SECRET = process.env.BROWSER_RPC_SECRET || process.env.AUTH_SECRET || config.secret;
 if (!SECRET || SECRET.length < 20) {
   console.error("[RUNNER] FATAL: AUTH_SECRET env variable or /tmp/runner-config.json secret is required and must be at least 20 chars.");
   process.exit(1);
