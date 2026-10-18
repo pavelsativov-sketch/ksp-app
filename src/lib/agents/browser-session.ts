@@ -123,10 +123,10 @@ export async function clearAgentBrowserSession(userId: string): Promise<void> {
   if (session) {
     await session.context.close().catch(() => {});
     await session.browser.close().catch(() => {});
-  } else if (process.env.VERCEL === "1") {
+  } else if (process.env.VERCEL === "1" || process.env.BROWSER_RPC_URL) {
     const stored = await readStoredState(userId).catch(() => undefined);
     if (stored?.sessionId) {
-      await browserRpc(userId, "close", { sessionId: stored.sessionId }).catch(() => {});
+      await browserRpc(userId, "close", { sessionId: stored.sessionId, rpcUrl: process.env.BROWSER_RPC_URL }).catch(() => {});
     }
   }
   const db = await getDb();
@@ -220,6 +220,30 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
   }
 
   const stored = await readStoredState(userId).catch(() => undefined);
+
+  // Временный тестовый раннер в GitHub Codespaces. Адрес задаётся только
+  // server-side secret, а сам раннер принимает лишь HMAC-подписанные запросы.
+  const externalRpcUrl = process.env.BROWSER_RPC_URL;
+  if (externalRpcUrl) {
+    try {
+      const rpcUrl = new URL(externalRpcUrl);
+      if (rpcUrl.protocol !== "https:") throw new Error("BROWSER_RPC_URL должен использовать https");
+      if (stored?.sessionId) {
+        const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now, rpcUrl.toString());
+        if (await remote.remote!.validate()) return remote;
+        sessions.delete(userId);
+      }
+      const created = await createBrowserRpcSession(userId, {
+        storageState: stored?.storageState,
+        currentUrl: stored?.currentUrl,
+        rpcUrl: rpcUrl.toString(),
+      });
+      return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl.toString());
+    } catch (e) {
+      log.error("browser-session: external runner unavailable", { userId, error: String(e) });
+      throw new BrowserRpcError(e instanceof Error ? e.message : "Тестовый браузер временно недоступен. Попробуйте ещё раз.", 503);
+    }
+  }
 
   // Браузер рабочей области существует только в персональной Vercel Sandbox.
   // Раньше здесь была ветка «Chromium в процессе Node», чтобы ОС работала
