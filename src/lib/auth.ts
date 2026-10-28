@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import { cache } from "react";
 import { getDb, COL } from "@/lib/mongo";
+import { mongoRequestState } from "@/lib/mongo-request-context";
 
 const COOKIE_NAME = "ksp_session";
 // Keep sessions short-lived and validate their version against the user record,
@@ -108,30 +109,56 @@ export async function readSessionSubject(token: string | undefined): Promise<str
 export const SESSION_COOKIE = COOKIE_NAME;
 
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
+  // Кеш в рамках одного запроса: server actions и route handlers могут
+  // вызывать getCurrentUser многократно (напр. авторизация + вложенные
+  // проверки). React.cache() покрывает рендер, но не отдельные вызовы —
+  // поэтому дополнительно кешируем в request-local AsyncLocalStorage.
+  const reqState = mongoRequestState();
+  const cacheKey = "current-user";
+  if (reqState) {
+    if (cacheKey in reqState) return (reqState as Record<string, unknown>)[cacheKey] as SessionUser | null;
+  }
+
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await jwtVerify(token, secret(), { maxTokenAge: "12h" });
-    if (!payload.sub || !/^[0-9a-f]{24}$/i.test(payload.sub)) return null;
-    // Reject legacy or malformed identities before opening a Mongo connection.
-    const email = payload.email;
-    const fullName = payload.fullName;
-    if (typeof email !== "string" || email.length > 320 || !/^\S+@\S+\.\S+$/.test(email)) return null;
-    if (fullName !== null && typeof fullName !== "string") return null;
-    // Ensure the account still exists and the token's version is current. This
-    // makes password changes and account deletion revoke older sessions.
-    const db = await getDb();
-    const account = await db.collection<UserDoc>(COL.users).findOne(
-      { _id: new ObjectId(payload.sub) },
-      { projection: { session_version: 1 } },
-    );
-    const tokenVersion = typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0;
-    if (!account || (account.session_version ?? 0) !== tokenVersion) return null;
-    return { id: payload.sub, email, fullName };
-  } catch {
-    return null;
+  let result: SessionUser | null = null;
+  if (token) {
+    try {
+      const { payload } = await jwtVerify(token, secret(), { maxTokenAge: "12h" });
+      if (!payload.sub || !/^[0-9a-f]{24}$/i.test(payload.sub)) result = null;
+      else {
+        // Reject legacy or malformed identities before opening a Mongo connection.
+        const email = payload.email;
+        const fullName = payload.fullName;
+        if (typeof email !== "string" || email.length > 320 || !/^\S+@\S+\.\S+$/.test(email)) result = null;
+        else if (fullName !== null && typeof fullName !== "string") result = null;
+        else {
+          // Ensure the account still exists and the token's version is current.
+          const db = await getDb();
+          const account = await db.collection<UserDoc>(COL.users).findOne(
+            { _id: new ObjectId(payload.sub) },
+            { projection: { session_version: 1, full_name: 1 } },
+          );
+          const tokenVersion = typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0;
+          if (!account || (account.session_version ?? 0) !== tokenVersion) {
+            // Просроченный/невалидный токен: чистим cookie, чтобы не повторять
+            // jwtVerify + запрос к Mongo на каждом вызове.
+            try { store.delete(COOKIE_NAME); } catch { /* cookie недоступна */ }
+            result = null;
+          } else {
+            // Имя берём из БД, а не из JWT.
+            result = { id: payload.sub, email, fullName: account.full_name ?? null };
+          }
+        }
+      }
+    } catch {
+      try { store.delete(COOKIE_NAME); } catch { /* cookie недоступна */ }
+      result = null;
+    }
   }
+
+  if (reqState) (reqState as Record<string, unknown>)[cacheKey] = result;
+  return result;
 });
 
 export async function findUserByEmail(email: string): Promise<UserDoc | null> {

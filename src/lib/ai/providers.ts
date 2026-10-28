@@ -99,7 +99,7 @@ function configured(config: ProviderConfig): boolean {
  * подхватит их автоматически, но больше не тратит 1–3 секунды на каждый
  * заведомо нерабочий запрос.
  */
-const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
+export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
   generation: () => [
     // Gemini — основной маршрут. Ключи перебираются: первый может упереться
     // в суточный лимит, пока второй ещё живой.
@@ -256,9 +256,17 @@ function shouldTryNextKey(err: unknown): boolean {
   );
 }
 
+export interface FallbackOptions {
+  /** Общий бюджет на весь каскад (по умолчанию FALLBACK_BUDGET_MS). */
+  budgetMs?: number;
+  /** Внешний сигнал отмены: прерывает текущий запрос к провайдеру. */
+  signal?: AbortSignal;
+}
+
 export async function executeWithFallback<T>(
   task: AiTask,
-  executeFn: (client: OpenAI, model: string, config: ProviderConfig) => Promise<T>
+  executeFn: (client: OpenAI, model: string, config: ProviderConfig, signal?: AbortSignal) => Promise<T>,
+  opts: FallbackOptions = {},
 ): Promise<T> {
   const configs = TASK_CONFIGS[task]().filter(configured);
 
@@ -270,7 +278,13 @@ export async function executeWithFallback<T>(
 
   // Общий дедлайн на каскад. Повтор SDK выключен, иначе его внутренняя
   // попытка могла превысить оставшееся время до перехода на следующий ключ.
-  const deadline = Date.now() + FALLBACK_BUDGET_MS;
+  const deadline = Date.now() + (opts.budgetMs ?? FALLBACK_BUDGET_MS);
+  const abortOnExternal = new AbortController();
+  const onAbort = () => abortOnExternal.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) abortOnExternal.abort();
+    else opts.signal.addEventListener("abort", onAbort, { once: true });
+  }
 
   for (const config of configs) {
     // Ключи провайдера: первый основной, остальные резервные. Перебор идёт
@@ -294,6 +308,7 @@ export async function executeWithFallback<T>(
       }
       const t0 = Date.now();
       try {
+        const signal = opts.signal ? abortOnExternal.signal : undefined;
         const client = new OpenAI({
           apiKey,
           baseURL: config.baseURL,
@@ -303,7 +318,7 @@ export async function executeWithFallback<T>(
         // Ключ из обрыва ответа модели (`apiKey` в конфиге) — для промптов,
         // которые печатают ключ в текст ошибки.
         const withKey = apiKey === config.apiKey ? config : { ...config, apiKey };
-        const result = await executeFn(client, config.model, withKey);
+        const result = await executeFn(client, config.model, withKey, signal);
         logAiEvent({
           task,
           provider: config.label,
@@ -318,6 +333,7 @@ export async function executeWithFallback<T>(
             { task },
           );
         }
+        if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
         return result;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -345,6 +361,8 @@ export async function executeWithFallback<T>(
       }
     }
   }
+
+  if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
 
   throw new Error(
     `Все AI провайдеры для «${task}» недоступны. Последняя ошибка: ${

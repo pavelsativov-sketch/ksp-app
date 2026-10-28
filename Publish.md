@@ -6,8 +6,8 @@
 
 - Единственный публичный адрес приложения: <https://ksp-app-pi.vercel.app>.
 - Основное Next.js-приложение публикуется в Vercel. Проект уже привязан к Vercel как `ksp-app`.
-- Браузер рабочей области живёт в той же персональной Vercel Sandbox, что и файлы/терминал. Код раннера — `src/lib/agents/sandbox-runner-code.ts`, загрузка и прогрев — `src/lib/agents/sandbox-browser-service.ts`. Отдельных переменных не требуется, `AUTH_SECRET` служит и подписью RPC к раннеру.
-- Codespaces runner, Cloudflare Browser Run и GitLab Shared Runner выведены. Вместе с ними удалены мост `/_agent/browser`, `@cloudflare/playwright`, Cloudflare Workflow и переменная `BROWSER_RPC_URL`.
+- Браузер рабочей области живёт в той же персональной Vercel Sandbox, что и файлы/терминал. Код раннера — `src/lib/agents/sandbox-runner-code.ts`, загрузка и прогрев — `src/lib/agents/sandbox-browser-service.ts`. RPC-подпись к раннеру — производный от `AUTH_SECRET` секрет на пользователя (`getRunnerRpcSecret`), глобальный `AUTH_SECRET` в песочницу не попадает.
+- Cloudflare Browser Run и GitLab Shared Runner выведены; `_agent/browser` как внешний мост больше нет — раннер живёт внутри песочницы. Опциональный локальный раннер на ноутбуке (для разработки) поддерживается через `BROWSER_RPC_SECRET` + `BROWSER_RPC_URL`, см. `LOCAL_BROWSER_RUNNER.md`.
 - Публикация идёт только в Vercel. Другого раннера и второго хоста для ОС в проекте нет.
 - Рабочая область — веб-интерфейс с окнами и вкладками. Команды рабочего стола выполняются в изолированной Vercel Sandbox, а удалённые сайты — в браузере внутри неё же. Это не установка ОС на компьютер пользователя и не доступ к его локальным файлам.
 - Агент и вкладка «Браузер» работают с одной сессией: `getAgentBrowserSession` — единственная точка входа. Если появится второй браузерный backend, действия агента перестанут быть видны учителю.

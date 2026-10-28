@@ -12,6 +12,7 @@ import { CrosswordButton, MemosButton, WorksheetButton } from "@/components/ksp/
 import { KtpBuilder } from "@/components/ksp/ktp-builder";
 import { LikeButton } from "@/components/ksp/like-button";
 import { ReportPlanButton } from "@/components/ksp/report-plan-button";
+import { DeletePlanButton } from "@/components/ksp/delete-plan-button";
 import { AssignHomeworkButton } from "@/components/assignments/assign-homework-button";
 import { QualityGate } from "@/components/ksp/quality-gate";
 import { QrCard } from "@/components/ksp/qr-card";
@@ -228,6 +229,7 @@ export default async function PlanViewPage({
                   <Edit /> Редактировать
                 </Link>
               </Button>
+              <DeletePlanButton planId={plan.id} />
               <Button asChild variant="outline">
                 <Link href={`/plans/${plan.id}/history`}>
                   <HistoryIcon /> История

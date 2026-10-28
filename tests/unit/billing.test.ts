@@ -27,7 +27,7 @@ const userId = "111111111111111111111111";
 const now = new Date("2026-09-17T12:30:00.000Z");
 let user: (UserBillingFields & { _id: ObjectId }) | null;
 let codes: BillingCodeDocument[];
-let events: Array<{ user_id: string; task: string; createdAt: Date }>;
+let events: Array<{ user_id: string; task: string; kind?: string; seq?: number; month?: string; createdAt: Date }>;
 let audit: Record<string, unknown>[];
 let failAudit: boolean;
 const claim = vi.fn();
@@ -103,6 +103,37 @@ beforeEach(() => {
         countDocuments: async (filter: { user_id: string; task: string; createdAt: { $gte: Date; $lt: Date } }) =>
           events.filter((event) => event.user_id === filter.user_id && event.task === filter.task &&
             event.createdAt >= filter.createdAt.$gte && event.createdAt < filter.createdAt.$lt).length,
+        aggregate: (pipeline: Array<Record<string, unknown>>) => ({
+          toArray: async () => {
+            let rows: Array<Record<string, unknown>> = [...events];
+            for (const stage of pipeline) {
+              const match = stage.$match as Record<string, unknown> | undefined;
+              if (match) {
+                const m = match;
+                rows = rows.filter((e) => {
+                  if (m.user_id && e.user_id !== m.user_id) return false;
+                  if (m.task && e.task !== m.task) return false;
+                  if (m.kind && e.kind !== m.kind) return false;
+                  const createdAt = m.createdAt as { $gte?: Date; $lt?: Date } | undefined;
+                  if (createdAt?.$gte && (e.createdAt as Date) < createdAt.$gte) return false;
+                  if (createdAt?.$lt && (e.createdAt as Date) >= createdAt.$lt) return false;
+                  return true;
+                });
+              }
+              const group = stage.$group as { _id: string } | undefined;
+              if (group) {
+                const keyPath = String(group._id).replace(/^\$/, "");
+                const byKey = new Map<string, number>();
+                for (const e of rows) {
+                  const key = String((e as Record<string, unknown>)[keyPath]);
+                  byKey.set(key, (byKey.get(key) ?? 0) + 1);
+                }
+                rows = Array.from(byKey, ([_id, count]) => ({ _id, count }));
+              }
+            }
+            return rows;
+          },
+        }),
       };
       throw new Error(`Unexpected collection ${name}`);
     },
@@ -251,11 +282,11 @@ describe("monthly quota", () => {
 
   it("uses calendar UTC boundaries, user and task filters, and resets next month", async () => {
     events.push(...[
-      { user_id: userId, task: "generation", createdAt: new Date("2026-08-31T23:59:59.999Z") },
-      { user_id: userId, task: "generation", createdAt: new Date("2026-09-01T00:00:00Z") },
-      { user_id: "other", task: "generation", createdAt: now },
-      { user_id: userId, task: "image", createdAt: now },
-      { user_id: userId, task: "generation", createdAt: new Date("2026-10-01T00:00:00Z") },
+      { user_id: userId, task: "generation", kind: "slot", createdAt: new Date("2026-08-31T23:59:59.999Z") },
+      { user_id: userId, task: "generation", kind: "slot", createdAt: new Date("2026-09-01T00:00:00Z") },
+      { user_id: "other", task: "generation", kind: "slot", createdAt: now },
+      { user_id: userId, task: "image", kind: "slot", createdAt: now },
+      { user_id: userId, task: "generation", kind: "slot", createdAt: new Date("2026-10-01T00:00:00Z") },
     ]);
     expect((await getPlanForUser(userId)).kspUsedThisMonth).toBe(1);
     expect(utcMonthWindow(new Date("2026-12-31T23:59:59Z"))).toEqual({
@@ -323,7 +354,7 @@ describe("monthly quota", () => {
 
     // Pro: лимит есть, учитывается по факту изображений за месяц.
     user!.plan = "pro";
-    events.push(...Array.from({ length: 50 }, () => ({ user_id: userId, task: "image", createdAt: now })));
+    events.push(...Array.from({ length: 50 }, () => ({ user_id: userId, task: "image", kind: "slot", createdAt: now })));
     const exhausted = await imagePOST(request());
     expect(exhausted.status).toBe(402);
     expect(mock.img).not.toHaveBeenCalled();

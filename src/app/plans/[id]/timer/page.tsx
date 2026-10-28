@@ -9,11 +9,24 @@ import { ArrowLeft, Clock, Play } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Длительность этапа из строки времени.
+ * «11–35 мин» — это интервал с 11-й по 35-ю минуту, т.е. 24 минуты,
+ * а не «11». Одиночное число («5 мин») трактуется как есть.
+ */
 function parseStageMinutes(timeStr: string): number {
   if (!timeStr) return 10;
-  // Try to extract first number from strings like "0–5 мин", "5 мин", "10-15 мин"
-  const match = timeStr.match(/(\d+)/);
-  if (match) return parseInt(match[1], 10) || 10;
+  const range = timeStr.match(/(\d+)\s*[–—-]\s*(\d+)/);
+  if (range) {
+    const from = parseInt(range[1], 10);
+    const to = parseInt(range[2], 10);
+    if (Number.isFinite(from) && Number.isFinite(to)) {
+      const diff = to - from;
+      if (diff > 0) return diff;
+    }
+  }
+  const single = timeStr.match(/(\d+)/);
+  if (single) return parseInt(single[1], 10) || 10;
   return 10;
 }
 

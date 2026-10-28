@@ -3,6 +3,7 @@ import {
   getResponseFormat,
 } from "./providers";
 import {
+  type DifferentiationLevel,
   type InteractiveTask,
   // Типы конкретных заданий нужны ниже: без них файл не собирается
   // («Cannot find name 'McqTask'»), даже если сами объявления используются
@@ -27,6 +28,7 @@ export interface GenerateTasksInput {
   count?: number;
   baseTask?: InteractiveTask;
   variationStyle?: TaskVariationStyle;
+  differentiationLevel?: DifferentiationLevel;
 }
 
 export type TaskVariationStyle = "alternate" | "simpler" | "harder" | "pair" | "shorter";
@@ -477,6 +479,7 @@ function buildTaskUserPrompt(
     ))}\n\nСоздай варианты того же задания: во всех вариантах сохрани тип «${input.baseTask.type}», учебную цель и исходный смысл. Баллы, код цели и критерии сохраняются сервером от исходного задания.`
     : "Создай три содержательно разных предложения новых заданий по теме; учитель выберет, какое добавить.";
   const variationInstruction = input.variationStyle ? getVariationInstruction(input.variationStyle, input.language) : "";
+  const levelInstruction = input.differentiationLevel ? getDifferentiationLevelPrompt(input.differentiationLevel, input.language) : "";
 
   return `Тема урока: «${input.topic}»
 Предмет: ${input.subject}
@@ -511,6 +514,21 @@ ${variationInstruction}
 9. Для MATCHING: пары должны однозначно сопоставить каждый элемент слева и справа; укажи массив индексов с нуля.
 
 Верни ровно ${count} заданий. ${input.baseTask ? `Тип каждого варианта строго ${input.baseTask.type}; варианты должны отличаться от исходника по указанному направлению.` : "Разнообразь типы заданий."}`;
+}
+
+function getDifferentiationLevelPrompt(level: DifferentiationLevel, language: "ru" | "kz"): string {
+  const ru: Record<DifferentiationLevel, string> = {
+    A: "УРОВЕНЬ ДИФФЕРЕНЦИАЦИИ: A (базовый, репродуктивный) — узнавание, воспроизведение по образцу, 1 шаг, опора/подсказка.",
+    B: "УРОВЕНЬ ДИФФЕРЕНЦИАЦИИ: B (средний, продуктивный) — применение алгоритма (1–2 шага), объяснение выбора.",
+    C: "УРОВЕНЬ ДИФФЕРЕНЦИАЦИИ: C (продвинутый, творческий) — перенос в новую/контекстную ситуацию, обоснование, выбор оптимального способа.",
+  };
+  const kk: Record<DifferentiationLevel, string> = {
+    A: "САРАЛАУ ДЕҢГЕЙІ: A (базалық) — танып-білу, үлгі бойынша орындау, 1 қадам.",
+    B: "САРАЛАУ ДЕҢГЕЙІ: B (орташа) — алгоритмді қолдану (1–2 қадам), түсіндіру.",
+    C: "САРАЛАУ ДЕҢГЕЙІ: C (жоғары) — жаңа жағдаятқа көшіру, негіздеу.",
+  };
+  const map = language === "kz" ? kk : ru;
+  return map[level] + " Сгенерируй задания именно этого уровня и проставь поле differentiationLevel.";
 }
 
 function getVariationInstruction(style: TaskVariationStyle, language: "ru" | "kz"): string {

@@ -22,7 +22,16 @@ type Phase = "name" | "lobby" | "question" | "submitted" | "reveal" | "ended";
 export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   const [code, setCode] = useState(initialCode);
   const [name, setName] = useState("");
-  const [studentId] = useState(() => generateStudentId());
+  // Идентификатор ученика сохраняется в sessionStorage по коду комнаты:
+  // после обновления страницы (F5) тот же ученик остаётся тем же участником,
+  // а не получает новую личность (иначе можно отвечать повторно).
+  const [studentId, setStudentId] = useState<string>(() => {
+    try {
+      return window.sessionStorage.getItem(`ksp-quiz-student:${initialCode}`) ?? generateStudentId();
+    } catch {
+      return generateStudentId();
+    }
+  });
   const [phase, setPhase] = useState<Phase>("name");
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +43,24 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   const [leaderboard, setLeaderboard] = useState<LiveLeaderboardEntry[]>([]);
 
   const lastSeqRef = useRef(0);
+
+  // При смене кода на экране входа пересоздаём идентификатор под новый код.
+  function ensureStudentIdForCode(targetCode: string) {
+    if (phase !== "name") return;
+    const key = `ksp-quiz-student:${targetCode}`;
+    try {
+      const existing = window.sessionStorage.getItem(key);
+      if (existing) {
+        setStudentId(existing);
+        return;
+      }
+      const fresh = generateStudentId();
+      window.sessionStorage.setItem(key, fresh);
+      setStudentId(fresh);
+    } catch {
+      setStudentId(generateStudentId());
+    }
+  }
 
   useEffect(() => {
     if (phase !== "question") return;
@@ -122,7 +149,11 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
               maxLength={6}
               className="text-center font-mono text-2xl tracking-widest"
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => {
+                const next = e.target.value.replace(/\D/g, "");
+                setCode(next);
+                ensureStudentIdForCode(next);
+              }}
             />
           </div>
           <div className="space-y-2">

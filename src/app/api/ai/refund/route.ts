@@ -39,8 +39,15 @@ export async function POST() {
       );
     }
 
+    // Возвращаем именно слот квоты (kind: "slot"), а не запись истории —
+    // иначе расход считался бы дважды (история + слот) и возврат был бы неполным.
     const latest = await db.collection(COL.aiEvents).findOne(
-      { user_id: auth.user.id, task: "generation", createdAt: { $gte: new Date(now.getTime() - REFUND_WINDOW_MS) } },
+      {
+        user_id: auth.user.id,
+        task: "generation",
+        kind: "slot",
+        createdAt: { $gte: new Date(now.getTime() - REFUND_WINDOW_MS) },
+      },
       { sort: { createdAt: -1 } },
     );
     if (!latest) {
@@ -52,7 +59,7 @@ export async function POST() {
 
     await db.collection(COL.aiEvents).deleteOne({ _id: latest._id });
     await db.collection(COL.aiEvents).insertOne({
-      user_id: auth.user.id, task: "generation_refund", ok: true, createdAt: now,
+      user_id: auth.user.id, task: "generation_refund", kind: "refund", ok: true, createdAt: now,
     });
 
     const usage = await getPlanForUser(auth.user.id);

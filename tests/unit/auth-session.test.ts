@@ -27,7 +27,9 @@ describe("signed account sessions", () => {
   });
 
   it("authenticates signed claims after checking the account session version", async () => {
-    const findOne = vi.fn().mockResolvedValue({ session_version: 3 });
+    // Имя берётся из БД, а не из JWT: после смены профиля сессии не должны
+    // показывать устаревшее имя.
+    const findOne = vi.fn().mockResolvedValue({ session_version: 3, full_name: "Test Teacher" });
     mocks.getDb.mockResolvedValue({ collection: () => ({ findOne }) });
     await createSession("0123456789abcdef01234567", 3, {
       email: "teacher@example.test",

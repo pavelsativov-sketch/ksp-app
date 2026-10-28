@@ -21,6 +21,13 @@ if (!SECRET || SECRET.length < 20) {
   process.exit(1);
 }
 
+// Лимиты ресурсов: песочница имеет 1 vCPU, и неограниченное число сессий
+// (контекстов Chromium) доводит её до OOM. Тело запроса ограничено, чтобы
+// нельзя было исчерпать память раннера одним POST-запросом без подписи.
+const MAX_CONCURRENT_SESSIONS = 20;
+const MAX_BODY_BYTES = 1_000_000;
+const MAX_EVALUATE_SCRIPT_CHARS = 8_000;
+
 let browserInstance = null;
 // Промис запуска: прогрев при старте и первый \`create\` могут прийти
 // одновременно. Без общего промиса Chromium поднимался бы дважды —
@@ -246,9 +253,23 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ error: "Method not allowed" }));
   }
 
+  let bodySize = 0;
+  let oversized = false;
   const chunks = [];
-  req.on("data", (chunk) => chunks.push(chunk));
+  req.on("data", (chunk) => {
+    bodySize += chunk.length;
+    if (bodySize > MAX_BODY_BYTES) {
+      oversized = true;
+      chunks.length = 0;
+      return;
+    }
+    chunks.push(chunk);
+  });
   req.on("end", async () => {
+    if (oversized) {
+      res.writeHead(413, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: "Payload too large" }));
+    }
     const rawBody = Buffer.concat(chunks).toString("utf8");
     const timestamp = req.headers["x-mekty-timestamp"];
     const signature = req.headers["x-mekty-signature"];
@@ -274,7 +295,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({
           ok: true,
           activeSessionCount: sessions.size,
-          maxConcurrentSessions: 50,
+          maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
           allowedBrowserAcquisitions: 100,
           timeUntilNextAllowedBrowserAcquisition: 0,
           dailyBrowserSecondsUsed: 0,
@@ -282,6 +303,10 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (action === "create") {
+        if (sessions.size >= MAX_CONCURRENT_SESSIONS) {
+          res.writeHead(429, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ error: "Too many browser sessions", status: 429 }));
+        }
         const browser = await getBrowser();
         const id = crypto.randomUUID();
         const context = await browser.newContext({
@@ -368,6 +393,16 @@ const server = http.createServer(async (req, res) => {
         result = await page.title().catch(() => "");
       } else if (action === "evaluate") {
         const script = String(args.script ?? "null");
+        if (script.length > MAX_EVALUATE_SCRIPT_CHARS) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ error: "Script too large" }));
+        }
+        // Разрешаем только функции/выражения (начинаются с «(»): произвольные
+        // операторы (document.location=…, fetch(…)) извне не исполняются.
+        if (!/^\\s*\\(/.test(script)) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ error: "Only function/IIFE scripts are allowed" }));
+        }
         const arg = args.arg;
         // Скрипт приходит строкой и бывает двух видов:
         //   "() => document.title"            — исходник функции;

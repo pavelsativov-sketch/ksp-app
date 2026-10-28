@@ -244,6 +244,7 @@ describe("POST /api/quiz/[code] — ответы учеников", () => {
   const openRoom = () => ({
     code: CODE, ownerId: "c".repeat(24), seq: 5,
     currentIndex: 0,
+    phase: "question",
     secretTask: SECRET_TASK,
     questionStartedAt: new Date(),
     questionEndsAt: new Date(Date.now() + 30_000),

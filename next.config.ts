@@ -17,7 +17,7 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
   // HSTS: браузер запоминает, что на этот домен ходят только по HTTPS.
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
   // connect-src
@@ -49,6 +49,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Dev-сервер на локальной машине доступен и как localhost, и как
+  // 127.0.0.1 — без этого HMR/WebSocket dev-клиента падают
+  // (ERR_INVALID_HTTP_RESPONSE), что ломало гидрацию в разработке.
+  allowedDevOrigins: ["localhost", "127.0.0.1"],
   serverExternalPackages: [
     "pdf-parse",
     "pdfjs-dist",
@@ -62,6 +66,44 @@ const nextConfig: NextConfig = {
     "openai",
     "@respan/respan",
   ],
+  webpack(config, { isServer }) {
+    // Инструментация (src/instrumentation.ts) импортирует @respan/respan →
+    // @opentelemetry/sdk-node → @grpc/grpc-js, который требует Node-билтины
+    // (stream, net, dns, …). В браузерном бандле их нет, и сборка клиента
+    // падала с «Can't resolve 'stream'», из-за чего в dev React не монтировался
+    // (мёртвые страницы). Серверные модули в клиенте не используются — исключаем.
+    if (!isServer) {
+      // IgnorePlugin — исключение серверных пакетов из клиентского бандла.
+      // webpack присутствует как транзитивная зависимость Next; в tsconfig его
+      // нет, поэтому берём через require с приведением к unknown.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { IgnorePlugin } = require("webpack") as { IgnorePlugin: new (options: { resourceRegExp: RegExp }) => unknown };
+      config.plugins.push(
+        new IgnorePlugin({
+          resourceRegExp: /@respan|@opentelemetry|@grpc|@traceloop/,
+        }),
+      );
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        stream: false,
+        net: false,
+        dns: false,
+        tls: false,
+        http2: false,
+        fs: false,
+        path: false,
+        os: false,
+        crypto: false,
+        zlib: false,
+        http: false,
+        https: false,
+        child_process: false,
+        worker_threads: false,
+        events: false,
+      };
+    }
+    return config;
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

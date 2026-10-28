@@ -14,20 +14,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowserApp } from '@/components/workspace/apps/browser';
 
-/** Ответ сервера, который висит дольше обычного: кадра ещё нет. */
-function hangingScreenshot() {
-  return new Promise<Response>(() => {
-    /* намеренно не резолвим: simulates подъём песочницы */
-  });
-}
-
 describe('BrowserApp: ожидание первого кадра объяснимо', () => {
   beforeEach(() => {
+    // Sandbox сообщает, что браузер ещё запускается — компонент обязан
+    // объяснить это, а не показывать немой спиннер.
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) =>
         String(url).includes('browser-stream')
-          ? hangingScreenshot()
+          ? Promise.resolve(new Response(JSON.stringify({ error: 'Браузер запускается, подождите' }), { status: 503, headers: { 'content-type': 'application/json' } }))
           : Promise.resolve(new Response('{}', { status: 200 })),
       ),
     );

@@ -8,6 +8,8 @@
 
 import type { ReusableBlockProvenance } from "@/lib/types/provenance";
 
+export type DifferentiationLevel = "A" | "B" | "C";
+
 export type TaskType =
   | "MCQ" // single-choice multiple-choice
   | "TRUE_FALSE"
@@ -26,6 +28,8 @@ export interface BaseTask {
   objectiveCode?: string;
   /** Exact criterion texts selected in the KSP; optional for legacy tasks. */
   criterionTexts?: string[];
+  /** Уровень дифференциации: A (базовый) / B (средний) / C (продвинутый). */
+  differentiationLevel?: DifferentiationLevel;
   /** Teacher-only provenance; public learner tasks are projected without these flags. */
   aiGenerated?: boolean;
   /** Explicit human review; any subsequent teacher edit resets this to false. */
@@ -276,5 +280,44 @@ export function taskTypeLabel(t: TaskType): string {
     case "MATCHING": return "Соотнесение";
     case "ORDERING": return "Расстановка по порядку";
     case "NUMERIC": return "Числовой ответ";
+  }
+}
+
+export function differentiationLevelLabel(level: DifferentiationLevel, locale: "ru" | "kk" = "ru"): string {
+  if (locale === "kk") {
+    switch (level) {
+      case "A": return "А деңгейі — базалық";
+      case "B": return "В деңгейі — орташа";
+      case "C": return "С деңгейі — күрделі";
+    }
+  }
+  switch (level) {
+    case "A": return "Уровень A — базовый";
+    case "B": return "Уровень B — средний";
+    case "C": return "Уровень C — продвинутый";
+  }
+}
+
+/** Бейдж-цвета Tailwind для differentiationLevel */
+export function differentiationLevelBadgeClass(level: DifferentiationLevel): string {
+  switch (level) {
+    case "A": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "B": return "bg-amber-50 text-amber-700 border-amber-200";
+    case "C": return "bg-violet-50 text-violet-700 border-violet-200";
+  }
+}
+
+export function differentiationLevelHint(level: DifferentiationLevel, locale: "ru" | "kk" = "ru"): string {
+  if (locale === "kk") {
+    switch (level) {
+      case "A": return "Танып-білу және үлгі бойынша орындау";
+      case "B": return "Алгоритмді қолдану және түсіндіру";
+      case "C": return "Жаңа жағдаятқа көшіру, негіздеу";
+    }
+  }
+  switch (level) {
+    case "A": return "Репродуктивный: узнавание, по образцу";
+    case "B": return "Продуктивный: применение алгоритма";
+    case "C": return "Творческий: перенос, обоснование";
   }
 }

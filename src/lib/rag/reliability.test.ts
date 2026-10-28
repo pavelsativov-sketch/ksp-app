@@ -22,7 +22,10 @@ vi.mock("@/lib/billing/quota", () => ({
   }),
   quotaFailure: () => ({ status: 429, body: {} }),
 }));
-vi.mock("@/lib/ai/generate", () => ({ generateKsp: mocks.generate }));
+vi.mock("@/lib/ai/generate", () => ({
+  generateKsp: mocks.generate,
+  generateKspWithModel: async (input: unknown) => ({ payload: await mocks.generate(input), model: "mock" }),
+}));
 
 import { embedTextbookChunks, embeddingProgress, EMBEDDING_BATCH_SIZE, EMBEDDING_LEASE_MS, type TextbookDoc } from "./ingest";
 import { retrieveTextbookContext, ATLAS_COOLDOWN_MS } from "./retrieve";

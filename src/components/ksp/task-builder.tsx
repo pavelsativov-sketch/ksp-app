@@ -16,6 +16,9 @@ import {
 import {
   emptyTask,
   taskTypeLabel,
+  differentiationLevelLabel,
+  differentiationLevelBadgeClass,
+  type DifferentiationLevel,
   type InteractiveTask,
   type TaskType,
   type McqTask,
@@ -56,6 +59,8 @@ export interface TaskBuilderProps {
 
 type TaskVariationStyle = "alternate" | "simpler" | "harder" | "pair" | "shorter";
 type TaskGenerationContext = TaskBuilderProps["context"];
+const LEVELS: DifferentiationLevel[] = ["A","B","C"];
+
 const VARIATION_LABELS: Record<TaskVariationStyle, { ru: string; kk: string }> = {
   alternate: { ru: "Другой контекст", kk: "Басқа контекст" },
   simpler: { ru: "Проще", kk: "Жеңілірек" },
@@ -64,7 +69,7 @@ const VARIATION_LABELS: Record<TaskVariationStyle, { ru: string; kk: string }> =
   shorter: { ru: "Короче", kk: "Қысқарақ" },
 };
 
-async function requestTaskVariants(context: TaskGenerationContext, baseTask?: InteractiveTask, variationStyle?: TaskVariationStyle) {
+async function requestTaskVariants(context: TaskGenerationContext, baseTask?: InteractiveTask, variationStyle?: TaskVariationStyle, differentiationLevel?: DifferentiationLevel) {
   const cleanBaseTask = baseTask ? { ...baseTask } : undefined;
   if (cleanBaseTask) {
     delete cleanBaseTask.aiGenerated;
@@ -73,7 +78,7 @@ async function requestTaskVariants(context: TaskGenerationContext, baseTask?: In
   const response = await fetch("/api/ai/generate-tasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...context, count: 3, ...(cleanBaseTask ? { baseTask: cleanBaseTask } : {}), ...(variationStyle ? { variationStyle } : {}) }),
+    body: JSON.stringify({ ...context, count: 3, ...(cleanBaseTask ? { baseTask: cleanBaseTask } : {}), ...(variationStyle ? { variationStyle } : {}), ...(differentiationLevel ? { differentiationLevel } : {}) }),
   });
   const data = await response.json().catch(() => ({})) as { tasks?: InteractiveTask[]; error?: string };
   if (!response.ok) throw new Error(data.error || "Не удалось подготовить варианты задания.");
@@ -88,6 +93,7 @@ export function TaskBuilder({ tasks, onChange, context, availableObjectives = []
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [alternatives, setAlternatives] = useState<InteractiveTask[]>([]);
+  const [bulkLevel, setBulkLevel] = useState<DifferentiationLevel | "">("");
   const { locale } = useUiLocale();
   const isKk = locale === "kk";
 
@@ -115,7 +121,7 @@ export function TaskBuilder({ tasks, onChange, context, availableObjectives = []
     }
     setAiLoading(true);
     try {
-      setAlternatives(await requestTaskVariants(context));
+      setAlternatives(await requestTaskVariants(context, undefined, undefined, bulkLevel || undefined));
     } catch (e) {
       setAiError(e instanceof Error ? e.message : isKk ? "Нұсқаларды жасау мүмкін болмады." : "Не удалось подготовить варианты.");
     } finally {
@@ -169,6 +175,18 @@ export function TaskBuilder({ tasks, onChange, context, availableObjectives = []
               ))}
             </SelectContent>
           </Select>
+          <select
+            value={bulkLevel}
+            onChange={(e) => setBulkLevel(e.target.value as DifferentiationLevel | "")}
+            className="h-9 rounded-md border border-input bg-white px-2 text-xs"
+            title={isKk ? "Дифференциация деңгейі" : "Уровень дифференциации"}
+            aria-label={isKk ? "AI генерация деңгейі" : "Уровень для AI-генерации"}
+          >
+            <option value="">{isKk ? "Деңгей — кез келген" : "Уровень — любой"}</option>
+            {LEVELS.map((lv) => (
+              <option key={lv} value={lv}>{differentiationLevelLabel(lv as DifferentiationLevel, isKk ? "kk" : "ru")}</option>
+            ))}
+          </select>
           <Button type="button" variant="outline" size="sm" onClick={addTask}>
             <Plus className="w-4 h-4" /> Добавить
           </Button>
@@ -260,7 +278,7 @@ function TaskCandidate({
     <article className="space-y-3 rounded-xl border border-[#ddd5cb] bg-white p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold">{isKk ? `Ұсыныс ${index + 1}` : `Вариант ${index + 1}`}</h4>
-        <span className="text-xs text-[#756b63]">{taskTypeLabel(task.type)} · {task.points} {isKk ? "ұпай" : "балл"}</span>
+        <span className="flex items-center gap-1 text-xs text-[#756b63]">{taskTypeLabel(task.type)} · {task.points} {isKk ? "ұпай" : "балл"}{task.differentiationLevel && <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${differentiationLevelBadgeClass(task.differentiationLevel)}`}>{task.differentiationLevel}</span>}</span>
       </div>
       <p className="text-sm text-[#302820]">{task.question}</p>
       <details>
@@ -298,6 +316,7 @@ function TaskCard({
   const [variantLoading, setVariantLoading] = useState(false);
   const [variantError, setVariantError] = useState<string | null>(null);
   const [variationStyle, setVariationStyle] = useState<TaskVariationStyle>("alternate");
+  const [genLevel, setGenLevel] = useState<DifferentiationLevel | "">("");
   const { locale } = useUiLocale();
   const isKk = locale === "kk";
 
@@ -305,7 +324,7 @@ function TaskCard({
     setVariantError(null);
     setVariantLoading(true);
     try {
-      setVariants(await requestTaskVariants(context, task, variationStyle));
+      setVariants(await requestTaskVariants(context, task, variationStyle, genLevel || undefined));
     } catch (error) {
       setVariantError(error instanceof Error ? error.message : isKk ? "Нұсқаларды жасау мүмкін болмады." : "Не удалось подготовить варианты.");
     } finally {
@@ -338,6 +357,11 @@ function TaskCard({
           <span className="text-xs uppercase tracking-wider text-[#8a817a]">
             {taskTypeLabel(task.type)}
           </span>
+          {task.differentiationLevel && (
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${differentiationLevelBadgeClass(task.differentiationLevel)}`}>
+              {task.differentiationLevel}
+            </span>
+          )}
           <span className="text-[#1c1a17]">
             {task.question || <em className="text-slate-400">без вопроса</em>}
           </span>
@@ -352,6 +376,19 @@ function TaskCard({
           >
             {(Object.keys(VARIATION_LABELS) as TaskVariationStyle[]).map((style) => (
               <option key={style} value={style}>{VARIATION_LABELS[style][isKk ? "kk" : "ru"]}</option>
+            ))}
+          </select>
+          <label className="sr-only" htmlFor={`gen-level-${task.id}`}>{isKk ? "Деңгей" : "Уровень"}</label>
+          <select
+            id={`gen-level-${task.id}`}
+            value={genLevel}
+            onChange={(e) => setGenLevel(e.target.value as DifferentiationLevel | "")}
+            className="max-w-28 rounded-lg border border-[#cfc3b5] bg-white px-2 py-1.5 text-xs"
+            title={isKk ? "Генерация деңгейі" : "Уровень генерации"}
+          >
+            <option value="">{isKk ? "Деңгей — ағымдағы" : "Уровень — как у задания"}</option>
+            {LEVELS.map((lv) => (
+              <option key={lv} value={lv}>{differentiationLevelLabel(lv as DifferentiationLevel, isKk ? "kk" : "ru")}</option>
             ))}
           </select>
           <Button type="button" variant="outline" size="sm" onClick={generateAlternatives} disabled={variantLoading} aria-busy={variantLoading}>
@@ -455,8 +492,9 @@ function CommonFields({
 }) {
   const questionId = `task-question-${task.id}`;
   const pointsId = `task-points-${task.id}`;
+  const levelId = `task-level-${task.id}`;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[1fr_120px] gap-3">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_110px_160px] gap-3">
       <div>
         <Label htmlFor={questionId}>Вопрос / инструкция</Label>
         <Textarea
@@ -477,6 +515,23 @@ function CommonFields({
           value={task.points}
           onChange={(e) => onChange({ ...task, points: Math.max(1, Number(e.target.value) || 1) })}
         />
+      </div>
+      <div>
+        <Label htmlFor={levelId}>Дифференциация</Label>
+        <select
+          id={levelId}
+          value={task.differentiationLevel ?? ""}
+          onChange={(e) => {
+            const v = e.target.value as DifferentiationLevel | "";
+            onChange({ ...task, differentiationLevel: v || undefined });
+          }}
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+        >
+          <option value="">— без уровня —</option>
+          {(["A","B","C"] as DifferentiationLevel[]).map((lv) => (
+            <option key={lv} value={lv}>{differentiationLevelLabel(lv, "ru")} </option>
+          ))}
+        </select>
       </div>
     </div>
   );

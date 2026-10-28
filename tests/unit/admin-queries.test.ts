@@ -48,7 +48,7 @@ describe("admin dashboard data", () => {
       { $match: { createdAt: { $gte: expect.any(Date), $lt: expect.any(Date) }, provider: { $type: "string" }, ok: { $type: "bool" } } },
     ]));
     expect(aggregate).toHaveBeenCalledWith("ai_events", expect.arrayContaining([
-      { $match: { createdAt: { $gte: expect.any(Date), $lt: expect.any(Date) }, user_id: { $type: "string" }, task: { $in: ["generation", "image"] } } },
+      { $match: { createdAt: { $gte: expect.any(Date), $lt: expect.any(Date) }, kind: "slot", user_id: { $type: "string" }, task: { $in: ["generation", "image"] } } },
     ]));
   });
 });

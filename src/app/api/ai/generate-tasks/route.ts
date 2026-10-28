@@ -15,6 +15,7 @@ const bodySchema = z.object({
   count: z.coerce.number().int().min(2).max(3).default(3),
   baseTask: interactiveTaskSchema.optional(),
   variationStyle: z.enum(["alternate", "simpler", "harder", "pair", "shorter"]).optional(),
+  differentiationLevel: z.enum(["A", "B", "C"]).optional(),
 });
 
 export const runtime = "nodejs";

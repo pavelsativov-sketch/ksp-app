@@ -46,7 +46,11 @@ it("shows a saved draft, reuses its returned ID for subsequent saves, and preser
   expect(mocks.draft.mock.calls[1][0].id).toBe(id);
 
   fireEvent.click(screen.getByRole("button", { name: /^Сохранить$/ }));
-  await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(`/plans/${id}`));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+  // После сохранения учитель остаётся в редакторе (раньше выбрасывало на
+  // страницу просмотра); вместо перехода появляется ссылка «Открыть план».
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(screen.getAllByText("Открыть план").length).toBeGreaterThan(0);
   expect(mocks.save.mock.calls[0][0]).toMatchObject({ id, content: { schoolProfile: "ogn" } });
 });
 

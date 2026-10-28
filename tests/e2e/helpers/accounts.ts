@@ -5,7 +5,7 @@
  * сценарии падают с понятным сообщением, а не молча идут мимо проверки.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, type Page } from "@playwright/test";
 
@@ -23,7 +23,7 @@ export interface TestAccount {
   name: string;
 }
 
-interface AccountsFile {
+export interface AccountsFile {
   baseUrl: string;
   runId: string;
   password: string;
@@ -31,6 +31,16 @@ interface AccountsFile {
 }
 
 let cache: AccountsFile | null = null;
+
+/**
+ * Сохраняет свежие учётные данные в то же место, откуда их читают E2E-тесты.
+ * Setup создаёт отдельного пользователя для текущего base URL, поэтому файл
+ * от другого деплоя не может случайно сломать локальный прогон.
+ */
+export function saveAccounts(accounts: AccountsFile): void {
+  writeFileSync(ACCOUNTS_PATH, JSON.stringify(accounts, null, 2), "utf8");
+  cache = accounts;
+}
 
 export function loadAccounts(): AccountsFile {
   if (cache) return cache;

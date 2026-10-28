@@ -10,7 +10,87 @@ import { runningTaskIsStale } from './lease';
  * schoolId необязателен: агент работает и без школы (личная рабочая область).
  */
 
-export async function startAgentTask(userId: string, schoolId: string | null, prompt: string): Promise<string> {
+/**
+ * Запускает следующую задачу из очереди (status: 'queued'), если слот
+ * пользователя свободен. Вызывается после завершения любой задачи.
+ */
+/**
+ * Единый атомарный захват queued-задачи и её выполнение.
+ *
+ * findOneAndUpdate со статусом queued→running гарантирует: из нескольких
+ * конкурирующих вызовов (поллер, триггер из GET, finish) только один получит
+ * документ и исполнит задачу; остальные получат null и ничего не делают.
+ */
+/**
+ * Единая точка запуска следующей задачи очереди.
+ *
+ * Атомарный findOneAndUpdate переводит queued→running (уникальный частичный
+ * индекс защищает от двойного запуска). Выполнение запускается через after():
+ * Next.js гарантирует выполнение после ответа даже в serverless-изоляте.
+ * В dev-режиме (где after() не работает) фоллбэк — setTimeout(0).
+ */
+function tryStartNextFromQueue(): void {
+  const work = async () => {
+    let db;
+    try {
+      db = await getDb();
+    } catch (e) {
+      console.error("[agent] tryStartNextFromQueue: БД недоступна", e instanceof Error ? e.message : String(e));
+      return;
+    }
+    const agentTasks = db.collection(COL.agentTasks);
+    const queued = await agentTasks.findOneAndUpdate(
+      { status: 'queued' },
+      { $set: { status: 'running', heartbeat_at: new Date(), updated_at: new Date() } },
+      { sort: { created_at: 1 }, returnDocument: 'after' },
+    );
+    const task = queued?.value as
+      | { _id?: ObjectId; prompt?: string; user_id?: ObjectId }
+      | null;
+    if (!task?._id || typeof task.prompt !== 'string' || !task.user_id) {
+      return;
+    }
+    const taskId = task._id.toString();
+    const userId = String(task.user_id);
+    try {
+      await runAgentTask(taskId, task.prompt!, userId, async (event) => {
+        try {
+          await db.collection(COL.agentExecutions).insertOne({
+            task_id: new ObjectId(taskId),
+            type: event.type,
+            message: event.message,
+            data: event.data ?? null,
+            created_at: new Date(),
+          });
+        } catch {
+          // лог некритичен
+        }
+      });
+    } catch (e) {
+      console.error("[agent] tryStartNextFromQueue execute failed", e instanceof Error ? e.message : String(e));
+      await db.collection(COL.agentTasks).updateOne(
+        { _id: new ObjectId(taskId), status: "running" },
+        { $set: { status: "error", error: "dispatch failed", updated_at: new Date() } },
+      ).catch(() => {});
+    }
+  };
+  // after() гарантирует выполнение после ответа HTTP даже в serverless-изоляте;
+  // в dev-режиме after() недоступен — фоллбэк на setTimeout(0).
+  try {
+    after(work);
+  } catch {
+    setTimeout(() => { void work(); }, 0);
+  }
+}
+
+export function dispatchQueuedTask(userId: string): Promise<string | null> {
+  // Сохранён API: сразу запускаем глобальный диспетчер. Задача берётся
+  // атомарно и не привязана к userId, если пользователь не указан.
+  tryStartNextFromQueue();
+  return Promise.resolve(null);
+}
+
+export async function startAgentTask(userId: string, schoolId: string | null, prompt: string): Promise<{ id: string; status: 'running' | 'queued' }> {
   const db = await getDb();
   const agentTasks = db.collection(COL.agentTasks);
 
@@ -19,7 +99,19 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
     { projection: { _id: 1, heartbeat_at: 1, updated_at: 1, created_at: 1 } },
   );
   if (active && !runningTaskIsStale(active, Date.now())) {
-    throw new Error('AGENT_TASK_ALREADY_RUNNING');
+    // Пока бежит живая задача, новую ставим в очередь: набор поручений
+    // не должен падать с 409.
+    const now = new Date();
+    const q = await agentTasks.insertOne({
+      user_id: new ObjectId(userId),
+      school_id: schoolId && /^[a-f\d]{24}$/i.test(schoolId) ? new ObjectId(schoolId) : null,
+      title: prompt.trim().slice(0, 80),
+      prompt,
+      status: 'queued',
+      created_at: now,
+      updated_at: now,
+    });
+    return { id: q.insertedId.toString(), status: 'queued' };
   }
   if (active) {
     // Серверлесс-функция раннера погибла (лимит 300 с), а статус остался
@@ -42,17 +134,37 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
   await setControlOwner(userId, 'ai').catch(() => {});
 
   const now = new Date();
-  const result = await agentTasks.insertOne({
-    user_id: new ObjectId(userId),
-    school_id: schoolId && /^[a-f\d]{24}$/i.test(schoolId) ? new ObjectId(schoolId) : null,
-    title: prompt.trim().slice(0, 80),
-    prompt,
-    status: 'running',
-    created_at: now,
-    updated_at: now,
-    heartbeat_at: now,
-  });
-  const taskId = result.insertedId.toString();
+  let taskId: string;
+  try {
+    const result = await agentTasks.insertOne({
+      user_id: new ObjectId(userId),
+      school_id: schoolId && /^[a-f\d]{24}$/i.test(schoolId) ? new ObjectId(schoolId) : null,
+      title: prompt.trim().slice(0, 80),
+      prompt,
+      status: 'running',
+      created_at: now,
+      updated_at: now,
+      heartbeat_at: now,
+    });
+    taskId = result.insertedId.toString();
+  } catch (error) {
+    // Параллельный запрос успел создать running-задачу между нашим findOne и
+    // insertOne — уникальный частичный индекс. Не падаем с 409, а ставим
+    // новое поручение в очередь.
+    if ((error as { code?: number }).code === 11000) {
+      const q = await agentTasks.insertOne({
+        user_id: new ObjectId(userId),
+        school_id: schoolId && /^[a-f\d]{24}$/i.test(schoolId) ? new ObjectId(schoolId) : null,
+        title: prompt.trim().slice(0, 80),
+        prompt,
+        status: 'queued',
+        created_at: now,
+        updated_at: now,
+      });
+      return { id: q.insertedId.toString(), status: 'queued' };
+    }
+    throw error;
+  }
 
   const execute = () => runAgentTask(taskId, prompt, userId, async (event) => {
     try {
@@ -75,7 +187,7 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
     void execute().catch(() => {});
   }
 
-  return taskId;
+  return { id: taskId, status: 'running' };
 }
 
 export async function listAgentTasks(userId: string, limit = 20) {
@@ -170,3 +282,40 @@ export async function resurrectStalePausedTask(userId: string): Promise<{ task: 
   }
   return { task: taskId, action: 'resurrected' };
 }
+
+/**
+ * Запуск следующей задачи из очереди в контексте активного запроса.
+ *
+ * В dev-окружении фоновые вызовы after/setTimeout после завершения ответа
+ * могут не исполняться; поэтому здесь задача выполняется синхронно внутри
+ * живого запроса (аналогично первичному старту через POST). Клиенты, которые
+ * поллят GET /api/agents/task, тем самым «пробуждают» очередь и дожидаются
+ * выполнения следующей задачи.
+ */
+export async function maybeDispatchQueuedFromRequest(userId: string): Promise<string | null> {
+  // «Будильник»: планируем попытку запуска (атомарную) в фоне и сразу
+  // возвращаем управление запросу — долгие задачи не блокируют GET.
+  tryStartNextFromQueue();
+  return null;
+}
+
+/**
+ * Страховочный поллер очереди: в окружениях, где фоновый вызов диспетчера
+ * из finish() может теряться (например, dev/Node без активного запроса),
+ * каждые 5 секунд проверяем: есть queued-задача и нет running — берём одну.
+ * Атомарный findOneAndUpdate + уникальный частичный индекс защищают от
+ * двойного запуска при нескольких инстансах.
+ */
+function startQueuePoller() {
+  const POLL_MS = 2000;
+  setInterval(() => {
+    try {
+      // tryStartNextFromQueue сам планирует выполнение, если есть queued.
+      tryStartNextFromQueue();
+    } catch {
+      // сбой — попробуем на следующем тике
+    }
+  }, POLL_MS);
+}
+
+startQueuePoller();

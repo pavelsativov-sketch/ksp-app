@@ -27,7 +27,11 @@ beforeEach(() => {
             if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
             return e[k] === v;
           })).length,
-        findOne: async () => events.find((e) => e.task === "generation") ?? null,
+        findOne: async (filter: Record<string, unknown>) =>
+          events.find((e) => Object.entries(filter).every(([k, v]) => {
+            if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
+            return e[k] === v;
+          })) ?? null,
         deleteOne: async (filter: { _id: ObjectId }) => {
           const i = events.findIndex((e) => String(e._id) === String(filter._id));
           if (i >= 0) events.splice(i, 1);
@@ -37,6 +41,36 @@ beforeEach(() => {
           events.push({ ...doc, _id: new ObjectId() });
           return { insertedId: new ObjectId() };
         },
+        aggregate: (pipeline: Array<Record<string, unknown>>) => ({
+          toArray: async () => {
+            let rows: Array<Record<string, unknown>> = [...events];
+            for (const stage of pipeline) {
+              const match = stage.$match as Record<string, unknown> | undefined;
+              if (match) {
+                rows = rows.filter((e) => {
+                  if (match.user_id && e.user_id !== match.user_id) return false;
+                  if (match.task && e.task !== match.task) return false;
+                  if (match.kind && e.kind !== match.kind) return false;
+                  const createdAt = match.createdAt as { $gte?: Date; $lt?: Date } | undefined;
+                  if (createdAt?.$gte && (e.createdAt as Date) < createdAt.$gte) return false;
+                  if (createdAt?.$lt && (e.createdAt as Date) >= createdAt.$lt) return false;
+                  return true;
+                });
+              }
+              const group = stage.$group as { _id: string } | undefined;
+              if (group) {
+                const keyPath = String(group._id).replace(/^\$/, "");
+                const byKey = new Map<string, number>();
+                for (const e of rows) {
+                  const key = String((e as Record<string, unknown>)[keyPath]);
+                  byKey.set(key, (byKey.get(key) ?? 0) + 1);
+                }
+                rows = Array.from(byKey, ([_id, count]) => ({ _id, count }));
+              }
+            }
+            return rows;
+          },
+        }),
       };
       throw new Error(`Unexpected ${name}`);
     },
@@ -45,7 +79,7 @@ beforeEach(() => {
 
 describe("POST /api/ai/refund", () => {
   it("refunds a fresh generation and returns remaining", async () => {
-    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", createdAt: new Date() });
+    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
     const res = await POST();
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -62,9 +96,9 @@ describe("POST /api/ai/refund", () => {
 
   it("429 after 3 refunds this month", async () => {
     for (let i = 0; i < 3; i++) {
-      events.push({ _id: new ObjectId(), user_id: userId, task: "generation_refund", createdAt: new Date() });
+      events.push({ _id: new ObjectId(), user_id: userId, task: "generation_refund", kind: "refund", createdAt: new Date() });
     }
-    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", createdAt: new Date() });
+    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
     const res = await POST();
     expect(res.status).toBe(429);
   });

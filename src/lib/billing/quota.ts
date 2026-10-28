@@ -30,8 +30,11 @@ export async function getPlanForUser(userId: string): Promise<UserPlanUsage> {
   const { start, end } = utcMonthWindow(now);
   const monthFilter = { user_id: userId, createdAt: { $gte: start, $lt: end } };
   const user = await db.collection<UserBillingFields>(COL.users).findOne({ _id: id });
+  if (!user) throw new Error("Billing user not found");
+  // Учитываем только слоты квоты (kind: "slot"): история AI, телеметрия
+  // и фидбек пишутся в ту же коллекцию и не должны считаться расходом.
   const events = await db.collection(COL.aiEvents).aggregate([
-    { $match: monthFilter },
+    { $match: { ...monthFilter, kind: "slot" } },
     {
       $group: {
         _id: "$task",
@@ -43,7 +46,6 @@ export async function getPlanForUser(userId: string): Promise<UserPlanUsage> {
   const used = usageMap["generation"] ?? 0;
   const assistUsed = usageMap["assist"] ?? 0;
   const imagesUsed = usageMap["image"] ?? 0;
-  if (!user) throw new Error("Billing user not found");
   const plan = effectivePlan(user, now);
   const limits = PLANS[plan].limits;
   const left = (limit: number | null, usedCount: number) =>
@@ -144,7 +146,7 @@ export async function reserveQuota(
             if (!success) return;
             try {
               await (await getDb()).collection(COL.aiEvents).insertOne({
-                user_id: user.id, task: kind, ok: true, createdAt: new Date(),
+                user_id: user.id, task: kind, kind: "slot", ok: true, createdAt: new Date(),
               });
             } catch {
               // учёт для Pro некритичен
@@ -169,7 +171,7 @@ export async function reserveQuota(
     for (let seq = 1; seq <= limit; seq++) {
       try {
         await db.collection(COL.aiEvents).insertOne({
-          user_id: user.id, task: kind, month, seq, ok: true, createdAt: new Date(),
+          user_id: user.id, task: kind, kind: "slot", month, seq, ok: true, createdAt: new Date(),
         });
       } catch (e) {
         if ((e as { code?: number }).code === 11000) continue; // слот занят параллельным запросом

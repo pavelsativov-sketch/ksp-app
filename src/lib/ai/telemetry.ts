@@ -26,7 +26,7 @@ export function logAiEvent(entry: Omit<AiEventEntry, "created_at">): void {
   void (async () => {
     try {
       const db = await getDb();
-      await db.collection(COL.aiEvents).insertOne({ ...entry, createdAt: new Date() });
+      await db.collection(COL.aiEvents).insertOne({ ...entry, kind: "telemetry", createdAt: new Date() });
     } catch {
       // Телеметрия необязательна: молча пропускаем любой сбой.
     }
@@ -47,7 +47,7 @@ export function logAiFeedback(entry: Omit<AiFeedbackEntry, "created_at">): void 
   void (async () => {
     try {
       const db = await getDb();
-      await db.collection(COL.aiEvents).insertOne({ ...entry, createdAt: new Date() });
+      await db.collection(COL.aiEvents).insertOne({ ...entry, kind: "feedback", createdAt: new Date() });
     } catch {
       // игнорируем
     }

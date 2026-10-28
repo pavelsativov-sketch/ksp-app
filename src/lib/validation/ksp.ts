@@ -24,6 +24,7 @@ const taskBase = {
   points: z.number().int().min(1).max(100).default(1),
   objectiveCode: text.max(100).nullish().transform((v) => v ?? undefined),
   criterionTexts: z.array(text).max(50).optional(),
+  differentiationLevel: z.enum(["A", "B", "C"]).nullish().transform((v) => v ?? undefined),
   aiGenerated: z.boolean().optional(),
   aiReviewed: z.boolean().optional(),
   copiedFrom: provenanceSchema.optional(),

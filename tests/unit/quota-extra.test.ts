@@ -45,6 +45,36 @@ beforeEach(() => {
         countDocuments: async (filter: { user_id: string; task: string; createdAt: { $gte: Date; $lt: Date } }) =>
           events.filter((e) => e.user_id === filter.user_id && e.task === filter.task &&
             (e.createdAt as Date) >= filter.createdAt.$gte && (e.createdAt as Date) < filter.createdAt.$lt).length,
+        aggregate: (pipeline: Array<Record<string, unknown>>) => ({
+          toArray: async () => {
+            let rows: Array<Record<string, unknown>> = [...events];
+            for (const stage of pipeline) {
+              const match = stage.$match as Record<string, unknown> | undefined;
+              if (match) {
+                rows = rows.filter((e) => {
+                  if (match.user_id && e.user_id !== match.user_id) return false;
+                  if (match.task && e.task !== match.task) return false;
+                  if (match.kind && e.kind !== match.kind) return false;
+                  const createdAt = match.createdAt as { $gte?: Date; $lt?: Date } | undefined;
+                  if (createdAt?.$gte && (e.createdAt as Date) < createdAt.$gte) return false;
+                  if (createdAt?.$lt && (e.createdAt as Date) >= createdAt.$lt) return false;
+                  return true;
+                });
+              }
+              const group = stage.$group as { _id: string } | undefined;
+              if (group) {
+                const keyPath = String(group._id).replace(/^\$/, "");
+                const byKey = new Map<string, number>();
+                for (const e of rows) {
+                  const key = String((e as Record<string, unknown>)[keyPath]);
+                  byKey.set(key, (byKey.get(key) ?? 0) + 1);
+                }
+                rows = Array.from(byKey, ([_id, count]) => ({ _id, count }));
+              }
+            }
+            return rows;
+          },
+        }),
       };
       throw new Error(`Unexpected collection ${name}`);
     },

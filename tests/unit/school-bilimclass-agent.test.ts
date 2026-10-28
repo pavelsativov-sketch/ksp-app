@@ -269,6 +269,7 @@ describe("Агент в /school (runAgentTask) — обучение работе
     // иначе в панели остаётся «AI РАБОТАЕТ» и «Забрать управление себе»
     // после того, как агент уже всё сделал.
     const { releaseControlToUser } = await import("@/lib/agents/session");
-    expect(releaseControlToUser).toHaveBeenCalledWith(userId);
+    // Управление возвращается учителю только для той задачи, которая завершилась.
+    expect(releaseControlToUser).toHaveBeenCalledWith(userId, expect.any(String));
   });
 });

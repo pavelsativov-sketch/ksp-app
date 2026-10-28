@@ -40,6 +40,7 @@ import { mergeAiIntoKsp } from "@/lib/ai/merge";
 import {
   savePlanAction,
   saveDraftAction,
+  deleteDraftAction,
   getPlanConflictSnapshotAction,
   type SavePlanInput,
   type PlanConflictSnapshot,
@@ -55,6 +56,8 @@ import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { fill, type Dict } from "@/lib/i18n/dictionaries";
 import { PlanBlockPicker, blockProvenance, type PlanReuseBlock } from "./plan-block-picker";
 import { AiContextCard } from "./ai-context-card";
+import { VoiceInput } from "./voice-input";
+import { ChatPanel } from "./chat-panel";
 
 interface PlanFormProps {
   initialPlan?: Partial<SavePlanInput> & { id?: string; updated_at?: string };
@@ -217,6 +220,37 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
   
   const { id: planId, title, subjectId, grade, quarter, classId, section, visibility, language, content } = state;
   const schoolProfile = content.schoolProfile ?? "";
+
+  // Флаг «есть несохранённые изменения» — для предупреждения при выходе.
+  // Снапшот обновляется после каждого успешного полного сохранения.
+  const initialSnapshotRef = useRef<string | null>(null);
+  if (initialSnapshotRef.current === null) {
+    initialSnapshotRef.current = JSON.stringify(state);
+  }
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    setDirty(JSON.stringify(getLatestState()) !== initialSnapshotRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  async function handleCancel() {
+    // Серверный черновик нового плана удаляем, чтобы он не оставался в архиве
+    // как «(без названия)». Ошибку удаления игнорируем — не блокируем выход.
+    if (planId) {
+      await deleteDraftAction(planId).catch(() => null);
+    }
+    router.back();
+  }
 
   async function loadConflictSnapshot(id: string | undefined) {
     if (!id) return;
@@ -705,7 +739,10 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
           if (res.updated_at) saveDraftNow(next);
         } else {
           clearDraft();
-          router.push(`/plans/${res.id}`);
+          // Остаёмся в редакторе: у учителя есть возможность продолжить правки,
+          // а не быть выброшенным на страницу просмотра после каждого сохранения.
+          initialSnapshotRef.current = JSON.stringify(next);
+          setDirty(false);
         }
       }
     });
@@ -1011,15 +1048,16 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Input
+          <VoiceInput
             value={content.topic}
-            onChange={(e) =>
-              setContent((prev) => ({ ...prev, topic: e.target.value }))
-            }
+            onChange={(v) => setContent((prev) => ({ ...prev, topic: v }))}
+            language={language}
             placeholder={pe.goals.topicPh}
-            className={showValidation && !content.topic.trim() ? "border-red-400 focus-visible:ring-red-400" : ""}
-            aria-invalid={showValidation && !content.topic.trim()}
+            ariaLabel={pe.goals.topicTitle}
           />
+          {showValidation && !content.topic.trim() && (
+            <p className="text-xs text-red-600">{pe.errors.topicRequired}</p>
+          )}
           <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-xs font-medium text-slate-700">
@@ -1628,6 +1666,11 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
 
         <div className="sticky bottom-3 flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-border bg-surface p-3 shadow-card">
           {draftStatus === "saved" && <span className="mr-auto text-xs text-[#2f5b4f]">{pe.save.draftServer}</span>}
+          {draftStatus === "saved" && planId && (
+            <Link href={`/plans/${planId}`} className="ml-3 text-xs text-[#1e4f91] underline-offset-2 hover:underline">
+              {pe.save.viewPlan}
+            </Link>
+          )}
           {draftStatus === "saving" && <span className="mr-auto text-xs text-muted-foreground">{pe.save.savingDraft}</span>}
           {draftStatus === "error" && <span className="mr-auto text-xs text-red-600">{pe.save.draftFailedShort}</span>}
           {aiApplied && (
@@ -1636,7 +1679,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
               {pe.save.undoAi}
             </Button>
           )}
-          <Button variant="outline" onClick={() => router.back()} type="button">
+          <Button variant="outline" onClick={() => void handleCancel()} type="button">
             {pe.save.cancel}
           </Button>
           <Button variant="outline" onClick={() => void saveDraft()} disabled={isPending || draftStatus === "saving" || !!recoveredDraft || !!conflictSnapshot || conflictLoading || !!conflictLoadError} type="button">
@@ -1687,6 +1730,15 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
             </DialogContent>
           </Dialog>
         )}
+        <ChatPanel
+          planContext={{
+            topic: content.topic,
+            subject: subjectName,
+            grade,
+            language,
+            content,
+          }}
+        />
       </div>
 
       {/* Окно ожидания с настоящим прогрессом от сервера. */}

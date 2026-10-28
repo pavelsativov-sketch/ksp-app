@@ -60,6 +60,7 @@ test-results/
 playwright-report/
 tests/e2e/.auth.json
 tests/e2e-screenshots/
+test-screenshots/
 *.zip
 plan.md
 manus-webdev.json
@@ -69,3 +70,8 @@ public/monaco/
 .freebuff/
 dev-os-check.log
 dev-os-check.pid
+# Логи, локальные утилиты и артефакты прогонов на ноутбуке.
+*.log
+.tools/
+nul
+test-bilim-*.png

@@ -425,8 +425,15 @@ function TaskBodyContent({ task, language, onLinkChange }: {
           </div>
           <p className="mt-2 text-xs text-slate-600">
             {language === "kz" ? "Табылатын сөздер:" : "Найдите слова:"}{" "}
-            {(task.searchWords ?? []).join(" · ")}
+            {grid.placed.join(" · ")}
           </p>
+          {grid.dropped.length > 0 && (
+            <p className="mt-1 text-xs text-amber-600">
+              {language === "kz"
+                ? `Келесі сөздер торға сыймады: ${grid.dropped.join(", ")}`
+                : `Следующие слова не поместились в сетку: ${grid.dropped.join(", ")}`}
+            </p>
+          )}
         </>
       );
     }

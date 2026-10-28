@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { optionalBooleanFlag } from "@/lib/validation/boolean-flag";
-import { generateKsp } from "@/lib/ai/generate";
+import { generateKspWithModel } from "@/lib/ai/generate";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 import { retrieveTextbookContext } from "@/lib/rag/retrieve";
 import { ensureArmanPvTextbookIngested } from "@/lib/rag/armanpv";
 import { summarizeRagUse } from "@/lib/rag/metadata";
+import { AI_HISTORY_SCHEMA_VERSION, buildHistoryParams, computeParamsHash, logAiHistory } from "@/lib/ai/history";
 
 const bodySchema = z.object({
   grade: z.coerce.number().int().min(1).max(11),
@@ -90,10 +91,34 @@ export async function POST(request: Request) {
   const ragInfo = summarizeRagUse(selectedTextbook, retrievedContext);
 
   try {
-    const content = await generateKsp({ ...parsed.data, textbookContext });
-    // Фиксация успеха обязательна: у тарифа с лимитом она ничего не делает,
-    // но у Pro именно finalize(true) пишет событие в аналитику. Без этого
-    // успешные генерации Pro были не видны в отчётах вообще.
+    const { payload: content, model } = await generateKspWithModel({ ...parsed.data, textbookContext });
+    // Серверная история: model / schema_version / source_ids / paramsHash (без текста ДЗ).
+    try {
+      const params = buildHistoryParams({
+        grade: parsed.data.grade,
+        subject: parsed.data.subject,
+        topic: parsed.data.topic,
+        learningObjectives: parsed.data.learningObjectives,
+        language: parsed.data.language,
+        schoolProfile: parsed.data.schoolProfile,
+        section: parsed.data.section,
+        previousTopic: parsed.data.previousTopic,
+        previousHomework: parsed.data.previousHomework,
+        textbookId: resolvedTextbookId ?? null,
+        armanpvId: parsed.data.armanpvId ?? null,
+      });
+      const sourceIds = ragInfo.sources.map((s) => s.id);
+      await logAiHistory({
+        user_id: auth.user.id,
+        task: "generation",
+        model,
+        schema_version: AI_HISTORY_SCHEMA_VERSION,
+        source_ids: sourceIds,
+        paramsHash: computeParamsHash(params),
+        params,
+        rag: ragInfo,
+      });
+    } catch {}
     await reservation.finalize(true);
     return NextResponse.json({ content, rag: ragInfo, quota: { remaining: reservation.remaining } });
   } catch (error) {

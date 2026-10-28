@@ -16,6 +16,9 @@ export async function GET(
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   const { id } = await params;
+  // ?answers=0 — ученическая версия комплекта без ключей; по умолчанию
+  // скачивается учительская версия с ответами.
+  const includeAnswers = new URL(request.url).searchParams.get("answers") !== "0";
 
   const rl = await checkRateLimitAsync(`kit:docx:${clientIp(request)}`, 30, 60_000);
   if (!rl.ok) return NextResponse.json({ error: "Слишком много запросов." }, { status: 429 });
@@ -30,8 +33,8 @@ export async function GET(
   const watermark = await resolveWatermark(user);
   // Несколько материалов — единый документ (памятки с новой страницы).
   const buffer = all.length > 1
-    ? await buildCombinedDocx(all, { watermark })
-    : await buildHandoutDocx(all[0]!, { watermark });
+    ? await buildCombinedDocx(all, { watermark, includeAnswers })
+    : await buildHandoutDocx(all[0]!, { watermark, includeAnswers });
 
   const filename = `Комплект — ${kit.title}.docx`.replace(/[^\p{L}\p{N}_\-. ]/gu, "_");
   return new NextResponse(new Uint8Array(buffer), {

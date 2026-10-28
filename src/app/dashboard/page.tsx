@@ -17,6 +17,8 @@ import { getActiveSchool } from "@/lib/school/active";
 import { requireSchoolAccess } from "@/lib/school";
 import { hasSchoolPermission } from "@/lib/school/role-matrix";
 import { schoolApprovalCopy } from "@/lib/school-approval-copy";
+import { listTrashedPlans, restorePlanFormAction } from "@/app/actions/plans";
+import { PlanSearchBox } from "@/components/ksp/plan-search-box";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +35,11 @@ export default async function DashboardPage() {
   const subjectMap = new Map(subjects.map((s) => [s.id, s.name_ru]));
   const classMap = new Map(classes.map((c) => [c.id, c.name]));
   const plans: PlanListItem[] = rawPlans.map((p) => ({ id: p._id ? p._id.toString() : "", title: p.title, grade: p.grade, subject_id: p.subject_id, subject_name: p.subject_id ? subjectMap.get(p.subject_id) ?? null : null, quarter: p.quarter, class_id: p.class_id ?? null, class_name: p.class_id ? classMap.get(p.class_id) ?? null : null, updated_at: p.updated_at instanceof Date ? p.updated_at.toISOString() : String(p.updated_at), visibility: p.visibility, is_draft: Boolean(p.is_draft), topic: p.content?.topic ?? null }));
-  const [assignments, activeSchool] = await Promise.all([
+  const plansTruncated = rawPlans.length >= 300;
+  const [assignments, activeSchool, trash] = await Promise.all([
     listTeacherAssignments(user.id, 10).catch(() => []),
     getActiveSchool(user.id).catch(() => null),
+    listTrashedPlans(user.id, 10).catch(() => []),
   ]);
   const activeSchoolId = activeSchool?._id?.toString();
   const schoolMember = activeSchoolId ? await requireSchoolAccess(user.id, activeSchoolId).catch(() => null) : null;
@@ -52,6 +56,36 @@ export default async function DashboardPage() {
       <span className="mt-1 block text-sm text-muted-foreground">{approvalCopy.queueDescription}</span>
     </Link>}
     {plans.length === 0 ? <Card><CardContent className="py-18 text-center space-y-7"><PlanOnboarding examples={getPlanExamples(subjects)} dashboard /></CardContent></Card> : <PlansFilter plans={plans} subjects={subjects} classes={classes.map((c) => ({ id: c.id, name: c.name }))} showVisibility showEditLink emptyMessage="Пока нет КСП" />}
+    {plansTruncated && (
+      <p className="text-xs text-muted-foreground">
+        Показаны первые 300 планов. Удалите или архивируйте старые, чтобы увидеть остальные.
+      </p>
+    )}
+    <PlanSearchBox />
+    {trash.length > 0 && (
+      <section className="space-y-3 rounded-2xl border border-border bg-surface p-5">
+        <h2 className="editorial-display text-2xl">Корзина</h2>
+        <ul className="divide-y divide-border">
+          {trash.map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-3 py-2">
+              <div>
+                <p className="text-sm font-semibold">{t.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t.grade ?? "—"} класс · удалён{" "}
+                  {new Date(t.deletedAt).toLocaleDateString("ru-RU")}
+                </p>
+              </div>
+              <form action={restorePlanFormAction}>
+                <input type="hidden" name="trashId" value={t.id} />
+                <button type="submit" className="text-sm font-medium text-[#1e4f91] hover:underline">
+                  Восстановить
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
     <AssignmentsList rows={assignments} a={t.assignments} />
   </div>;
 }

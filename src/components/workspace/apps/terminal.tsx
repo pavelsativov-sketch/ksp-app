@@ -37,6 +37,14 @@ export function TerminalApp() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [entries, busy]);
 
+  async function stop() {
+    try {
+      await fetch("/api/agents/terminal/stop", { method: "POST" });
+    } catch {
+      // команда могла завершиться сама — игнорируем
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     const requested = command.trim();
@@ -108,7 +116,19 @@ export function TerminalApp() {
             {entry.exitCode !== undefined && entry.exitCode !== 0 && <p className="mt-1 text-amber-300">Процесс завершился с кодом {entry.exitCode}</p>}
           </div>
         ))}
-        {busy && <div className="flex items-center gap-2 text-white/45"><LoaderCircle className="size-4 animate-spin" /> Выполняю…</div>}
+        {busy && (
+          <div className="flex items-center gap-2 text-white/45">
+            <LoaderCircle className="size-4 animate-spin" /> Выполняю…
+            <button
+              type="button"
+              onClick={stop}
+              className="rounded bg-white/10 px-2 py-0.5 text-xs text-white/70 hover:bg-white/20"
+              aria-label="Остановить команду"
+            >
+              Стоп
+            </button>
+          </div>
+        )}
         {!available && entries.length === 0 && <p className="mt-4 text-amber-200/80">Файлы и браузер агента доступны. Запуск Linux-команд требует отдельной среды выполнения и здесь отключён.</p>}
         <div ref={endRef} />
       </div>

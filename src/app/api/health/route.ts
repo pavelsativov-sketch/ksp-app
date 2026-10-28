@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb, isMongoConfigured } from "@/lib/mongo";
 import { isAnyProviderConfigured } from "@/lib/ai/providers";
+import { getRateLimitFallbackStats } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function GET() {
       mongo,
       mongoConfigured,
       aiConfigured: isAnyProviderConfigured(),
+      rateLimitFallback: getRateLimitFallbackStats(),
       dbLatencyMs,
       time: new Date().toISOString(),
     },

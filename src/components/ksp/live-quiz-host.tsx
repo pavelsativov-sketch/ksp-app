@@ -9,6 +9,7 @@ import {
   Trophy,
   Users,
   Loader2,
+  Download,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
@@ -262,7 +263,7 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
           />
         )}
 
-        {phase === "ended" && <EndView leaderboard={studentsList} />}
+        {phase === "ended" && <EndView code={code} leaderboard={studentsList} />}
       </div>
     </div>
   );
@@ -477,7 +478,7 @@ function RevealView({
   );
 }
 
-function EndView({ leaderboard }: { leaderboard: LiveLeaderboardEntry[] }) {
+function EndView({ code, leaderboard }: { code: string; leaderboard: LiveLeaderboardEntry[] }) {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-[#c0512f] p-8 text-center text-[#faf7f2]">
@@ -486,6 +487,14 @@ function EndView({ leaderboard }: { leaderboard: LiveLeaderboardEntry[] }) {
         <p className="text-indigo-100">Поздравляем участников</p>
       </div>
       <Leaderboard entries={leaderboard} />
+      <div className="flex justify-end">
+        <a href={`/api/quiz/${code}/results`}>
+          <Button variant="outline">
+            <Download className="w-4 h-4" />
+            Скачать результаты (CSV)
+          </Button>
+        </a>
+      </div>
     </div>
   );
 }

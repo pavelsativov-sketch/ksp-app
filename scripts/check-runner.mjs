@@ -67,7 +67,11 @@ const runnerFile = path.join(runnerDir, "runner.mjs");
 writeFileSync(runnerFile, loadRunnerScript(), "utf8");
 
 const child = spawn(process.execPath, [runnerFile], {
-  env: { ...process.env, PORT, AUTH_SECRET: SECRET },
+  // RUNNER_SCRIPT предпочитает BROWSER_RPC_SECRET. Явно перезаписываем оба
+  // имени: иначе локальный .env с другим BROWSER_RPC_SECRET заставляет
+  // дочерний runner проверять подпись не тем ключом, которым её подписывает
+  // этот smoke-test, и create ложно выглядит сломанным.
+  env: { ...process.env, PORT, AUTH_SECRET: SECRET, BROWSER_RPC_SECRET: SECRET },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let runnerLog = "";
@@ -157,12 +161,19 @@ try {
   const mouseUp = await rpc({ action: "mouseUp", sessionId, args: {} });
   check("mouseDown/mouseUp поддержаны (drag)", mouseDown.ok === true && mouseUp.ok === true);
 
+  // Проверяем через navigate — это ровно путь, которым агент открывает URL.
+  // `evaluate(fetch(...))` не годится: Chromium может вернуть undefined при
+  // отменённом Route, скрыв факт блокировки за различиями версий Playwright.
   const ssrf = await rpc({
-    action: "evaluate",
+    action: "navigate",
     sessionId,
-    args: { script: "async () => { try { const r = await fetch('http://169.254.169.254/latest/meta-data/'); return 'status:' + r.status; } catch { return 'blocked'; } }" },
+    args: { url: "http://169.254.169.254/latest/meta-data/" },
   });
-  check("SSRF-guard блокирует метаданные облака", ssrf.result === "blocked", JSON.stringify(ssrf.result));
+  check(
+    "SSRF-guard блокирует метаданные облака",
+    ssrf.status === 502 && /abort|failed|denied|blocked/i.test(String(ssrf.error ?? "")),
+    JSON.stringify(ssrf),
+  );
 
   const gone = await rpc({ action: "status", sessionId: "нет-такой-сессии", args: {} });
   check("неизвестная сессия → 410", gone.status === 410 || String(gone.error).includes("Session expired"), JSON.stringify(gone));

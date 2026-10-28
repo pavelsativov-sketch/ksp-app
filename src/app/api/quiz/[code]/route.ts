@@ -3,8 +3,9 @@ import { z } from "zod";
 import { getDb, COL, isMongoConfigured } from "@/lib/mongo";
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
-import { computeAnswerScore } from "@/lib/ksp/live-quiz";
+import { computeAnswerScore, generateRoomCode, MAX_STUDENTS } from "@/lib/ksp/live-quiz";
 import { evaluateTask, type InteractiveTask, type TaskAnswer } from "@/lib/ksp/tasks";
+import { getAccessiblePlan } from "@/lib/plans-repo";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,8 @@ interface HostQuestionPayload {
 const ROOM_TTL_MS = 6 * 3600_000;
 const MAX_BODY_BYTES = 32 * 1024;
 const EVENTS_PER_MINUTE = 240;
+/** Попыток сгенерировать свободный код комнаты при коллизии. */
+const MAX_CODE_ATTEMPTS = 5;
 
 interface RoomStudent {
   name?: string;
@@ -151,23 +154,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   // Хост-события — только от владельца комнаты. Комната создаётся первым
   // host-событием; если студенты успели создать её раньше хоста (lobby),
   // хост «занимает» комнату, пока у той нет владельца.
+  //
+  // Защита от захвата: «занять» или создать комнату может только владелец
+  // плана, переданного в событии (host:state/х:question несут planId).
+  // Студент с аккаунтом, знающий код, не владеет планом — захват невозможен.
   if (parsed.data.event.startsWith("host:")) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
+    const hostPlanId = (payloadChecked.data as { planId?: string }).planId;
+    let ownsPlan = false;
+    if (hostPlanId) {
+      const plan = await getAccessiblePlan(hostPlanId, user.id);
+      ownsPlan = plan?.owner_id === user.id;
+    }
     const room0 = await rooms.findOne({ code });
     if (!room0) {
-      // Комнаты нет — создаём сразу с владельцем (upsert + unique-индекс на
-      // code защищают от гонки двух хостов).
-      await rooms.updateOne(
-        { code },
-        { $setOnInsert: { code, ownerId: user.id, createdAt: now, seq: 0 } },
-        { upsert: true },
-      );
+      // Комнаты нет — создаём сразу с владельцем, но только для владельца
+      // плана (upsert + unique-индекс на code защищают от гонки двух хостов).
+      if (!ownsPlan) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      // Коллизия кода (другой хост случайно выбрал тот же 6-значный код):
+      // повторяем генерацию до MAX_CODE_ATTEMPTS раз, а не «занимаем»
+      // чужую комнату.
+      let created = false;
+      for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS && !created; attempt++) {
+        const candidate = attempt === 0 ? code : generateRoomCode();
+        const res = await rooms.updateOne(
+          { code: candidate },
+          { $setOnInsert: { code: candidate, ownerId: user.id, planId: hostPlanId, createdAt: now, seq: 0 } },
+          { upsert: true },
+        );
+        if (res.upsertedCount === 1) {
+          created = true;
+          if (candidate !== code) {
+            // Комната создалась под другим кодом — сообщаем хост-клиенту.
+            return NextResponse.json({ ok: true, seq: 0, roomCode: candidate });
+          }
+        }
+      }
+      if (!created) {
+        return NextResponse.json({ error: "Не удалось создать комнату: повторите попытку" }, { status: 409 });
+      }
     } else if (room0.ownerId && room0.ownerId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     } else if (!room0.ownerId) {
       // Студенты успели создать комнату раньше хоста — «занимаем» её.
-      await rooms.updateOne({ code, ownerId: null }, { $set: { ownerId: user.id } });
+      // Претендент должен владеть планом, к которому привязана комната.
+      if (!ownsPlan) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      await rooms.updateOne({ code, ownerId: null }, { $set: { ownerId: user.id, planId: hostPlanId } });
       const claimed = await rooms.findOne({ code });
       if (claimed?.ownerId !== user.id) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -238,6 +271,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     await rooms.updateOne({ code }, { $set: set });
   } else if (parsed.data.event === "student:join") {
     const { studentId, name } = payloadChecked.data as { studentId: string; name: string };
+    const roomNow = await rooms.findOne({ code }, { projection: { students: 1 } });
+    const existingCount = roomNow?.students ? Object.keys(roomNow.students).length : 0;
+    // Защита от флуда: без лимита любой знающий код мог раздуть словарь
+    // students до тысяч записей. Уже вошедший ученик лимит не расходует.
+    if (existingCount >= MAX_STUDENTS && !roomNow?.students?.[studentId]) {
+      return NextResponse.json({ error: "В комнате слишком много участников" }, { status: 429 });
+    }
     const firstJoin = await rooms.updateOne(
       { code, [`students.${studentId}`]: { $exists: false } },
       { $set: { [`students.${studentId}`]: { name, score: 0, answered: 0 } } },
@@ -256,10 +296,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const secretTask = room?.secretTask;
     const startedAt = asTime(room?.questionStartedAt);
     const endsAt = asTime(room?.questionEndsAt);
+    // Фаза должна быть «question»: после host:reveal (или конца квиза) ответы
+    // больше не принимаются, даже если таймер ещё не истёк, — иначе ученики
+    // набирали бы баллы, уже видя правильный ответ.
     const stateOk =
       secretTask != null &&
       typeof secretTask === "object" &&
       "type" in secretTask &&
+      room?.phase === "question" &&
       room?.currentIndex === index &&
       startedAt > 0 &&
       Date.now() <= endsAt + ANSWER_GRACE_MS;

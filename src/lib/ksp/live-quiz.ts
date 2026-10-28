@@ -19,6 +19,9 @@ import type { InteractiveTask, TaskAnswer } from "./tasks";
 
 export type LivePhase = "lobby" | "question" | "reveal" | "ended";
 
+/** Максимум участников комнаты — защита от флуда student:join с уникальными id. */
+export const MAX_STUDENTS = 200;
+
 export interface LiveLeaderboardEntry {
   studentId: string;
   name: string;
@@ -140,6 +143,7 @@ export function correctSummary(task: InteractiveTask): string {
  */
 export function speedBonus(ms: number, timeLimitSec?: number): number {
   const limitMs = (timeLimitSec ?? 30) * 1000;
+  if (!Number.isFinite(limitMs) || limitMs <= 0) return 1;
   const ratio = Math.max(0, Math.min(1, 1 - ms / limitMs));
   return 1 + 0.5 * ratio;
 }
@@ -153,8 +157,12 @@ export function computeAnswerScore(
   ms: number,
   timeLimitSec?: number,
 ): number {
+  // Неверный ответ всегда 0 баллов: множитель скорости применяется только
+  // к верным ответам. Раньше при isCorrect=false возвращался evaluation.score,
+  // т.е. частично верная оценка могла начислить очки за неверный ответ.
+  if (!evaluation.isCorrect) return 0;
   const elapsed = Math.min(Math.max(0, ms), (timeLimitSec ?? 30) * 1000);
-  return Math.round(evaluation.score * (evaluation.isCorrect ? speedBonus(elapsed, timeLimitSec) : 1));
+  return Math.round(evaluation.score * speedBonus(elapsed, timeLimitSec));
 }
 
 export function generateRoomCode(): string {

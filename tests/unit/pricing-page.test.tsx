@@ -15,7 +15,8 @@ describe("Mekty pricing", () => {
     const pro = within(screen.getByRole("article", { name: "Учитель Pro" }));
     expect(pro.getByText("2 490 ₸")).toBeTruthy();
     expect(pro.getByRole("link", { name: "Активировать код" }).getAttribute("href")).toBe("/redeem");
-    expect(screen.getByRole("article", { name: "Школа" }).textContent).toContain("9 900 ₸");
+    // Школьный тариф ещё не подключён к биллингу — карточка честно говорит «Скоро».
+    expect(screen.getByRole("article", { name: "Школа" }).textContent).toContain("Скоро");
     expect(metadata.title).toBe("Тарифы — Mekty");
   });
 });

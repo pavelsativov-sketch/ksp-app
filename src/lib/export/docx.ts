@@ -205,10 +205,13 @@ function assessmentCellChildren(stage: LessonStage): Paragraph[] {
 }
 
 function stageRow(label: string, stage: LessonStage): TableRow {
+  // Время этапа — переносом строки внутри ячейки: символ «\n» внутри TextRun
+  // не создаёт переноса в Word (буквально попадает в текст), поэтому второй
+  // run получает явный break перед текстом.
   const stageCell = new Paragraph({
     children: [
       new TextRun({ text: label, bold: true }),
-      ...(stage.time ? [new TextRun({ text: `\n${stage.time}` })] : []),
+      ...(stage.time ? [new TextRun({ text: stage.time, break: 1 })] : []),
     ],
   });
   return new TableRow({

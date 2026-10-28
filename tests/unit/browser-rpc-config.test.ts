@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { browserRpc, BrowserRpcError } from "@/lib/agents/browser-rpc";
+import { browserRpc, getRunnerRpcSecret } from "@/lib/agents/browser-rpc";
 
 const getSandboxBrowserRpcUrl = vi.fn(async () => RPC_URL);
 vi.mock("@/lib/agents/sandbox-browser-service", () => ({ getSandboxBrowserRpcUrl }));
@@ -28,6 +28,8 @@ describe("browserRpc configuration", () => {
   });
 
   it("refuses to sign a request without a long enough AUTH_SECRET", async () => {
+    // Отдельный ключ раннера не должен маскировать короткий AUTH_SECRET.
+    delete process.env.BROWSER_RPC_SECRET;
     process.env.AUTH_SECRET = "short";
 
     await expect(browserRpc("user-1", "status", { rpcUrl: RPC_URL })).rejects.toThrow(/AUTH_SECRET/);
@@ -84,7 +86,8 @@ describe("browserRpc configuration", () => {
     const headers = init.headers as Record<string, string>;
     const rawBody = init.body as string;
     const timestamp = headers["x-mekty-timestamp"];
-    const expected = createHmac("sha256", Buffer.from(AUTH_SECRET))
+    // Без BROWSER_RPC_SECRET подпись считается производным секретом пользователя.
+    const expected = createHmac("sha256", Buffer.from(getRunnerRpcSecret("user-1")))
       .update(`${timestamp}.${rawBody}`)
       .digest("base64url");
     expect(headers["x-mekty-signature"]).toBe(expected);
@@ -165,5 +168,27 @@ describe("browserRpc configuration", () => {
 
     await expect(browserRpc("user-1", "status", { rpcUrl: RPC_URL, sessionId: "gone" }))
       .rejects.toMatchObject({ name: "BrowserRpcError", status: 410 });
+  });
+
+  it("retries 502/503 with backoff before giving up", async () => {
+    delete process.env.VERCEL;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "warming up", status: 503 }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, result: { open: true } }), {
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await browserRpc("user-1", "status", { rpcUrl: RPC_URL });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.result).toEqual({ open: true });
   });
 });

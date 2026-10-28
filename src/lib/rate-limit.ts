@@ -1,9 +1,16 @@
 /**
  * Rate limiter: MongoDB-backed при настроенном MONGODB_URI (работает на
  * multi-instance/serverless), иначе in-memory fallback для локальной разработки.
+ *
+ * ВАЖНО: in-memory fallback хранит счётчики в памяти одного инстанса.
+ * На Vercel serverless каждый инстанс имеет отдельный Map, поэтому при
+ * недоступности MongoDB эффективный лимит вырастает в N раз (N = число
+ * инстансов). Fallback нужен только чтобы не блокировать пользователей при
+ * кратком сбое БД; каждый переход на него подсчитывается и логируется.
  */
 
 import { getDb, COL, isMongoConfigured } from "@/lib/mongo";
+import { log } from "@/lib/logger";
 
 interface RateLimitEntry {
   count: number;
@@ -18,6 +25,13 @@ interface RateLimitDoc {
 }
 
 const memStore = new Map<string, RateLimitEntry>();
+
+/** Сколько раз лимитер переходил на in-memory fallback (метрика). */
+let fallbackTransitions = 0;
+
+export function getRateLimitFallbackStats(): { fallbackTransitions: number } {
+  return { fallbackTransitions };
+}
 
 export interface RateLimitResult {
   ok: boolean;
@@ -110,10 +124,12 @@ export async function checkRateLimitAsync(
       resetAt: effectiveResetAt,
     };
   } catch (error) {
-    console.error(
-      `[rate-limit] Mongo-лимитер недоступен, используется локальный счётчик:`,
-      error instanceof Error ? error.message : error,
-    );
+    fallbackTransitions += 1;
+    log.warn("[rate-limit] Mongo-лимитер недоступен, используется локальный счётчик (лимит ослаблен на мульти-инстансном деплое)", {
+      error: error instanceof Error ? error.message : String(error),
+      key: key.slice(0, 40),
+      fallbackTransitions,
+    });
     return checkRateLimit(key, limit, windowMs);
   }
 }

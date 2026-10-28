@@ -1,13 +1,15 @@
 import { z } from "zod";
 import { optionalBooleanFlag } from "@/lib/validation/boolean-flag";
-import { generateKsp, type KspStage } from "@/lib/ai/generate";
+import { generateKspWithModel, type KspStage } from "@/lib/ai/generate";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
-import { reserveQuotaOrResponse } from "@/lib/billing/quota";
+import { reserveQuota, quotaFailure } from "@/lib/billing/quota";
+import { generationCacheKey, getCachedGeneration, setCachedGeneration } from "@/lib/ai/generation-cache";
 import { retrieveTextbookContext } from "@/lib/rag/retrieve";
 import { ensureArmanPvTextbookIngested } from "@/lib/rag/armanpv";
 import { log } from "@/lib/logger";
 import { summarizeRagUse } from "@/lib/rag/metadata";
+import { AI_HISTORY_SCHEMA_VERSION, buildHistoryParams, computeParamsHash, logAiHistory } from "@/lib/ai/history";
 
 /**
  * Генерация КСП с живым прогрессом (SSE).
@@ -35,6 +37,13 @@ const bodySchema = z.object({
   armanpvId: z.string().trim().max(200).optional(),
   refine: optionalBooleanFlag,
 });
+
+const SSE_HEADERS = {
+  "Content-Type": "text/event-stream; charset=utf-8",
+  "Cache-Control": "no-cache, no-transform",
+  Connection: "keep-alive",
+  "X-Accel-Buffering": "no",
+};
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,14 +82,54 @@ export async function POST(request: Request) {
     );
   }
 
-  const quota = await reserveQuotaOrResponse(auth.user, "generation");
-  if (!quota.ok) return quota.response;
+  // Идентичный повторный запрос отдаётся из кэша без обращения к провайдерам
+  // и без расхода квоты. Ключ строится по параметрам, известным до RAG.
+  const preCacheKey = generationCacheKey({
+    grade: parsed.data.grade,
+    subject: parsed.data.subject,
+    topic: parsed.data.topic,
+    learningObjectives: parsed.data.learningObjectives ?? [],
+    language: parsed.data.language,
+    schoolProfile: parsed.data.schoolProfile,
+    section: parsed.data.section ?? null,
+    previousTopic: parsed.data.previousTopic ?? null,
+    previousHomeworkIncluded: Boolean(parsed.data.previousHomework?.trim()),
+    textbookId: parsed.data.textbookId ?? null,
+    armanpvId: parsed.data.armanpvId ?? null,
+    refine: Boolean(parsed.data.refine),
+  });
+  const cached = getCachedGeneration(preCacheKey);
+  if (cached) {
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder();
+        const send = (payload: unknown) =>
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        send({ type: "progress", percent: 100, label: "План готов (повторная генерация из кэша)" });
+        send({ type: "done", content: cached.payload, rag: cached.rag });
+        controller.close();
+      },
+    });
+    return new Response(stream, { headers: SSE_HEADERS });
+  }
+
+  // Отказ по квоте отдаём как SSE-кадр error, а не как JSON: клиент ждёт
+  // поток и не умеет разбирать обычный ответ (см. use-plan-ai.ts).
+  const quota = await reserveQuota(auth.user, "generation");
+  if (!quota.ok) {
+    const { status, body } = quotaFailure(quota);
+    return new Response(
+      `data: ${JSON.stringify({ type: "error", error: body.error, code: body.code })}\n\n`,
+      { status, headers: { "Content-Type": "text/event-stream" } },
+    );
+  }
   const { reservation } = quota;
 
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
       let closed = false;
+      let settled = false;
       let lastPercent = 0;
 
       const send = (payload: unknown) => {
@@ -113,9 +162,13 @@ export async function POST(request: Request) {
       };
 
       // Учитель закрыл вкладку или нажал «Отменить» — работа впустую.
+      // Слот квоты возвращаем только если результат ещё не был выдан (settled).
       request.signal.addEventListener("abort", () => {
         closed = true;
-        void reservation.finalize(false);
+        if (!settled) {
+          settled = true;
+          void reservation.finalize(false);
+        }
       });
 
       try {
@@ -158,7 +211,44 @@ export async function POST(request: Request) {
 
         const ragInfo = summarizeRagUse(selectedTextbook, retrievedContext);
 
-        const content = await generateKsp({ ...parsed.data, textbookContext, onStage: stage });
+        const { payload: content, model } = await generateKspWithModel({
+          ...parsed.data,
+          textbookContext,
+          onStage: stage,
+          signal: request.signal,
+        });
+        try {
+          const params = buildHistoryParams({
+            grade: parsed.data.grade,
+            subject: parsed.data.subject,
+            topic: parsed.data.topic,
+            learningObjectives: parsed.data.learningObjectives,
+            language: parsed.data.language,
+            schoolProfile: parsed.data.schoolProfile,
+            section: parsed.data.section,
+            previousTopic: parsed.data.previousTopic,
+            previousHomework: parsed.data.previousHomework,
+            textbookId: resolvedTextbookId ?? null,
+            armanpvId: parsed.data.armanpvId ?? null,
+          });
+          const sourceIds = ragInfo.sources.map((s) => s.id);
+          await logAiHistory({
+            user_id: auth.user.id,
+            task: "generation",
+            model,
+            schema_version: AI_HISTORY_SCHEMA_VERSION,
+            source_ids: sourceIds,
+            paramsHash: computeParamsHash(params),
+            params,
+            rag: ragInfo,
+          });
+        } catch {}
+
+        // Кладём в кэш под полным ключом (с учётом resolved-учебника).
+        setCachedGeneration(preCacheKey, { payload: content, model, rag: ragInfo });
+
+        // Результат получен — слот квоты оставляем, abort больше не возвращает его.
+        settled = true;
         await reservation.finalize(true);
 
         // 100% и результат одним кадром: учитель ждёт именно этого — иначе
@@ -173,7 +263,10 @@ export async function POST(request: Request) {
           quota: { remaining: reservation.remaining },
         });
       } catch (error) {
-        await reservation.finalize(false);
+        if (!settled) {
+          settled = true;
+          await reservation.finalize(false);
+        }
         log.error("KSP generation failed", {
           userId: auth.user.id,
           reason: error instanceof Error ? error.message : String(error),
@@ -189,12 +282,5 @@ export async function POST(request: Request) {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  return new Response(stream, { headers: SSE_HEADERS });
 }

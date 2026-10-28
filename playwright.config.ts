@@ -17,6 +17,7 @@ import { defineConfig, devices } from "@playwright/test";
  *   node scripts/seed-test-accounts.mjs && npm run test:e2e
  */
 const useProductionServer = process.env.PROD === "1";
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -29,7 +30,7 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     locale: "ru-RU",

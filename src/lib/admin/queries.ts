@@ -47,7 +47,7 @@ export async function getAdminDashboard(input: AdminSearchParams) {
     users.countDocuments({}, options), users.countDocuments(filter, options), codes.countDocuments(codeFilter, options),
     users.countDocuments({ plan: "pro", $or: [{ plan_expires_at: null }, { plan_expires_at: { $gt: now } }] }, options),
     db.collection(COL.aiEvents).aggregate<{ _id: string; count: number }>([
-      { $match: { ...monthFilter, user_id: { $type: "string" }, task: { $in: ["generation", "image"] } } },
+      { $match: { ...monthFilter, kind: "slot", user_id: { $type: "string" }, task: { $in: ["generation", "image"] } } },
       { $group: { _id: "$task", count: { $sum: 1 } } },
     ], options).toArray(),
     db.collection(COL.aiEvents).aggregate<{ _id: null; requests: number; errors: number; tokens: number; avgDuration: number }>([
@@ -70,7 +70,7 @@ export async function getAdminDashboard(input: AdminSearchParams) {
       .sort({ created_at: -1, _id: -1 }).skip((query.codePage - 1) * PAGE_SIZE).limit(PAGE_SIZE).toArray(),
   ]);
   const perUser = userRows.length ? await db.collection(COL.aiEvents).aggregate<{ _id: { user: string; task: string }; count: number }>([
-    { $match: { ...monthFilter, user_id: { $in: userRows.map((u) => u._id.toHexString()) }, task: { $in: ["generation", "image"] } } },
+    { $match: { ...monthFilter, kind: "slot", user_id: { $in: userRows.map((u) => u._id.toHexString()) }, task: { $in: ["generation", "image"] } } },
     { $group: { _id: { user: "$user_id", task: "$task" }, count: { $sum: 1 } } },
   ], options).toArray() : [];
   const counts = new Map(perUser.map((row) => [`${row._id.user}:${row._id.task}`, row.count]));

@@ -85,6 +85,11 @@ export function KitList({
                   <Download /> {c.kitsOpen}
                 </a>
               </Button>
+              <Button asChild size="sm" variant="ghost">
+                <a href={`/api/kits/${kit.id}/docx?answers=0`} download title="Версия без ответов — для учеников">
+                  {c.kitsOpen} (ученикам)
+                </a>
+              </Button>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();

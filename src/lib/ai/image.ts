@@ -364,8 +364,11 @@ async function generateWithFlux(
       throw new Error(`Cloudflare API error ${response.status}${await describeCloudflareError(response)}`);
     }
     const retryAfter = Number(response.headers.get("retry-after"));
+    // Если заголовок retry-after отсутствует — ждём дефолтные 30 секунд.
+    // Раньше NaN превращался в 0 и retry срабатывал мгновенно.
+    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 30_000;
     await response.body?.cancel();
-    await new Promise((resolve) => setTimeout(resolve, Math.min(70_000, Math.max(60_000, retryAfter * 1000))));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(70_000, Math.max(60_000, delayMs))));
   }
   if (!response) throw new Error("Cloudflare не вернул изображение");
 

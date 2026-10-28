@@ -54,7 +54,7 @@ export default async function PricingPage() {
             <article aria-labelledby="school-plan" className="app-card flex flex-col p-6">
               <p className="editorial-kicker">{p.schoolKicker}</p>
               <h2 id="school-plan" className="editorial-display mt-5 text-3xl">{p.schoolName}</h2>
-              <p className="mt-6"><span className="text-4xl font-semibold tracking-tight">9 900 ₸</span></p>
+              <p className="mt-6"><span className="text-2xl font-semibold tracking-tight text-graphite">Скоро</span></p>
               <p className="mt-2 text-sm text-graphite">{p.schoolPerTeacher}</p>
               <div className="my-7 border-t border-line pt-6"><p className="text-sm leading-6 text-graphite">{p.schoolText}</p><p className="app-note mt-6 text-xl">{p.schoolSlogan}</p></div>
               <div className="mt-auto border-t border-line pt-5"><p className="font-semibold text-ink">{p.schoolTitle}</p><p className="mt-2 text-sm leading-6 text-graphite">{p.schoolNote}</p></div>

@@ -3,6 +3,7 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { getControlOwner, setControlOwner } from "@/lib/agents/session";
 import { hasLiveAgentTask, resurrectStalePausedTask } from "@/lib/agents/orchestrator";
 import { resolveControlOwner } from "@/lib/agents/lease";
+import { listPending } from "@/lib/agents/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,9 @@ export async function GET() {
   const stored = await getControlOwner(auth.user.id);
   const owner = resolveControlOwner(stored, await hasLiveAgentTask(auth.user.id));
   if (owner !== stored) await setControlOwner(auth.user.id, owner).catch(() => {});
+  const pending = await listPending(auth.user.id).catch(() => []);
   return NextResponse.json(
-    { control: owner },
+    { control: owner, pendingCount: pending.length },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

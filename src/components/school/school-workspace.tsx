@@ -70,6 +70,7 @@ export function SchoolWorkspace({
   const [elapsed, setElapsed] = useState<string | null>(null);
   const [control, setControlState] = useState<"user" | "ai">("user");
   const [controlLoaded, setControlLoaded] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const [editorFile, setEditorFile] = useState<string | null>(null);
   const [browserUrl, setBrowserUrl] = useState<string | undefined>(initialUrl);
   const [notice, setNotice] = useState<string | null>(null);
@@ -102,8 +103,9 @@ export function SchoolWorkspace({
       try {
         const res = await fetch("/api/agents/control", { cache: "no-store" });
         if (res.ok && alive) {
-          const data = (await res.json()) as { control?: "user" | "ai" };
+          const data = (await res.json()) as { control?: "user" | "ai"; pendingCount?: number };
           if (data.control) setControlState(data.control);
+          if (typeof data.pendingCount === "number") setPendingCount(data.pendingCount);
           setControlLoaded(true);
         }
       } catch { /* некритично */ }
@@ -233,6 +235,15 @@ export function SchoolWorkspace({
             </button>
           )}
         </div>
+
+        {pendingCount > 0 && (
+          <div
+            role="status"
+            className="mx-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11px] font-medium text-amber-300"
+          >
+            ⚠ Агент ждёт подтверждения действия ({pendingCount}) — откройте «Работу с компьютером» или разрешите в запросе.
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3">
           {task ? (

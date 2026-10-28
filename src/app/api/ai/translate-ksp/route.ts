@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 import { executeWithFallback, getResponseFormat, isAnyProviderConfigured } from "@/lib/ai/providers";
 import { OPENAI_JSON_SCHEMA, type AiKspPayload } from "@/lib/ai/prompt";
 import { normalizeTextFields } from "@/lib/ai/generate";
@@ -96,6 +97,12 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+
+  // Перевод — затратная AI-операция: учитываем её в тарифной квоте assist
+  // (как улучшение секций), чтобы её нельзя было использовать мимо тарифа.
+  const quota = await reserveQuotaOrResponse(auth.user, "assist");
+  if (!quota.ok) return quota.response;
+  const { reservation } = quota;
 
   let json: unknown;
   try {
@@ -285,6 +292,7 @@ export async function POST(request: Request) {
       text: officialMap.get(o.code) || aiObjMap.get(o.code) || o.text,
     }));
 
+    await reservation.finalize(true);
     return NextResponse.json({
       language: targetLanguage,
       title: translatedMeta.title || translatedBody.topic,
@@ -296,6 +304,7 @@ export async function POST(request: Request) {
     });
   } catch (e) {
     console.error("translate-ksp failed:", e);
+    await reservation.finalize(false).catch(() => {});
     return NextResponse.json(
       {
         error:

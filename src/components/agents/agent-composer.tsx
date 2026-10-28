@@ -37,6 +37,7 @@ export function AgentComposer() {
   const [prompt, setPrompt] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const wantsBrowser = useMemo(() => needsBrowser(prompt), [prompt]);
 
@@ -56,11 +57,16 @@ export function AgentComposer() {
         router.push("/login?next=/school/workspace");
         return;
       }
-      const data = (await res.json()) as { taskId?: string; error?: string };
+      const data = (await res.json()) as { taskId?: string; status?: string; error?: string };
       if (!res.ok || !data.taskId) {
         setError(data.error ?? "Не удалось запустить ассистента");
         setPending(false);
         return;
+      }
+      if (data.status === "queued") {
+        setNotice("Задача поставлена в очередь: предыдущая ещё выполняется. Она запустится автоматически.");
+      } else {
+        setNotice(null);
       }
       setActiveAgentTask(data.taskId, text.slice(0, 80), text);
       setPrompt("");
@@ -132,6 +138,7 @@ export function AgentComposer() {
           </Button>
         </div>
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+        {notice && <p className="mt-2 text-xs text-sky-300">{notice}</p>}
       </div>
 
       <div className="flex flex-wrap gap-1.5">

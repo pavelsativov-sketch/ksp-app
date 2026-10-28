@@ -49,15 +49,22 @@ function safeNextPath(raw: FormDataEntryValue | null): string {
   // текущего сайта после нормализации браузером.
   if (value.includes("\\") || /[\u0000-\u001f\u007f]/.test(value)) return "/dashboard";
   if (value.startsWith("//")) return "/dashboard";
-  // /%2F%2Fevil.com и подобные — декодируем один раз и проверяем снова.
+  // /%2F%2Fevil.com и подобные — декодируем до двух раз (двойное
+  // кодирование %252F%252Fevil.com), чтобы те же проверки прошли по
+  // финальному виду. Если после декодирования получается, например,
+  // «//evil.com» — это попытка URL-редайректа наружу.
   let decoded = value;
   try {
-    decoded = decodeURIComponent(value);
+    for (let i = 0; i < 2; i++) {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    }
   } catch {
     return "/dashboard";
   }
   if (decoded.startsWith("//") || decoded.includes("\\") || !decoded.startsWith("/")) return "/dashboard";
-  return value;
+  return decoded;
 }
 
 export async function loginAction(_: AuthFormState, formData: FormData): Promise<AuthFormState> {

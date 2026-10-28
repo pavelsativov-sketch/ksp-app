@@ -1,7 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import type { AiRunContext } from "./hooks/use-plan-ai";
 import { Button } from "@/components/ui/button";
+
+export type AiHistoryMeta = {
+  model?: string | null;
+  schemaVersion?: string | null;
+  paramsHash?: string | null;
+  sourceIds?: string[] | null;
+};
 
 export function AiContextCard({
   context,
@@ -9,12 +17,14 @@ export function AiContextCard({
   history = [],
   canReplayExactly,
   onReplay,
+  serverMeta,
 }: {
   context: AiRunContext;
   locale: "ru" | "kk";
   history?: AiRunContext[];
   canReplayExactly?: (id: string) => boolean;
   onReplay?: (id: string) => void;
+  serverMeta?: AiHistoryMeta | null;
 }) {
   const isKk = locale === "kk";
   const { rag } = context;
@@ -36,6 +46,14 @@ export function AiContextCard({
       <div className="mt-3 space-y-3">
         <p className="text-[11px] text-[#756b63]">{isKk ? "Соңғы сәтті сұрау:" : "Последний успешный запрос:"} {generatedAt}</p>
         <p className="text-[11px] text-[#756b63]">{isKk ? "Үлгі нұсқасы" : "Версия пайплайна"}: {context.promptVersion} · {isKk ? "КСП нұсқасы" : "Версия КСП"}: {context.planRevision?.slice(0, 19) ?? (isKk ? "сақталмаған" : "ещё не сохранён")}</p>
+        {serverMeta && (
+          <dl className="grid gap-x-3 gap-y-1 sm:grid-cols-[auto_1fr] rounded-lg border border-[#e8ddd0] bg-white p-2">
+            <dt className="font-medium">model</dt><dd className="truncate" title={serverMeta.model ?? undefined}>{serverMeta.model ?? "—"}</dd>
+            <dt className="font-medium">schema_version</dt><dd>{serverMeta.schemaVersion ?? "—"}</dd>
+            <dt className="font-medium">paramsHash</dt><dd className="font-mono text-[11px] truncate" title={serverMeta.paramsHash ?? undefined}>{serverMeta.paramsHash ? `${serverMeta.paramsHash.slice(0, 8)}…` : "—"}</dd>
+            <dt className="font-medium">source_ids</dt><dd>{serverMeta.sourceIds?.length ?? rag.sources.length} {isKk ? "идентификатор" : "ID"}</dd>
+          </dl>
+        )}
         <p role="status">{status}</p>
         <dl className="grid gap-x-3 gap-y-1 sm:grid-cols-[auto_1fr]">
           <dt className="font-medium">{isKk ? "Сынып" : "Класс"}</dt><dd>{context.grade}</dd>
@@ -71,6 +89,16 @@ export function AiContextCard({
         <p className="text-[11px] text-[#756b63]">
           {isKk ? "AI-дың жасырын ішкі пайымдары көрсетілмейді. Қауіпсіз метадеректер ағымдағы қойындының sessionStorage ішінде сақталады." : "Внутренние рассуждения AI не показываются. Безопасные метаданные хранятся в sessionStorage текущей вкладки."}
         </p>
+        {serverMeta?.paramsHash && (
+          <p className="text-[11px] text-[#756b63]">
+            {isKk ? "TTL 90 күн — тарих автоматты түрде жойылады." : "История хранится 90 дней (TTL), затем удаляется."}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Link href="/ai/history" className="text-[11px] font-medium text-[#6b5e52] underline underline-offset-2 hover:text-[#453d36]">
+            {isKk ? "Сервердегі тарихты ашу" : "Открыть серверную историю"}
+          </Link>
+        </div>
         {onReplay && (
           <div className="space-y-2 border-t border-[#ddd5cb] pt-3">
             <Button type="button" size="sm" variant="outline" onClick={() => onReplay(context.id)}>

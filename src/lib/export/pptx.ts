@@ -350,16 +350,26 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
   // пересекались, и на слайдах с подсказкой текст ложился поверх текста.
   if (options.watermark) {
     for (const slide of (pres as unknown as { slides: PptxGenJS.Slide[] }).slides) {
+      // Знак печатается двумя слоями: тёмный слой читается на белых/светлых
+      // слайдах, белый — на тёмно-синем финальном. Одиночный цвет всегда
+      // пропадал на одном из фонов.
       slide.addText("Создано в Mekty — бесплатный тариф", {
         x: 0.7,
         y: 7.02,
         w: 6,
         h: 0.32,
         fontSize: 10,
-        // Знак должен читаться и на тёмно-синем финальном слайде, и на
-        // белом: серый 94a3b8 на синем 1d4ed8 не читался вовсе.
+        color: "334155",
+        align: "left",
+      });
+      slide.addText("Создано в Mekty — бесплатный тариф", {
+        x: 0.7,
+        y: 7.02,
+        w: 6,
+        h: 0.32,
+        fontSize: 10,
         color: "ffffff",
-        transparency: 35,
+        transparency: 45,
         align: "left",
       });
     }

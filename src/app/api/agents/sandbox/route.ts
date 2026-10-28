@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getDb, COL } from "@/lib/mongo";
-import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
+import { getWorkspaceRuntime, MAX_FILE_BYTES } from "@/lib/workspace/runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +63,9 @@ export async function PUT(req: Request) {
 
   let body: { file?: string; content?: string };
   try { body = await req.json() as typeof body; } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-  if (typeof body.file !== "string" || typeof body.content !== "string" || body.content.length > 200_000) {
+  // Размер проверяем в байтах UTF-8: строка из 200k символов кириллицы
+  // занимает до 400k байт, а лимит рабочей области задан именно в байтах.
+  if (typeof body.file !== "string" || typeof body.content !== "string" || Buffer.byteLength(body.content, "utf8") > MAX_FILE_BYTES) {
     return NextResponse.json({ error: "Некорректный файл или содержимое" }, { status: 400 });
   }
 

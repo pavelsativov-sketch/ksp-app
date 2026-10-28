@@ -14,8 +14,15 @@
 async function initRespanTracing() {
   if (!process.env.RESPAN_API_KEY) return;
   try {
-    const { Respan } = await import("@respan/respan");
-    const respan = new Respan();
+    // Динамический импорт через переменную: статический анализ webpack видит
+    // «@respan/respan» и тащит в клиентский бандл весь граф OpenTelemetry с
+    // @grpc/grpc-js (требует Node-билтины), из-за чего в dev гидрация
+    // умирала. Через переменную импорт не анализируется и остаётся только
+    // на сервере.
+    const respanModule = await Function(
+      "return import(\"@respan/respan\")",
+    )() as typeof import("@respan/respan");
+    const respan = new respanModule.Respan();
     await respan.initialize();
   } catch (error) {
     // Трассировка не должна мешать серверу подняться: без неё приложение работает.

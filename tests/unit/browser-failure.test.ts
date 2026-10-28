@@ -41,6 +41,17 @@ describe("browser service failures", () => {
     expect(failure.message).not.toContain("Cloudflare");
   });
 
+  it("explains exhausted Vercel Sandbox snapshot storage without retrying", () => {
+    const failure = browserFailure({
+      message: "Status code 402 is not ok: Hobby plan usage limit exceeded for Snapshots Storage.",
+      status: 402,
+    });
+
+    expect(failure.status).toBe(402);
+    expect(failure.message).toContain("Vercel Sandbox");
+    expect(failure.message).toContain("snapshots");
+  });
+
   it("never mentions Cloudflare in any branch", () => {
     const inputs: Array<[unknown, number]> = [
       [new Error("connection reset"), 503],

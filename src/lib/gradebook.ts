@@ -33,7 +33,12 @@ export interface GradebookData {
   rows: GradebookRow[];
   students: StudentSummary[];
   assignments: Array<{ id: string; title: string; subject: string | null; grade: number | null }>;
+  /** true — выборка попыток обрезана лимитом, журнал неполон. */
+  rowsTruncated: boolean;
 }
+
+const MAX_ATTEMPTS = 5000;
+const MAX_ASSIGNMENTS = 1000;
 
 /**
  * Получить все результаты учеников для учителя, сгруппированные по ученикам.
@@ -46,14 +51,15 @@ export async function getTeacherGradebook(ownerId: string): Promise<GradebookDat
     .collection<AttemptDoc>(COL.assignmentAttempts)
     .find({ owner_id: ownerId })
     .sort({ created_at: -1 })
-    .limit(5000)
+    .limit(MAX_ATTEMPTS)
     .toArray();
+  const rowsTruncated = attempts.length >= MAX_ATTEMPTS;
 
   // Получаем все выдачи учителя для обогащения данных
   const assignments = await db
     .collection<AssignmentDoc>(COL.assignments)
     .find({ owner_id: ownerId })
-    .limit(1000)
+    .limit(MAX_ASSIGNMENTS)
     .toArray();
 
   const assignmentMap = new Map(assignments.map((a) => [a._id?.toHexString() ?? "", a]));
@@ -118,6 +124,7 @@ export async function getTeacherGradebook(ownerId: string): Promise<GradebookDat
     rows,
     students,
     assignments: Array.from(uniqueAssignments.values()),
+    rowsTruncated,
   };
 }
 

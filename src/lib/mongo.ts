@@ -92,6 +92,8 @@ export const COL = {
   schoolMembers: "school_members",
   schoolClassAssignments: "school_class_assignments",
   schoolAuditEvents: "school_audit_events",
+  // Корзина удалённых планов (мягкое удаление + восстановление).
+  planTrash: "plan_trash",
   schoolPlanApprovals: "school_plan_approval_cycles",
   notifications: "app_notifications",
   students: "students",
@@ -155,6 +157,10 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.aiEvents).createIndex({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600, name: "ai_events_ttl" }),
     db.collection(COL.aiEvents).createIndex({ task: 1, createdAt: -1 }, { name: "ai_events_task" }),
     db.collection(COL.aiEvents).createIndex({ user_id: 1, task: 1, createdAt: 1 }, { name: "ai_events_user_task_created" }),
+    db.collection(COL.aiEvents).createIndex(
+      { user_id: 1, schema_version: 1, createdAt: -1 },
+      { name: "ai_events_history_user_schema_created", partialFilterExpression: { schema_version: { $exists: true } } },
+    ),
     // Квота тарифа: один слот {user_id, task, month, seq} — уникальность только для документов с seq.
     db.collection(COL.aiEvents).createIndex(
       { user_id: 1, task: 1, month: 1, seq: 1 },
@@ -250,6 +256,12 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.vskInspections).createIndex({ school_id: 1 }, { name: "vsk_inspections_school" }),
     db.collection(COL.agentTasks).createIndex({ user_id: 1, created_at: -1 }, { name: "agent_tasks_user_created" }),
     db.collection(COL.agentTasks).createIndex({ school_id: 1, status: 1 }, { name: "agent_tasks_school_status" }),
+    // Один слот на пользователя: защита от гонки двух параллельных POST,
+    // когда оба могли бы создать «running»-задачу и запустить два раннера.
+    db.collection(COL.agentTasks).createIndex(
+      { user_id: 1 },
+      { unique: true, name: "agent_tasks_running_user_unique", partialFilterExpression: { status: "running" } },
+    ),
     db.collection(COL.agentExecutions).createIndex({ task_id: 1, created_at: -1 }, { name: "agent_executions_task_created" }),
     db.collection(COL.agentBrowserSessions).createIndex({ user_id: 1 }, { unique: true, name: "agent_browser_sessions_user_unique" }),
     db.collection(COL.agentPermissionRequests).createIndex({ user_id: 1, status: 1, created_at: -1 }, { name: "agent_permissions_user_status_created" }),

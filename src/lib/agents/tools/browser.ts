@@ -13,6 +13,7 @@ import {
 import { classifyClick, classifyTyping } from '../computer/safety';
 import { requestPermission } from '../permissions';
 import { detectPageAuthBarrier } from '../browser-dom';
+import { executeWithFallback } from '@/lib/ai/providers';
 
 async function extractPageSnapshot(page: {
   url: () => string;
@@ -163,6 +164,46 @@ export const browserTools = {
       };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : 'type failed' };
+    }
+  },
+
+  /**
+   * «Зрение» задачного агента: снимок текущей страницы → текстовое описание
+   * через vision-модель. Позволяет понять визуальное состояние (графики,
+   * ошибки, элементы вне innerText), не меняя страницу.
+   */
+  browserDescribeScreen: async (args: Record<string, never>, ctx?: { userId?: string }) => {
+    if (!ctx?.userId) return { success: false, error: 'Нужна пользовательская сессия' };
+    try {
+      const session = await getAgentBrowserSession(ctx.userId);
+      const shot = await session.page.screenshot({ type: 'jpeg', quality: 70 });
+      const base64 = shot.toString('base64');
+      const description = await executeWithFallback('vision', async (client, model) => {
+        const resp = await client.chat.completions.create({
+          model,
+          max_completion_tokens: 800,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Опиши подробно, что показано на экране: заголовки, поля, кнопки, ошибки, графики и их состояние. Это нужно агенту, который работает от лица учителя, для продолжения задачи.',
+                },
+                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
+              ],
+            },
+          ],
+        });
+        return resp.choices[0]?.message?.content ?? '';
+      });
+      return {
+        success: true,
+        url: session.page.url(),
+        description: String(description).trim().slice(0, 3000),
+      };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'vision failed' };
     }
   },
 };

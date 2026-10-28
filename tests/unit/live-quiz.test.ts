@@ -39,7 +39,8 @@ describe("live-quiz helpers", () => {
     expect(computeAnswerScore(correct, 15_000, 30)).toBe(13); // 12.5 → округляется
     expect(computeAnswerScore(correct, 60_000, 30)).toBe(10); // отрицательное время зажимается
     expect(computeAnswerScore(correct, -5_000, 30)).toBe(15); // ms < 0 → 0
-    expect(computeAnswerScore(wrong, 0, 30)).toBe(10); // неверный ответ — без бонуса
+    expect(computeAnswerScore(wrong, 0, 30)).toBe(0); // неверный ответ — 0 баллов
+    expect(computeAnswerScore(wrong, 5_000, 30)).toBe(0); // даже быстрый неверный
   });
 
   it("toPublicTask strips secret fields from MCQ", () => {

@@ -31,6 +31,13 @@ export async function createSchoolAction(formData: FormData): Promise<{ id: stri
   const user = await getCurrentUser();
   if (!user) return { error: 'Unauthorized' };
 
+  // Ограничение частоты создания школ — иначе можно спамить школьные записи.
+  const ip = await clientIp();
+  const byUser = await checkRateLimitAsync(`school:create:user:${user.id}`, 3, 3_600_000);
+  if (!byUser.ok) return { error: 'Слишком много школ за час. Попробуйте позже.' };
+  const byIp = await checkRateLimitAsync(`school:create:ip:${ip}`, 10, 3_600_000);
+  if (!byIp.ok) return { error: 'Слишком много запросов с этого адреса. Попробуйте позже.' };
+
   try {
     const data = {
       name: String(formData.get('name') ?? ''),

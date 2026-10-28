@@ -1,6 +1,6 @@
 import { getAccountSandbox } from "@/lib/workspace/runtime";
 import { RUNNER_SCRIPT } from "@/lib/agents/sandbox-runner-code";
-import { BrowserRpcError } from "@/lib/agents/browser-rpc";
+import { BrowserRpcError, getRunnerRpcSecret } from "@/lib/agents/browser-rpc";
 import { log } from "@/lib/logger";
 
 interface RunnerCacheEntry {
@@ -65,7 +65,9 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
     log.info("sandbox-browser: Starting browser runner inside Vercel Sandbox...", { userId });
 
     // 2. Записываем конфигурацию и скрипт runner'а
-    const secret = process.env.AUTH_SECRET;
+    // Секрет — производный от AUTH_SECRET на пользователя (см. getRunnerRpcSecret):
+    // в песочницу не попадает глобальный секрет приложения.
+    const secret = getRunnerRpcSecret(userId);
     await sandbox.fs.writeFile(
       "/tmp/runner-config.json",
       JSON.stringify({ secret, port: 3000 }),
@@ -102,7 +104,7 @@ if mkdir "$LOCK" 2>/dev/null; then
   cd /tmp
   if [ ! -f "$READY" ]; then
     npm init -y >"$LOG" 2>&1
-    npm i playwright@1.63.0 >>"$LOG" 2>&1
+    npm i playwright@1.64.1 >>"$LOG" 2>&1
     npx playwright install chromium >>"$LOG" 2>&1
     if [ -d /tmp/node_modules/playwright ]; then touch "$READY"; fi
   fi

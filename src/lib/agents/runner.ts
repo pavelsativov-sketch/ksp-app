@@ -3,7 +3,7 @@ import { getDb, COL } from '@/lib/mongo';
 import { tools } from './tools';
 import OpenAI from 'openai';
 import { executeWithFallback } from '@/lib/ai/providers';
-import { getControlOwner, releaseControlToUser, waitForControl } from './session';
+import { getControlOwner, releaseControlToUser, setControlOwner, waitForControl } from './session';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
 import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
 
@@ -18,6 +18,7 @@ const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekt
 - browserNavigate — открыть публичную страницу в облачном браузере и получить её текст + список кликабельных элементов с координатами (x, y);
 - browserClick — кликнуть в облачном браузере по координатам (x, y) из списка interactables;
 - browserType — ввести текст в поле на странице в облачном браузере (с опциональными координатами x, y поля и нажатием Enter);
+- browserDescribeScreen — показать текущий экран браузера vision-модели и получить текстовое описание того, что видно (заголовки, кнопки, графики, ошибки);
 - finishTask — завершить задачу с итоговым summary.
 Правила: делай шаги по одному, после каждого инструмента анализируй результат.
 Никогда не выдумывай результаты инструментов — они приходят в следующих сообщениях.
@@ -43,6 +44,7 @@ const TOOL_SCHEMAS = [
   { type: 'function' as const, function: { name: 'browserNavigate', description: 'Открыть URL в браузере, вернуть заголовок, видимый текст и список кликабельных элементов interactables с координатами (x, y)', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } },
   { type: 'function' as const, function: { name: 'browserClick', description: 'Кликнуть в браузере по координатам (x, y) из списка interactables текущей страницы и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, intent: { type: 'string', description: 'Краткое пояснение, на какую кнопку нажимаем' } }, required: ['x', 'y'] } } },
   { type: 'function' as const, function: { name: 'browserType', description: 'Ввести текст в поле на странице браузера (опционально кликнув по координатам x, y из interactables) и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, text: { type: 'string' }, pressEnter: { type: 'boolean' } }, required: ['text'] } } },
+  { type: 'function' as const, function: { name: 'browserDescribeScreen', description: 'Получить текстовое описание того, что сейчас видно на экране браузера (зрение): заголовки, кнопки, графики, ошибки. Полезно, когда текст страницы не даёт ответа', parameters: { type: 'object', properties: {}, required: [] } } },
   { type: 'function' as const, function: { name: 'finishTask', description: 'Завершить задачу с итогом', parameters: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } } },
 ];
 
@@ -65,6 +67,13 @@ export async function runAgentTask(
   const db = await getDb();
   const agentTasks = db.collection(COL.agentTasks);
 
+  // runAgentTask вызывается не только через startAgentTask: из очереди и при
+  // оживлении зависшей задачи он стартует напрямую. В этих путях в Mongo мог
+  // остаться owner=user от предыдущей паузы, и новый агент немедленно
+  // засыпал, ни разу не открыв браузер. Новый запуск всегда начинается у ИИ;
+  // позже учитель может безопасно забрать управление обычным control API.
+  await setControlOwner(userId, 'ai');
+
   const finish = async (status: 'completed' | 'failed' | 'stopped', patch: Record<string, unknown> = {}) => {
     await agentTasks.updateOne(
       { _id: new ObjectId(taskId) },
@@ -73,7 +82,10 @@ export async function runAgentTask(
     // Задача окончена — общая рабочая область возвращается учителю. Иначе
     // панель навсегда оставляла «AI РАБОТАЕТ» и кнопку «Забрать управление
     // себе», хотя управлять было уже некому.
-    await releaseControlToUser(userId).catch(() => {});
+    await releaseControlToUser(userId, taskId).catch(() => {});
+    // Освободился слот — следующее поручение из очереди подхватит поллер
+    // (startQueuePoller). Он работает вне контекста запроса и не зависит от
+    // завершения текущего выполнения.
   };
 
   // Сердцебиение: «пока статус running, раннер жив». Если серверлесс-функция
@@ -92,8 +104,22 @@ export async function runAgentTask(
     }
   };
 
+  // Watchdog: «Остановить» меняет статус в БД — прерываем долгий вызов
+  // модели/инструмента через AbortController, а не ждём конца следующей
+  // итерации (задержка могла достигать десятков секунд).
+  const abortController = new AbortController();
+  const watchdog = setInterval(async () => {
+    try {
+      const t = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
+      if (t && t.status !== 'running') abortController.abort();
+    } catch {
+      // кратковременный сбой БД — пропускаем тик
+    }
+  }, 1200);
+
   try {
     await beat(); // раннер поднялся — фиксируем жизнь до медленной проверки песочницы
+    await log({ type: 'START', message: `Задача запущена (${taskId})` }).catch(() => {});
     const workspace = await getWorkspaceRuntime(userId);
     const shellAvailable = (await workspace.getSandboxStatus()).available;
     const activeTools = shellAvailable
@@ -105,9 +131,34 @@ export async function runAgentTask(
     const baseSystemPrompt = shellAvailable
       ? SYSTEM_PROMPT
       : `${SYSTEM_PROMPT}\nВ этой рабочей области доступны браузер и файлы, но Linux-среда выполнения сейчас недоступна. Не вызывай команды и не утверждай, что скрипты запускались. Если задаче необходимо выполнить программу или системную команду, заверши её как заблокированную и объясни, что среда выполнения не настроена.`;
-    const systemPrompt = isBilimClassContext(prompt, '')
+
+    // Долговременная «память»: темы недавних задач помогают следующему
+    // поручению не начинать с нуля. Только заголовки (title) — без результатов,
+    // чтобы исключить утечку персональных данных (имена учеников, оценки, URL).
+    let memoryBlock = '';
+    try {
+      const recent = await agentTasks
+        .find(
+          {
+            user_id: new ObjectId(userId),
+            status: { $in: ['completed', 'stopped'] },
+          },
+          { projection: { title: 1, updated_at: 1 } }, // только тема, НЕ result
+        )
+        .sort({ updated_at: -1 })
+        .limit(3)
+        .toArray();
+      const parts = recent
+        .map((t) => String(t.title ?? '').trim().slice(0, 80))
+        .filter(Boolean);
+      if (parts.length) {
+        memoryBlock = `\nПоследние поручения (только темы, без результатов):\n${parts.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+      }
+    } catch { /* память некритична */ }
+
+    const systemPrompt = (isBilimClassContext(prompt, '')
       ? `${baseSystemPrompt}\n\n${bilimClassInstructions()}`
-      : baseSystemPrompt;
+      : baseSystemPrompt) + memoryBlock;
     const deadline = Date.now() + TIME_BUDGET_MS;
     // Сообщение о жёстком ограничении браузера (дневной лимит, 429):
     // только такие ошибки прерывают весь цикл. Мягкие ошибки (таймаут
@@ -118,18 +169,21 @@ export async function runAgentTask(
     // Мульти-провайдерный фоллбэк: Groq → Cerebras → Gemini → OpenRouter.
     // Провайдер используется для всего цикла; при его сбое (лимит 429 и т.п.)
     // loop перезапускается на следующем провайдере.
-    const summaryFinal = await executeWithFallback('tasks', async (client, model) => {
+    const summaryFinal = await executeWithFallback('tasks', async (client, model, config, signal) => {
       // ── План: короткий чеклист из 3–5 шагов для чата (как у Devin) ──
       try {
-        const planResp = await client.chat.completions.create({
-          model,
-          temperature: 0.2,
-          max_completion_tokens: 512,
-          messages: [
-            { role: 'system', content: 'Ты только составляешь план для другого агента, у которого есть инструменты для файлов и браузера. Не исполняй поручение, не отказывайся и не говори, что у тебя нет доступа. Составь 3–5 коротких шагов по-русски. Выведи только JSON без Markdown строго вида {"steps":["шаг 1","шаг 2","шаг 3"]}.' },
-            { role: 'user', content: `Задание другого агента: ${prompt}` },
-          ],
-        });
+        const planResp = await client.chat.completions.create(
+          {
+            model,
+            temperature: 0.2,
+            max_completion_tokens: 512,
+            messages: [
+              { role: 'system', content: 'Ты только составляешь план для другого агента, у которого есть инструменты для файлов и браузера. Не исполняй поручение, не отказывайся и не говори, что у тебя нет доступа. Составь 3–5 коротких шагов по-русски. Выведи только JSON без Markdown строго вида {"steps":["шаг 1","шаг 2","шаг 3"]}.' },
+              { role: 'user', content: `Задание другого агента: ${prompt}` },
+            ],
+          },
+          { signal },
+        );
         const raw = planResp.choices[0]?.message?.content ?? '{}';
         const parsed = JSON.parse(raw) as { steps?: unknown };
         const plan = Array.isArray(parsed.steps)
@@ -143,7 +197,7 @@ export async function runAgentTask(
         // план не обязателен — без него просто выполняем задачу
       }
 
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
       ];
@@ -200,14 +254,18 @@ export async function runAgentTask(
 
         await log({ type: 'THINK', message: `Шаг ${step}: обдумываю следующий ход…` });
 
-        const response = await client.chat.completions.create({
-          model,
-          max_completion_tokens: 1024,
-          messages,
-          tools: activeToolSchemas,
-          tool_choice: 'auto',
-          temperature: 0.2,
-        });
+        messages = trimMessages(messages);
+        const response = await client.chat.completions.create(
+          {
+            model,
+            max_completion_tokens: 1024,
+            messages,
+            tools: activeToolSchemas,
+            tool_choice: 'auto',
+            temperature: 0.2,
+          },
+          { signal },
+        );
         await beat(); // долгий вызов модели позади — подтверждаем жизнь
 
         const message = response.choices[0]?.message;
@@ -335,9 +393,20 @@ export async function runAgentTask(
       await finish('completed', { result: summaryFinal || null });
     }
   } catch (error) {
+    // AbortError — пользователь остановил задачу (watchdog) или сервер оборвал
+    // соединение: это не сбой, завершаем аккуратно статусом stopped.
+    if (error instanceof Error && error.name === 'AbortError') {
+      const afterStop = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
+      if (afterStop?.status !== 'stopped') {
+        await finish('stopped', { result: 'Остановлено пользователем' });
+      }
+      return;
+    }
     const message = error instanceof Error ? error.message : 'Ошибка агента';
     await log({ type: 'ERROR', message: `Агент упал: ${message}` });
     await finish('failed', { error: message });
+  } finally {
+    clearInterval(watchdog);
   }
 }
 
@@ -374,4 +443,28 @@ function shrinkArgs(name: string, args: Record<string, unknown>): Record<string,
     return { filename: args.filename, contentLength: args.content.length };
   }
   return args;
+}
+
+/**
+ * Держит транскрипт в границах контекста провайдера.
+ *
+ * Раньше messages рос без ограничений: результаты инструментов (до 4000
+ * символов каждый) накапливались на всех 12 шагах, и на длинных задачах
+ * контекст переполнялся. Сохраняем system + исходное задание, а середину
+ * сжимаем до короткой пометки, оставляя последние шаги.
+ */
+function trimMessages(
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  if (messages.length <= 32) return messages;
+  const head = messages.slice(0, 2);
+  const tail = messages.slice(-24);
+  return [
+    ...head,
+    {
+      role: 'system',
+      content: '(Промежуточные шаги опущены для экономии контекста; продолжайте с текущего состояния.)',
+    },
+    ...tail,
+  ];
 }

@@ -136,6 +136,7 @@ export function usePlanAi({ historyKey = "default" }: { historyKey?: string } = 
     setAiLoading(false);
     setProgress(null);
     setLastRunContext(null);
+    setAiError(null);
   }
 
   /**
@@ -233,6 +234,23 @@ export function usePlanAi({ historyKey = "default" }: { historyKey?: string } = 
         signal: controller.signal,
       });
 
+      if (!res.ok) {
+        // Отказ может прийти и как SSE-кадр error (квота, лимит), и как JSON:
+        // распознаём оба формата, чтобы показать настоящую причину.
+        const text = await res.text();
+        let message = text.slice(0, 300);
+        const match = text.match(/data:\s*(\{.*\})/);
+        if (match) {
+          try {
+            const ev = JSON.parse(match[1]) as { error?: string };
+            if (typeof ev.error === "string" && ev.error) message = ev.error;
+          } catch {
+            // оставляем сырой текст
+          }
+        }
+        throw new Error(message || `Сервер ответил ${res.status}`);
+      }
+
       if (!res.body) throw new Error("Сервер не вернул поток генерации");
 
       const data = await readStream(res.body, setProgress);
@@ -248,7 +266,7 @@ export function usePlanAi({ historyKey = "default" }: { historyKey?: string } = 
       };
       const runId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
-        : `ai-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        : `ai-${Date.now()}-${Math.floor(Math.random() * 0xffffff).toString(36)}`;
       const runContext: AiRunContext = {
         id: runId,
         grade: opts.grade,

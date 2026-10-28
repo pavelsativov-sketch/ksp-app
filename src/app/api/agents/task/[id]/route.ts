@@ -13,6 +13,7 @@ interface AgentTaskDoc {
   status: string;
   created_at?: Date;
   createdAt?: Date;
+  heartbeat_at?: Date;
   plan?: string[];
   title?: string;
 }
@@ -58,6 +59,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       const seen = new Set<string>();
       let closed = false;
       let metaSent = false;
+      let queuedSent = false;
 
       const close = () => {
         if (closed) return;
@@ -91,6 +93,12 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
             });
           }
 
+          // Задача в очереди — сообщаем об этом один раз, поток держим открытым.
+          if (!queuedSent && task.status === "queued") {
+            queuedSent = true;
+            push({ type: "STATUS_UPDATE", status: "queued" });
+          }
+
           // Пишем task_id + created_at (см. runner). Фолбэк на старые поля — для ранних логов.
           const newLogs = await agentExecutions
             .find({
@@ -117,7 +125,9 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
             });
           }
 
-          if (task.status !== "running") {
+          // Очередь и выполнение — «живые» статусы; остальное терминально.
+          const terminal = task.status !== "running" && task.status !== "queued";
+          if (terminal) {
             push({ type: "STATUS_UPDATE", status: task.status, result: (task as { result?: string }).result ?? null, error: (task as { error?: string }).error ?? null });
             close();
             return;
@@ -126,9 +136,15 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           // Если задача зависла в статусе «running» дольше допустимого,
           // функция Vercel/Cloudflare уже убита без обновления статуса.
           // Исправляем статус в БД, чтобы пользователь не видел вечный спиннер.
+          //
+          // Считаем «возраст» от последнего heartbeat, а не от created_at:
+          // при паузе на ручном входе учителя задача легально живёт дольше
+          // 12 минут, и heartbeat продолжает обновляться.
           const MAX_TASK_AGE_MS = 12 * 60_000; // 12 мин — выше потолка Vercel Pro (10 мин) + запас
           const taskStarted = (task.created_at ?? task.createdAt)?.getTime() ?? 0;
-          if (taskStarted > 0 && Date.now() - taskStarted > MAX_TASK_AGE_MS) {
+          const lastBeat = (task.heartbeat_at as Date | undefined)?.getTime?.() ?? 0;
+          const lastActivity = Math.max(taskStarted, lastBeat);
+          if (task.status === "running" && lastActivity > 0 && Date.now() - lastActivity > MAX_TASK_AGE_MS) {
             const staleMsg = "Задача превысила лимит времени и была остановлена автоматически.";
             try {
               await agentTasks.updateOne(

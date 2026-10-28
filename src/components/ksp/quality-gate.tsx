@@ -6,7 +6,7 @@
 // готовый чертёж, презентация и КТП были недоступны целиком.
 
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
 import { checkKspQuality, type QualityStatus } from "@/lib/ksp/quality";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
@@ -25,6 +25,8 @@ const color: Record<QualityStatus, string> = {
 /**
  * Гейт качества КСП: готовность к уроку и проверке.
  * Показывается владельцу на странице плана (не печатается).
+ * Каждый пункт ведёт в конкретное поле редактора (tab + anchor),
+ * раскрывает пояснение «как исправить» и помечает эвристики как не-норматив.
  */
 const kkCopy: Record<string, { label: string; hint: string; where?: string }> = {
   objectives: { label: "Оқу мақсаттары", hint: "Бағдарламадағы оқу мақсаттарын таңдаңыз.", where: "«Мақсаттар» бөлімі" },
@@ -51,31 +53,31 @@ const kkCopy: Record<string, { label: string; hint: string; where?: string }> = 
   "content-language": { label: "Қазақ тілінің бірізділігі", hint: "Жоспарда орысша қалған нұсқауларды қазақшаға аударыңыз.", where: "Барлық бөлімді тексеріңіз" },
 };
 
-function editorTabFor(itemId: string): "goals" | "context" | "flow" | "evaluation" {
-  if (itemId === "values") return "context";
-  if (itemId === "evaluation") return "evaluation";
-  if (itemId === "objectives" || itemId === "lesson-objectives" || itemId === "criteria" || itemId.startsWith("content-")) return "goals";
-  return "flow";
-}
-
 export function QualityGate({ content, planId, language = "ru" }: { content: Parameters<typeof checkKspQuality>[0]; planId: string; language?: "ru" | "kz" }) {
   const { locale } = useUiLocale();
   const { items, score } = checkKspQuality(content, language);
   const fails = items.filter((i) => i.status === "fail").length;
+  const warns = items.filter((i) => i.status === "warn").length;
   const isKk = locale === "kk";
   return (
-    <section aria-labelledby="quality-title" className="no-print space-y-4 rounded-xl border border-[#ddd5cb] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <section aria-labelledby="quality-title" data-testid="quality-gate" className="no-print space-y-4 rounded-xl border border-[#ddd5cb] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <h2 id="quality-title" className="text-xl font-semibold">{isKk ? `Мазмұн тексерістері: ${score}%` : `Автоматические проверки содержания: ${score}%`}</h2>
           <p className="text-sm text-slate-600">
             {fails === 0
               ? (isKk ? "Байланыстарда айқын қате табылған жоқ. Сары ұсыныстарды нақты сабаққа сай қарап шығыңыз." : "Явных ошибок связей нет. Просмотрите предупреждения с учётом своего урока.")
               : isKk ? `Түзетуге болатын байланыс қатесі: ${fails}. Қажетті өріске өтіп, шешімді мұғалім қабылдайды.` : `Найдены ошибки связей: ${fails}. Перейдите к полю; решение по содержанию остаётся за учителем.`}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{isKk ? "Бұл — көмекші эвристикалар; ресми нормативтерге сәйкестікті растамайды." : "Это вспомогательные эвристики, а не официальная проверка соответствия нормативам."}</p>
+          {warns > 0 && fails === 0 && (
+            <p className="text-xs text-amber-700">{isKk ? `Ескерту: ${warns}` : `Предупреждений: ${warns} — не блокируют сохранение, но стоит проверить перед печатью.`}</p>
+          )}
+          <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900" data-testid="quality-disclaimer">
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>{isKk ? "Бұл — көмекші эвристикалар; ресми нормативтерге сәйкестікті растамайды. Ұпай мен уақыт бағдарларын мұғалім «Сабақ барысы → Ориентиры планирования» бөлімінде өзі белгілейді." : "Это вспомогательные эвристики, а не официальная проверка соответствия нормативам. Ориентиры по баллам и времени задаёт учитель в «Ход урока → Ориентиры планирования»."}</span>
+          </p>
         </div>
-        <div role="progressbar" aria-label={isKk ? "Орындалған тексерістер" : "Автоматические проверки без замечаний"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} className="h-2.5 w-44 overflow-hidden rounded-full bg-muted">
+        <div role="progressbar" aria-label={isKk ? "Орындалған тексерістер" : "Автоматические проверки без замечаний"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} className="h-2.5 w-44 shrink-0 overflow-hidden rounded-full bg-muted">
           <div
             className={`h-full transition-all ${score >= 80 ? "bg-emerald-500" : score >= 50 ? "bg-amber-500" : "bg-red-500"}`}
             style={{ width: `${score}%` }}
@@ -85,15 +87,46 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
       <ul className="grid gap-2 md:grid-cols-2">
         {items.map((item) => {
           const Icon = icon[item.status];
+          const label = isKk ? kkCopy[item.id]?.label ?? item.label : item.label;
+          const hint = isKk ? kkCopy[item.id]?.hint ?? item.hint : item.hint;
+          const whereText = isKk ? kkCopy[item.id]?.where ?? item.where : item.where;
+          const href = `/plans/${planId}/edit?tab=${item.whereTab}${item.whereAnchor ? `#${item.whereAnchor}` : ""}`;
+          const hasDetails = Boolean(item.details);
           return (
-            <li key={item.id} className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              <Icon className={`mt-0.5 size-4 shrink-0 ${color[item.status]}`} />
-              <div>
-                <p className="font-medium">{isKk ? kkCopy[item.id]?.label ?? item.label : item.label}</p>
-                <p className="text-slate-600">{isKk ? kkCopy[item.id]?.hint ?? item.hint : item.hint}</p>
+            <li key={item.id} data-testid={`quality-item-${item.id}`} data-status={item.status} className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm">
+              <Icon className={`mt-0.5 size-4 shrink-0 ${color[item.status]}`} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium leading-tight">
+                  {label}
+                  {item.nonNormative && (
+                    <span className="ml-2 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                      {isKk ? "бағдар" : "ориентир"}
+                    </span>
+                  )}
+                </p>
+                <p className="text-slate-600">{hint}</p>
+                {hasDetails && (
+                  <details className="mt-1 group">
+                    <summary className="cursor-pointer list-none text-xs font-medium text-slate-700 underline decoration-dotted underline-offset-2 marker:hidden hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2B2D83]">
+                      <span className="inline-flex items-center gap-1">
+                        {isKk ? "Қалай түзетуге болады" : "Как исправить"}
+                        <span aria-hidden className="transition group-open:rotate-180">▾</span>
+                      </span>
+                    </summary>
+                    <p className="mt-1.5 rounded-md bg-slate-50 px-2.5 py-2 text-xs leading-relaxed text-slate-700">{item.details}</p>
+                    {item.nonNormative && (
+                      <p className="mt-1 text-[11px] italic text-amber-800">{isKk ? "Бұл тексеріс ресми норма емес — шешімді мұғалім қабылдайды." : "Эта проверка — не норматив: решение принимает учитель."}</p>
+                    )}
+                  </details>
+                )}
                 {item.status !== "ok" && (
-                  <Link href={`/plans/${planId}/edit?tab=${editorTabFor(item.id)}`} aria-label={`${isKk ? "Түзету" : "Перейти к исправлению"}: ${isKk ? kkCopy[item.id]?.label ?? item.label : item.label}`} className="rounded-sm text-xs font-medium text-[#2B2D83] underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
-                    {isKk ? kkCopy[item.id]?.where ?? "Түзету орнын ашыңыз" : item.where} →
+                  <Link
+                    href={href}
+                    aria-label={`${isKk ? "Түзету" : "Перейти к исправлению"}: ${label}`}
+                    data-testid={`quality-link-${item.id}`}
+                    className="mt-1 inline-flex rounded-sm text-xs font-medium text-[#2B2D83] underline underline-offset-2 hover:text-[#1a1c6b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2B2D83]"
+                  >
+                    {whereText} →
                   </Link>
                 )}
               </div>

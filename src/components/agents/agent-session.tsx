@@ -17,7 +17,7 @@ export interface AgentEvent {
   createdAt?: string | null;
 }
 
-type Status = "connecting" | "running" | "completed" | "failed" | "stopped";
+type Status = "connecting" | "queued" | "running" | "completed" | "failed" | "stopped";
 
 /**
  * Живой лог сессии агента: подписка на SSE-поток /api/agents/task/[id],
@@ -67,6 +67,15 @@ function AgentSessionStream({
       try {
         const ev = JSON.parse(e.data) as AgentEvent & { status?: string };
         if (ev.type === "STATUS_UPDATE") {
+          if (ev.status === "queued") {
+            // Задача стоит в очереди: ждём, когда запустится.
+            setStatus("queued");
+            return;
+          }
+          if (ev.status === "running") {
+            setStatus("running");
+            return;
+          }
           setStatus(ev.status === "failed" ? "failed" : ev.status === "stopped" ? "stopped" : "completed");
           final = true;
           es.close();
@@ -357,7 +366,7 @@ function extractResult(ev: AgentEvent): string | null {
 }
 
 export function StatusDot({ status }: { status: Status }) {
-  const color = status === "running" || status === "connecting" ? "bg-amber-400 animate-pulse" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
+  const color = status === "running" || status === "connecting" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-sky-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
   return <span className={`inline-block size-2 rounded-full ${color}`} aria-hidden />;
 }
 

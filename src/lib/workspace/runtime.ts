@@ -4,7 +4,8 @@ import { getDb, COL } from "@/lib/mongo";
 import type { Sandbox } from "@vercel/sandbox";
 
 const ROOT = "workspace";
-const MAX_FILE_BYTES = 200_000;
+/** Максимальный размер файла рабочей области (в байтах UTF-8). */
+export const MAX_FILE_BYTES = 200_000;
 const MAX_SNAPSHOT_BYTES = 2_000_000;
 const MAX_SNAPSHOTS = 10;
 
@@ -229,10 +230,24 @@ async function makeVercelRuntime(userId: string) {
   };
 }
 
-function splitFileName(input: string): { path: string; name: string } {
+/**
+ * Разбор имени файла на (путь, имя) с защитой от path traversal.
+ *
+ * Запрещаем сегменты:
+ *  - пустые («//»), "." и ".." — обход каталога;
+ *  - начинающиеся с точки (dotfiles) — в песочнице они не нужны, а имена
+ *    вида ".", "..", "...", "..hidden" на части ОС трактуются неочевидно;
+ *  - заканчивающиеся пробелом/точкой — на Windows такие имена запрещены.
+ */
+export function splitFileName(input: string): { path: string; name: string } {
   const normalized = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
   const segments = normalized.split("/");
-  if (!normalized || normalized.length > 1000 || segments.some((part) => !part || part === "." || part === ".." || part.length > 200)) {
+  const invalid = (part: string) =>
+    !part ||
+    part.length > 200 ||
+    part.startsWith(".") ||
+    /\.$/.test(part);
+  if (!normalized || normalized.length > 1000 || segments.some(invalid)) {
     throw new Error("Некорректный путь файла");
   }
   const name = segments.pop()!;

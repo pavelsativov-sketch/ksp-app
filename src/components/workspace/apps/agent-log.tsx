@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, Loader2, CheckCircle2, AlertCircle, Wrench, BrainCircuit } from 'lucide-react';
 
 interface LogEntry {
-  id: number;
+  id: string;
   type: 'START' | 'THINK' | 'TOOL_CALL' | 'TOOL_RESULT' | 'REASONING' | 'END' | 'ERROR' | 'WARNING' | 'user';
   message: string;
   data?: unknown;
@@ -46,7 +46,9 @@ export function AgentLogApp() {
                 setRunning(false);
               } else if (parsed.type) {
                 setLogs(prev => [...prev, {
-                  id: Date.now() + Math.random(),
+                  id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${prev.length}`,
                   type: parsed.type,
                   message: parsed.message || '',
                   data: parsed.data,
@@ -69,7 +71,7 @@ export function AgentLogApp() {
     if (!prompt.trim() || running) return;
     const userMsg = prompt.trim();
     setPrompt('');
-    setLogs(prev => [...prev, { id: Date.now(), type: 'user', message: userMsg, timestamp: new Date() }]);
+    setLogs(prev => [...prev, { id: crypto.randomUUID ? crypto.randomUUID() : `u-${Date.now()}`, type: 'user', message: userMsg, timestamp: new Date() }]);
     setRunning(true);
 
     try {
@@ -82,12 +84,12 @@ export function AgentLogApp() {
       if (data.taskId) {
         setTaskId(data.taskId);
       } else {
-        setLogs(prev => [...prev, { id: Date.now(), type: 'ERROR', message: data.error || 'Failed to start task', timestamp: new Date() }]);
+        setLogs(prev => [...prev, { id: crypto.randomUUID ? crypto.randomUUID() : `e-${Date.now()}`, type: 'ERROR', message: data.error || 'Failed to start task', timestamp: new Date() }]);
         setRunning(false);
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
-      setLogs(prev => [...prev, { id: Date.now(), type: 'ERROR', message, timestamp: new Date() }]);
+      setLogs(prev => [...prev, { id: crypto.randomUUID ? crypto.randomUUID() : `e-${Date.now()}`, type: 'ERROR', message, timestamp: new Date() }]);
       setRunning(false);
     }
   };

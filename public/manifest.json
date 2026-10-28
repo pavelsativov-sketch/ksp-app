@@ -1,0 +1,46 @@
+{
+  "name": "Mekty — КСП и материалы к уроку",
+  "short_name": "Mekty",
+  "description": "КСП, рабочие листы и презентации для учителей Казахстана. Работает офлайн с черновиками.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#fdfbf7",
+  "theme_color": "#1a3a2f",
+  "lang": "ru",
+  "orientation": "any",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/mekty-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Новый КСП",
+      "url": "/plans/new",
+      "description": "Создать новый краткосрочный план"
+    },
+    {
+      "name": "Мои планы",
+      "url": "/dashboard",
+      "description": "Открыть архив планов"
+    }
+  ]
+}

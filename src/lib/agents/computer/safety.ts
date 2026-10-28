@@ -280,7 +280,7 @@ export function classifyAction(name: string): SafetyDecision {
 const INJECTION_PATTERNS: RegExp[] = [
   /(игнорируй|игнорировать|забудь|не учитывай)\s+(все\s+)?(предыдущие|прежние|выше|прошлые)/i,
   /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules)/i,
-  /(disregard|forget)\s+(all\s+)?(your\s+)?(previous|prior|earlier)\s+(instructions|directions)/i,
+  /(disregard|forget)\s+(all\s+)?(your\s+)?(previous|prior|earlier)\s+(instructions|directions|rules|commands|prompts)/i,
   /(you are now|теперь ты|отныне ты)\s+(a|an|you are)?\s*(админ|admin|root|developer|разработчик)/i,
   /(new instructions|новые инструкции|новое задание)\s*[:：]/i,
   /(system\s*:\s*you|система\s*:\s*ты)/i,

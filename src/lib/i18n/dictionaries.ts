@@ -784,6 +784,7 @@ const ru = {
       saveDraft: "Сохранить черновик",
       save: "Сохранить",
       saveTitle: "Сохранить (Ctrl+S)",
+      viewPlan: "Открыть план",
     },
     aiDialog: {
       aria: "Результат AI-заполнения",
@@ -1707,6 +1708,7 @@ planEditor: {
       saveDraft: "Нұсқаны сақтау",
       save: "Сақтау",
       saveTitle: "Сақтау (Ctrl+S)",
+      viewPlan: "Жоспарды ашу",
     },
     aiDialog: {
       aria: "AI-толтыру нәтижесі",

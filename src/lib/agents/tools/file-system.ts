@@ -8,9 +8,12 @@ export const fileSystemTools = {
     try {
       if (!ctx?.userId) throw new Error('Нет пользователя сессии');
       const { classifyCommand, alwaysAllows, requestPermission } = await import('@/lib/agents/permissions');
-      if (classifyCommand(command) === 'high' && !await alwaysAllows(ctx.userId)) {
-        const allowed = await requestPermission(ctx.userId, command, 'high');
-        if (!allowed) return { success: false, error: 'Команда высокого риска отклонена или запрос разрешения истёк. Выполни безопасный вариант или попроси пользователя разрешить команду.' };
+      const risk = classifyCommand(command);
+      // Подтверждение требуется для всего, что не входит в явный LOW-список
+      // (medium-команды раньше выполнялись без спроса — см. permissions.ts).
+      if (risk !== 'low' && !await alwaysAllows(ctx.userId)) {
+        const allowed = await requestPermission(ctx.userId, command, risk);
+        if (!allowed) return { success: false, error: 'Команда отклонена или запрос разрешения истёк. Выполни безопасный вариант или попроси пользователя разрешить команду.' };
       }
       const runtime = await getWorkspaceRuntime(ctx.userId);
       const result = await runtime.runCommand(command, typeof timeoutMs === 'number' ? timeoutMs : 90_000);

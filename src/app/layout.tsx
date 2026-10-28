@@ -17,6 +17,7 @@ import { HeaderScrollEffect } from "@/components/landing/header-scroll";
 import { MarketingChrome } from "@/components/landing/marketing-chrome";
 import { ToastProvider } from "@/components/ui/toast";
 import { FirstRunOnboarding } from "@/components/onboarding/first-run";
+import { RegisterSW } from "@/components/pwa/register-sw";
 import styles from "@/components/landing/site-chrome.module.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "cyrillic"], display: "swap" });
@@ -29,6 +30,8 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: `${SITE_NAME} — комплект к уроку за 5 минут`,
   description: SITE_DESCRIPTION,
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "default" },
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
@@ -133,6 +136,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             footer={footer}
           />
           {user && <FirstRunOnboarding />}
+          <RegisterSW />
         </ToastProvider>
         </LocaleProvider>
       </body>

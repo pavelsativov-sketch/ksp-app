@@ -60,6 +60,9 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [waiting, setWaiting] = useState(false);
   const [waitSec, setWaitSec] = useState(0);
   const waitingRef = useRef(false);
+  // Счётчик подряд идущих 503: после трёх останавливаем polling.
+  const consecutive503Ref = useRef(0);
+  const unavailableRef = useRef(false);
 
   const [imgLayout, setImgLayout] = useState<{ width: number; height: number } | null>(null);
 
@@ -187,6 +190,19 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     if (!imgSrc) beginWait();
     try {
       const res = await fetch(`${BASE}?action=screenshot`, { signal: abortRef.current.signal, cache: 'no-store' });
+      // Устойчивый 503 — браузер недоступен по окружению (например, вне
+      // Vercel). Не долбим сервер каждые 1.2с: останавливаем polling и
+      // показываем понятное сообщение.
+      if (res.status === 503) {
+        consecutive503Ref.current += 1;
+        if (consecutive503Ref.current >= 3) {
+          unavailableRef.current = true;
+          setError('Браузер рабочей области доступен только в Vercel-окружении (Sandbox). Повторите позже или разверните приложение на Vercel.');
+        }
+        return undefined;
+      }
+      consecutive503Ref.current = 0;
+      unavailableRef.current = false;
       return await acceptFrame(res);
     } catch (e: unknown) {
       const isAbort = e instanceof Error && e.name === 'AbortError';
@@ -449,6 +465,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   // Paused while user is actively controlling the browser to avoid refresh interruptions.
   useEffect(() => {
     const id = setInterval(() => {
+      if (unavailableRef.current) return;
       if (
         document.visibilityState === 'visible' &&
         pendingCountRef.current === 0 &&
@@ -818,7 +835,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               <p className="text-white/80 font-semibold text-sm">Запускаю браузер…</p>
               <p className="text-white/45 text-xs mt-1.5">Первый запуск поднимает личный браузер и занимает около минуты. Повтор произойдёт автоматически.</p>
             </div>
-            <button type="button" onClick={() => { setError(''); void fetchFrame(); }}
+            <button type="button" onClick={() => { unavailableRef.current = false; consecutive503Ref.current = 0; setError(''); void fetchFrame(); }}
               className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
               Проверить снова
             </button>

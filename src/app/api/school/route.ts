@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireApiAuth } from '@/lib/api-auth';
 import { getUserSchools, createSchool } from '@/lib/school';
 import { ACTIVE_SCHOOL_COOKIE } from '@/lib/school/active';
+import { checkRateLimitAsync, clientIp } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 const createSchoolSchema = z.object({
@@ -60,6 +61,16 @@ export async function POST(req: Request) {
     const authResult = await requireApiAuth();
     if (authResult.response) return authResult.response;
     const user = authResult.user;
+
+    const byUser = await checkRateLimitAsync(`school:create:user:${user.id}`, 3, 3_600_000);
+    if (!byUser.ok) {
+      return NextResponse.json({ error: 'Слишком много школ за час. Попробуйте позже.' }, { status: 429 });
+    }
+    const byIp = await checkRateLimitAsync(`school:create:ip:${clientIp(req)}`, 10, 3_600_000);
+    if (!byIp.ok) {
+      return NextResponse.json({ error: 'Слишком много запросов с этого адреса.' }, { status: 429 });
+    }
+
     const body = await req.json();
     
     const parseResult = createSchoolSchema.safeParse(body);

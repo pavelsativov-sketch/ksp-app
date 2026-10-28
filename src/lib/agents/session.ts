@@ -39,9 +39,22 @@ export async function setControlOwner(userId: string, owner: "user" | "ai"): Pro
  * панель перестаёт утверждать, что «AI работает». На паузе у входа в
  * авторизацию управление уже отдано учителю отдельно (runner.ts), поэтому
  * здесь мы его только подтверждаем.
+ *
+ * Если передан taskId — возвращаем управление только когда активная (running)
+ * задача этого пользователя действительно та самая. Иначе поздний финиш
+ * зомби-раннера приостановил бы уже новую живую задачу.
  */
-export async function releaseControlToUser(userId: string): Promise<void> {
-  if (await getControlOwner(userId) === "ai") await setControlOwner(userId, "user");
+export async function releaseControlToUser(userId: string, taskId?: string): Promise<void> {
+  if (await getControlOwner(userId) !== "ai") return;
+  if (taskId) {
+    const db = await getDb();
+    const active = await db.collection(COL.agentTasks).findOne(
+      { user_id: validUserId(userId), status: "running" },
+      { projection: { _id: 1 } },
+    );
+    if (active && active._id.toString() !== taskId) return;
+  }
+  await setControlOwner(userId, "user");
 }
 
 /** Pause agent work while the account owner controls the shared workspace. */

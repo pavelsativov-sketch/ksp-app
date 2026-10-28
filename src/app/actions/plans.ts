@@ -137,12 +137,102 @@ export async function deletePlanAction(id: string) {
   try {
     const user = await getCurrentUser();
     if (!user) return { error: "Требуется вход" };
+    const oid = toObjectId(id);
+    if (!oid) return { error: "Некорректный id" };
+    const db = await getDb();
+    const doc = await db.collection<PlanDoc>(COL.plans).findOne({ _id: oid, owner_id: user.id });
+    if (!doc) return { error: "План не найден" };
+    // Мягкое удаление: полная копия уходит в корзину, чтобы план можно было
+    // восстановить из дашборда (restorePlanAction).
+    await db.collection(COL.planTrash).updateOne(
+      { original_id: oid, owner_id: user.id },
+      { $set: { original: doc, deleted_at: new Date() } },
+      { upsert: true },
+    );
     await deletePlanWithVersions(id, user.id);
     refreshPlan(id);
   } catch (error) {
     return { error: planMutationError(error, "Не удалось удалить план") };
   }
   redirect("/dashboard");
+}
+
+export interface TrashedPlanRow {
+  id: string;
+  title: string;
+  grade: number | null;
+  topic: string | null;
+  deletedAt: string;
+}
+
+/** Список удалённых планов пользователя (для корзины на дашборде). */
+export async function listTrashedPlans(userId: string, limit = 20): Promise<TrashedPlanRow[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection(COL.planTrash)
+    .find({ owner_id: userId })
+    .sort({ deleted_at: -1 })
+    .limit(limit)
+    .toArray();
+  return docs.map((d) => ({
+    id: String(d._id),
+    title: String((d.original as PlanDoc | undefined)?.title ?? "(без названия)"),
+    grade: Number.isFinite((d.original as PlanDoc | undefined)?.grade)
+      ? (d.original as PlanDoc).grade
+      : null,
+    topic: typeof (d.original as PlanDoc | undefined)?.content?.topic === "string"
+      ? (d.original as PlanDoc).content.topic
+      : null,
+    deletedAt: d.deleted_at instanceof Date ? d.deleted_at.toISOString() : new Date().toISOString(),
+  }));
+}
+
+/** Обёртка для формы: достаёт id из FormData (ожидаемый тип server action — Promise<void>). */
+export async function restorePlanFormAction(formData: FormData): Promise<void> {
+  await restorePlanAction(String(formData.get("trashId") ?? "").trim());
+}
+
+/** Восстановление плана из корзины. */
+export async function restorePlanAction(trashId: string): Promise<{ ok: true } | { error: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { error: "Требуется вход" };
+    const oid = toObjectId(trashId);
+    if (!oid) return { error: "Некорректный id" };
+    const db = await getDb();
+    const trashed = await db.collection(COL.planTrash).findOne({ _id: oid, owner_id: user.id });
+    if (!trashed || !trashed.original) return { error: "Удалённый план не найден" };
+    const original = trashed.original as unknown as PlanDoc;
+    await db.collection<PlanDoc>(COL.plans).insertOne(original);
+    await db.collection(COL.planTrash).deleteOne({ _id: oid });
+    revalidatePath("/dashboard");
+    revalidatePath(`/plans/${String(original._id)}`);
+    return { ok: true };
+  } catch (error) {
+    return { error: planMutationError(error, "Не удалось восстановить план") };
+  }
+}
+
+/**
+ * Удаление серверного черновика при отмене редактирования: иначе орфанные
+ * «(без названия)» записи навсегда оставались бы в архиве.
+ */
+export async function deleteDraftAction(id: string): Promise<{ ok: true } | { error: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { error: "Требуется вход" };
+    const oid = toObjectId(id);
+    if (!oid) return { error: "Некорректный id" };
+    const db = await getDb();
+    const plan = await db.collection<PlanDoc>(COL.plans).findOne({ _id: oid, owner_id: user.id });
+    if (!plan) return { error: "План не найден" };
+    if (!plan.is_draft) return { error: "План не является черновиком" };
+    await deletePlanWithVersions(id, user.id);
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return { error: planMutationError(error, "Не удалось удалить черновик") };
+  }
 }
 
 export async function duplicatePlanAction(id: string) {
@@ -154,7 +244,14 @@ export async function duplicatePlanAction(id: string) {
     if (!oid) return { error: "Некорректный id" };
     const db = await getDb();
     const src = await db.collection<PlanDoc>(COL.plans).findOne({
-      _id: oid, $or: [{ owner_id: user.id }, { visibility: "public" }],
+      _id: oid,
+      $or: [
+        { owner_id: user.id },
+        { visibility: "public" },
+        // unlisted — доступен по прямой ссылке, поэтому его тоже можно
+        // клонировать; скрытые модерацией — нельзя.
+        { visibility: "unlisted", moderation_hidden: { $ne: true } },
+      ],
     });
     if (!src) return { error: "План не найден" };
     const suffix = " (копия)";

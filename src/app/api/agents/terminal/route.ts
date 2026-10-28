@@ -27,7 +27,11 @@ export async function POST(req: Request) {
   }
   try {
     const runtime = await getWorkspaceRuntime(auth.user.id);
-    const result = await runtime.runCommand(body.command, typeof body.timeoutMs === "number" ? body.timeoutMs : undefined);
+    // Записываем PID процесса в /tmp/mekty-term.pid и заменяем оболочку
+    // командой (exec): теперь «Стоп» (/api/agents/terminal/stop) может
+    // послать SIGTERM именно процессу команды, а не обёртке.
+    const tracked = `echo $$ > /tmp/mekty-term.pid; exec ${body.command}`;
+    const result = await runtime.runCommand(tracked, typeof body.timeoutMs === "number" ? body.timeoutMs : undefined);
     return NextResponse.json({ success: result.exitCode === 0, ...result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось выполнить команду";

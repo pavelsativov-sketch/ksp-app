@@ -34,6 +34,12 @@ export async function GET(
 
   const user = await getCurrentUser();
   const db = await getDb();
+  const oid = toObjectId(id);
+  if (!oid) return NextResponse.json({ likes: 0, liked: false }, { headers: { "Cache-Control": "no-store" } });
+  const plan = await db.collection(COL.plans).findOne({ _id: oid }, { projection: { moderation_hidden: 1 } });
+  if (plan?.moderation_hidden === true) {
+    return NextResponse.json({ likes: 0, liked: false }, { headers: { "Cache-Control": "no-store" } });
+  }
   const likesCollection = db.collection<PlanLikeDoc>(COL.planLikes);
   const likes = await likesCollection.countDocuments({ plan_id: id });
   const liked = user ? Boolean(await likesCollection.findOne({ _id: likeKey(user.id, id) })) : false;
@@ -59,6 +65,11 @@ export async function POST(
   if (!oid) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const plan = await db.collection(COL.plans).findOne({ _id: oid });
   if (!plan) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // План, скрытый модерацией, лайкать нельзя: он не должен набирать
+  // популярность по прямой ссылке, пока находится в очереди модерации.
+  if (plan.moderation_hidden === true) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   // Лайкать можно публичные и unlisted; свой план — нет смысла.
   if (plan.visibility === "private" && plan.owner_id !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

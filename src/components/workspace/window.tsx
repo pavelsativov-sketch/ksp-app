@@ -33,8 +33,11 @@ export function Window({ id, title, children, onClose }: WindowProps) {
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, origX: 0, origY: 0 });
   const resizeRef = useRef({ resizing: false, edge: '', startX: 0, startY: 0, origW: 0, origH: 0, origX: 0, origY: 0 });
 
-  if (!windowState || windowState.isMinimized) return null;
+  if (!windowState) return null;
 
+  // Свернутое окно скрываем CSS, а не размонтированием: иначе приложение
+  // (терминал, редактор, файлы) теряло бы своё состояние при сворачивании.
+  const minimized = Boolean(windowState.isMinimized);
   const isMax = windowState.isMaximized;
 
   const close = () => {
@@ -108,7 +111,7 @@ export function Window({ id, title, children, onClose }: WindowProps) {
   };
 
   const style: React.CSSProperties = isMax
-    ? { position: 'absolute', top: 0, left: 0, width: '100%', height: 'calc(100% - 48px)', zIndex: windowState.zIndex, borderRadius: 0 }
+    ? { position: 'absolute', top: 0, left: 0, width: '100%', height: 'calc(100% - 48px)', zIndex: windowState.zIndex, borderRadius: 0, display: minimized ? 'none' : undefined }
     // max-* удерживает окно внутри рабочей области: в двухпанельной раскладке
     // колонка уже, чем размер окна по умолчанию (960×640).
     : {
@@ -116,6 +119,7 @@ export function Window({ id, title, children, onClose }: WindowProps) {
         maxWidth: `calc(100% - ${Math.max(0, pos.x)}px)`,
         maxHeight: `calc(100% - ${Math.max(0, pos.y)}px)`,
         zIndex: windowState.zIndex,
+        display: minimized ? 'none' : undefined,
       };
 
   return (

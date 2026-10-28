@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb, COL, toObjectId, isMongoConfigured } from "@/lib/mongo";
 import { requireApiAuth } from "@/lib/api-auth";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { embedTextbookChunks, embeddingProgress, type TextbookDoc } from "@/lib/rag/ingest";
 
 export const runtime = "nodejs";
@@ -10,6 +11,18 @@ export const maxDuration = 60;
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+
+  // Вычисление embeddings — платная облачная операция: строгий лимит,
+  // чтобы публичные учебники Арман-ПВ нельзя было пересчитывать бесконечно.
+  const rl = await checkRateLimitAsync(`embeddings:${auth.user.id}`, 12, 3600_000);
+  if (!rl.ok) {
+    const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+    return NextResponse.json(
+      { error: "Превышен лимит пересчёта embeddings (12 в час). Попробуйте позже." },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
+  }
+
   const { id } = await params;
   const oid = toObjectId(id);
   if (!oid) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
