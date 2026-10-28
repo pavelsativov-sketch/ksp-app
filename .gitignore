@@ -33,6 +33,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.local.example
 
 # Разовые отладочные скрипты с зашитыми учётными данными production.
 # Не коммитить: в них лежит живой пароль и почта владельца.
@@ -75,3 +76,6 @@ dev-os-check.pid
 .tools/
 nul
 test-bilim-*.png
+
+# Черновые пробы (могут содержать ключи)
+*.tmp.mjs

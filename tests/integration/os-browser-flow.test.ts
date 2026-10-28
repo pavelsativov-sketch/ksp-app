@@ -17,8 +17,10 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const AUTH_SECRET = "integration-secret-definitely-longer-than-32-chars";
-const PORT = 3211;
-const RPC_URL = `http://127.0.0.1:${PORT}/_agent/browser`;
+// Как в проде: у каждого пользователя свой раннер (своя песочница) со своим
+// производным секретом. Общий AUTH_SECRET раннеру больше не годится.
+const PORTS: Record<string, number> = {};
+const rpcUrlFor = (userId: string) => `http://127.0.0.1:${PORTS[userId]}/_agent/browser`;
 
 /** Что persist кладёт в Mongo — читается обратно тем же шифрованием. */
 const stored = new Map<string, string>();
@@ -49,7 +51,7 @@ vi.mock("@/lib/mongo", () => ({
 // На Vercel приложение само достаёт адрес раннера из песочницы. Здесь
 // песочницу заменяет локальный процесс; всё остальное — настоящее.
 vi.mock("@/lib/agents/sandbox-browser-service", () => ({
-  getSandboxBrowserRpcUrl: async () => RPC_URL,
+  getSandboxBrowserRpcUrl: async (userId: string) => rpcUrlFor(userId),
 }));
 
 const {
@@ -76,7 +78,9 @@ const USER = `651f${"0".repeat(18)}aa`;
 // Отдельный пользователь для проверки смерти браузера: тест нарочно убивает
 // сессию, и общую трогать нельзя.
 const USER_CRASH = `651f${"0".repeat(18)}bb`;
-let runner: ReturnType<typeof spawn> | null = null;
+const runners: Array<ReturnType<typeof spawn>> = [];
+PORTS[USER] = 3211;
+PORTS[USER_CRASH] = 3212;
 
 /**
  * Chromium может быть не установлен (`npx playwright install chromium`).
@@ -113,23 +117,31 @@ beforeAll(async () => {
   const file = path.join(dir, "runner.mjs");
   writeFileSync(file, loadRunnerScript(), "utf8");
 
-  runner = spawn(process.execPath, [file], {
-    env: { ...process.env, PORT: String(PORT), AUTH_SECRET },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  runner.stderr?.on("data", () => {});
-
-  for (let i = 0; i < 60; i++) {
-    try {
-      if ((await fetch(`http://127.0.0.1:${PORT}/health`)).ok) return;
-    } catch { /* раннер ещё поднимается */ }
-    await sleep(500);
+  const { getRunnerRpcSecret } = await import("@/lib/agents/browser-rpc");
+  for (const user of [USER, USER_CRASH]) {
+    const port = PORTS[user]!;
+    const child = spawn(process.execPath, [file], {
+      env: { ...process.env, PORT: String(port), AUTH_SECRET, BROWSER_RPC_SECRET: getRunnerRpcSecret(user) },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stderr?.on("data", () => {});
+    runners.push(child);
   }
-  throw new Error("раннер не поднялся");
+
+  for (const user of [USER, USER_CRASH]) {
+    let ready = false;
+    for (let i = 0; i < 60 && !ready; i++) {
+      try {
+        ready = (await fetch(`http://127.0.0.1:${PORTS[user]}/health`)).ok;
+      } catch { /* раннер ещё поднимается */ }
+      if (!ready) await sleep(500);
+    }
+    if (!ready) throw new Error("раннер не поднялся");
+  }
 }, 60_000);
 
 afterAll(() => {
-  runner?.kill();
+  for (const child of runners) child.kill();
 });
 
 describe.skipIf(!chromiumAvailable)("ОС: сессия браузера", () => {

@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { log } from "@/lib/logger";
+import { getBrowserTarget } from "@/lib/agents/runtime-mode";
 
 const encoder = new TextEncoder();
 // Раннер принимает тело до 256 КБ. Снимки IndexedDB со сторонних сайтов
@@ -36,26 +37,35 @@ function transferableStorageState(value: unknown): unknown {
 }
 
 /**
- * Секрет HMAC-подписи для браузерного раннера.
+ * Секрет HMAC-подписи для браузерного раннера в песочнице.
  *
- * Внешний/локальный раннер использует отдельный ключ BROWSER_RPC_SECRET.
- * Для песочничного раннера секрет выводится из AUTH_SECRET на пользователя:
- * конфиг раннера лежит в песочнице учителя (/tmp/runner-config.json), поэтому
- * глобальный AUTH_SECRET туда писать нельзя — учитель (или агент под
- * промпт-инъекцией) мог бы прочитать его и подделывать RPC-запросы к чужим
- * песочницам. Производный секрет позволяет подделывать только свой.
+ * Секрет выводится из AUTH_SECRET на пользователя: конфиг раннера лежит в
+ * песочнице учителя (/tmp/runner-config.json), поэтому глобальный AUTH_SECRET
+ * туда писать нельзя — учитель (или агент под промпт-инъекцией) мог бы прочитать
+ * его и подделывать RPC-запросы к чужим песочницам. Производный секрет позволяет
+ * подделывать только свой.
  */
 export function getRunnerRpcSecret(userId: string): string {
-  const external = process.env.BROWSER_RPC_SECRET;
-  if (external && external.length >= 32) return external;
   const auth = process.env.AUTH_SECRET;
   if (!auth || auth.length < 32) {
-    throw new Error("AUTH_SECRET or BROWSER_RPC_SECRET is not configured for browser service");
+    throw new Error("AUTH_SECRET is not configured for browser service (нужно минимум 32 символа)");
   }
   return createHmac("sha256", auth)
     .update(`browser-runner:${userId}`)
     .digest("base64url")
     .slice(0, 43);
+}
+
+/**
+ * Единственное место, где решается, КУДА идёт браузерный RPC: в персональную
+ * Vercel Sandbox пользователя. Вне Vercel — честная ошибка 503.
+ */
+export async function resolveRunnerUrl(userId: string): Promise<string> {
+  if (getBrowserTarget() !== "vercel-sandbox") {
+    throw new BrowserRpcError("Браузер рабочей области работает только на опубликованном сайте (Vercel Sandbox).", 503);
+  }
+  const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
+  return getSandboxBrowserRpcUrl(userId);
 }
 
 export async function browserRpc<T = unknown>(
@@ -73,22 +83,9 @@ export async function browserRpc<T = unknown>(
     rpcUrl?: string;
   } = {},
 ): Promise<{ sessionId?: string; currentUrl?: string; pageTitle?: string; result: T; storageState?: unknown; interactionState?: unknown; screenshotBase64?: string }> {
+  // Единый выбор раннера для агента, вкладки «Браузер» и keepalive.
+  const rpcUrl = options.rpcUrl ?? await resolveRunnerUrl(userId);
   const secret = getRunnerRpcSecret(userId);
-
-  // Единственный источник адреса — персональная Vercel Sandbox. Раньше здесь
-  // был ещё запасной путь `BROWSER_RPC_URL` на внешний раннер; он остался от
-  // Codespaces, на Vercel всё равно не читался и только путал при развёртывании.
-  let rpcUrl = options.rpcUrl;
-  if (!rpcUrl) {
-    if (process.env.VERCEL !== "1") {
-      throw new BrowserRpcError(
-        "Облачный браузер рабочей области доступен только на Vercel.",
-        503,
-      );
-    }
-    const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
-    rpcUrl = await getSandboxBrowserRpcUrl(userId);
-  }
 
   const { storageState, ...rest } = options;
   const safeStorageState = transferableStorageState(storageState);

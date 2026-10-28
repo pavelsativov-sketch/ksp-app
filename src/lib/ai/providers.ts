@@ -43,6 +43,7 @@ const CEREBRAS_BASE = "https://api.cerebras.ai/v1";
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const OPENAI_BASE = "https://api.openai.com/v1";
 const XAI_BASE = "https://api.x.ai/v1";
+const APINEX_BASE = "https://api.apinex.bond/v1";
 
 /**
  * Ключи провайдера из переменной окружения.
@@ -64,6 +65,7 @@ const keys = {
   groq: () => parseApiKeys(process.env.GROQ_API_KEY),
   cerebras: () => parseApiKeys(process.env.CEREBRAS_API_KEY),
   openrouter: () => parseApiKeys(process.env.OPENROUTER_API_KEY),
+  apinex: () => parseApiKeys(process.env.APINEX_API_KEY || process.env.APINEX_KEY),
 };
 
 /** Ставит список ключей в конфиг: первый — основной, остальные — резерв. */
@@ -101,61 +103,43 @@ function configured(config: ProviderConfig): boolean {
  */
 export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
   generation: () => [
-    // Gemini — основной маршрут. Ключи перебираются: первый может упереться
-    // в суточный лимит, пока второй ещё живой.
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Primary)", temperature: 0.7, maxTokens: 8192 }),
-    // Groq GPT OSS 120B — резерв. Три изменения по живым замерам 2026-10-07:
-    //  1) maxTokens поднят 1536 → 8192: при 1536 план обрывался на середине,
-    //     generateKsp это видел и уводил каскад дальше, то есть резерв был
-    //     структурно непригоден, пока Gemini был жив;
-    //  2) supportsJsonSchema выключен: gpt-oss — рассуждающая модель, и на
-    //     строгой схеме КСП она отдавала 400 «'/stages/beginning/tasks/0'
-    //     does not validate». Схема глубокая (этапы → задачи), и одна
-    //     несовпавшая мелочь отбрасывала весь план;
-    //  3) response_format не задаётся вовсе: и json_schema, и json_object
-    //     для этой модели заканчивались 400 («Failed to generate JSON»).
-    //     Формат задаёт промпт, а приводит ответ к схеме наш extractJson —
-    //     он умеет снимать ограждения и закрывать обрезанный JSON.
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Fallback 1)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),
-    // OpenAI GPT-4o — лучшее качество, если ключ будет валидным.
-    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o", supportsJsonSchema: true, label: "OpenAI GPT-4o (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),
-    // Cerebras — быстрая бесплатная модель
-    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 3)", temperature: 0.7, maxTokens: 8192 }),
-    // OpenRouter — последний резерв. Слаг без «:free»: провайдер отвечает
-    // 404 «This model is unavailable for free» и прямо называет рабочий
-    // вариант — тот и стоит в каскаде последним аварийным маршрутом.
+    // Apinex (Apinex/Bond) — проверено живым бенчмарком 2026-10-28:
+    // kimi-k3 даёт самый полный валидный КСП; glm-5.3 — быстрый запасной;
+    // gpt-6-luna — ещё один резерв.
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Primary)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback 2)", temperature: 0.5, maxTokens: 8192 }),
+    // Groq GPT OSS 120B — резерв (недоступен/медленнее, чем Apinex).
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Fallback 3)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o", supportsJsonSchema: true, label: "OpenAI GPT-4o (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 6)", temperature: 0.7, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-pro", supportsJsonSchema: false, label: "OpenRouter Nex 2.5 Pro (Free Emergency Fallback)", temperature: 0.7, maxTokens: 8192 }),
   ],
   enhance: () => [
-    // Gemini — основной маршрут: улучшение секций короткое, ответ быстрый.
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Primary)", temperature: 0.5, maxTokens: 8192 }),
-    // Groq — резерв. 8192 проверено вживую: улучшение секций короткое,
-    // провайдер отдаёт ответ целиком.
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: true, label: "Groq GPT OSS 120B (Fallback 1)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 2)", temperature: 0.5, maxTokens: 8192 }),
-    // OpenAI GPT-4o-mini — быстрая и качественная для редактирования
-    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 2)", temperature: 0.5, maxTokens: 8192 }),
-    // Cerebras
-    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 3)", temperature: 0.5, maxTokens: 8192 }),
-    // OpenRouter — слаг без «:free», см. пояснение в generation.
+    // Apinex — самый быстрый и стабильный на коротких задачах.
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Primary)", temperature: 0.3, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback 2)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: true, label: "Groq GPT OSS 120B (Fallback 3)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 5)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 6)", temperature: 0.5, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-pro", supportsJsonSchema: false, label: "OpenRouter Nex 2.5 Pro (Free Emergency Fallback)", temperature: 0.5, maxTokens: 8192 }),
   ],
   tasks: () => [
-    // Groq проверен живым вызовом listFiles: tool_calls вернулся за 808 мс.
-    // Ставим его первым, чтобы короткие задания не ждали медленный Gemini.
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Primary)", temperature: 0.2, maxTokens: 8192 }),
-    // Gemini остаётся резервом после быстрого проверенного маршрута.
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 1)", temperature: 0.2, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),
-    // Groq GPT OSS 20B — быстрый резерв.
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-20b", supportsJsonSchema: true, label: "Groq GPT OSS 20B (Fallback 2)", temperature: 0.7, maxTokens: 8192 }),
-    // OpenAI GPT-4o-mini — лучший структурированный JSON, если ключ рабочий.
-    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 3)", temperature: 0.7, maxTokens: 8192 }),
-    // Cerebras
-    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 4)", temperature: 0.7, maxTokens: 8192 }),
-    // OpenRouter. Слаг :free у nex-agi отозван (404), поэтому берём pro без
-    // суффикса — он остаётся в каскаде последним аварийным маршрутом.
+    // Apinex — первичный маршрут для инструментов агента и заданий.
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Primary)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback 2)", temperature: 0.3, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Fallback 3)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-20b", supportsJsonSchema: true, label: "Groq GPT OSS 20B (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 6)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 7)", temperature: 0.7, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-mini", supportsJsonSchema: false, label: "OpenRouter Nex Mini (Free Emergency Fallback)", temperature: 0.7, maxTokens: 8192 }),
   ],
   image: () => [

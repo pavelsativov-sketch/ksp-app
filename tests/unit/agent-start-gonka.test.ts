@@ -62,4 +62,27 @@ describe("startAgentTask: один слот на пользователя + оч
     expect(result.status).toBe("queued");
     expect(mock.after).not.toHaveBeenCalled();
   });
+
+  it("не блокирует второго пользователя running-задачей первого", async () => {
+    const firstUserId = "a".repeat(24);
+    const secondUserId = "b".repeat(24);
+    const firstUserTask = { _id: new ObjectId(), user_id: new ObjectId(firstUserId), status: "running", heartbeat_at: new Date() };
+    const insertOne = vi.fn(async () => ({ insertedId: new ObjectId() }));
+    mock.getDb.mockResolvedValue({
+      collection: () => ({
+        findOne: async (filter: { user_id?: ObjectId }) =>
+          filter.user_id?.toString() === firstUserId ? firstUserTask : null,
+        updateOne: async () => ({ matchedCount: 1 }),
+        insertOne,
+      }),
+    });
+
+    const result = await startAgentTask(secondUserId, null, "поручение второго пользователя");
+
+    expect(result.status).toBe("running");
+    expect(insertOne).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: new ObjectId(secondUserId),
+      status: "running",
+    }));
+  });
 });

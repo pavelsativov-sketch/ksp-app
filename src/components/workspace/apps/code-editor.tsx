@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Editor, { loader, type OnMount, type Monaco } from "@monaco-editor/react";
 import { FileCode, Loader2, Save, FilePlus } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/store/workspace";
@@ -25,6 +25,7 @@ const LANG: Record<string, string> = {
   ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
   json: "json", css: "css", html: "html", md: "markdown", py: "python",
   sh: "shell", bat: "bat", cmd: "bat", yml: "yaml", yaml: "yaml",
+  ps1: "powershell", xml: "xml", sql: "sql", csv: "plaintext", txt: "plaintext",
 };
 
 /**
@@ -42,9 +43,37 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [editorRef, setEditorRef] = useState<{ getValue: () => string; setValue: (v: string) => void } | null>(null);
+  const [files, setFiles] = useState<string[]>([]);
+  // Экземпляр Monaco и актуальная функция сохранения лежат в ref: команда
+  // Ctrl+S регистрируется один раз при монтировании, и замыкание на `save`
+  // из того рендера видело бы пустой редактор — сохранение молча не работало.
+  const editorInstance = useRef<{ getValue: () => string } | null>(null);
+  const saveRef = useRef<() => void>(() => {});
+  const openRef = useRef<OpenFile | null>(null);
+
+  useEffect(() => { openRef.current = open; }, [open]);
+
+  const refreshFiles = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agents/sandbox", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { files?: { name: string }[] };
+      setFiles((data.files ?? []).map((f) => f.name));
+    } catch {
+      // список файлов — удобство, а не необходимость
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => void refreshFiles(), 0);
+    return () => clearTimeout(timer);
+  }, [refreshFiles]);
 
   const openFile = useCallback(async (name: string) => {
+    const current = openRef.current;
+    if (current?.dirty && current.name !== name && !window.confirm(`В «${current.name}» есть несохранённые изменения. Открыть «${name}» без сохранения?`)) {
+      return;
+    }
     setLoading(true);
     setNotice(null);
     try {
@@ -77,62 +106,98 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   }, [effectiveFile, openFile]);
 
   const save = useCallback(async () => {
-    if (!open || !editorRef || saving) return;
+    const editor = editorInstance.current;
+    if (!open || !editor || saving) return;
     setSaving(true);
     setNotice(null);
     try {
+      const content = editor.getValue();
       const res = await fetch("/api/agents/sandbox", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: open.name, content: editorRef.getValue() }),
+        body: JSON.stringify({ file: open.name, content }),
       });
-      if (!res.ok) throw new Error("Не удалось сохранить");
-      setOpen({ ...open, dirty: false, content: editorRef.getValue() });
-      setNotice("Сохранено на диск");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "Не удалось сохранить");
+      }
+      setOpen({ ...open, dirty: false, content });
+      setNotice("Сохранено");
+      void refreshFiles();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Ошибка сохранения");
     }
     setSaving(false);
-  }, [open, editorRef, saving]);
+  }, [open, saving, refreshFiles]);
+
+  useEffect(() => { saveRef.current = () => { void save(); }; }, [save]);
 
   const onMount: OnMount = (editor, monaco: Monaco) => {
-    setEditorRef({ getValue: () => editor.getValue(), setValue: (v: string) => editor.setValue(v) });
-    // Ctrl+S — сохранить файл в машину.
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { void save(); });
+    editorInstance.current = editor;
+    // Ctrl+S — сохранить файл; вызываем актуальную версию через ref.
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { saveRef.current(); });
   };
 
   const ext = open?.name.split(".").pop()?.toLowerCase() ?? "txt";
+  const names = open && !files.includes(open.name) ? [open.name, ...files] : files;
+
+  function createFile() {
+    const current = openRef.current;
+    if (current?.dirty && !window.confirm(`В «${current.name}» есть несохранённые изменения. Создать новый файл без сохранения?`)) return;
+    const name = window.prompt("Имя нового файла:", "script.js");
+    if (!name) return;
+    setOpen({ name, content: "", dirty: true });
+    setNotice("Введите содержимое и нажмите «Сохранить» (Ctrl+S)");
+  }
 
   return (
     <div className="flex h-full flex-col bg-[#141225] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-1.5">
-        <FileCode className="size-3.5 text-sky-300" />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{open ? open.name : "нет открытого файла"}</span>
-        {open?.dirty && <span className="text-[10px] text-amber-400">не сохранено</span>}
+        <FileCode className="size-3.5 shrink-0 text-sky-300" />
+        {names.length > 0 ? (
+          <select
+            aria-label="Файл в редакторе"
+            value={open?.name ?? ""}
+            onChange={(e) => { if (e.target.value) void openFile(e.target.value); }}
+            className="min-w-0 max-w-[55%] flex-1 truncate rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-slate-200 outline-none focus:border-sky-400/50"
+          >
+            {!open && <option value="">Выберите файл…</option>}
+            {names.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        ) : (
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{open ? open.name : "нет открытого файла"}</span>
+        )}
+        <span className="flex-1" />
+        {open?.dirty && <span className="shrink-0 text-[10px] text-amber-400">не сохранено</span>}
+        <button
+          type="button"
+          onClick={createFile}
+          title="Новый файл"
+          aria-label="Новый файл"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/15 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-white/10"
+        >
+          <FilePlus className="size-3" /> <span className="hidden sm:inline">Новый</span>
+        </button>
         <button
           type="button"
           onClick={() => void save()}
           disabled={!open || saving}
-          className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 px-2 py-0.5 text-[11px] text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-40"
+          title="Сохранить (Ctrl+S)"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/40 px-2 py-0.5 text-[11px] text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-40"
         >
           {saving ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Сохранить
         </button>
       </div>
 
-      {notice && <p className="shrink-0 px-3 py-1 text-[11px] text-muted-foreground">{notice}</p>}
+      {notice && <p className="shrink-0 px-3 py-1 text-[11px] text-muted-foreground" role="status">{notice}</p>}
 
       {loading && <p className="flex flex-1 items-center justify-center gap-2 text-sm text-white/40"><Loader2 className="size-4 animate-spin" /> Открываю…</p>}
 
       {!open && !loading && (
         <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-white/40">
-          Откройте файл из вкладки «Файлы» (кнопка «В редактор») или создайте новый.
-          <button
-            type="button"
-            className="ml-2 inline-flex items-center gap-1 rounded-md border border-white/15 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10"
-            onClick={() => { const name = window.prompt("Имя нового файла:", "script.js"); if (name) { setOpen({ name, content: "", dirty: true }); setNotice("Введите содержимое и нажмите «Сохранить»"); } }}
-          >
-            <FilePlus className="size-3" /> Новый файл
-          </button>
+          {files.length > 0
+            ? "Выберите файл в списке сверху, откройте его из вкладки «Файлы» (кнопка «В редактор») или создайте новый."
+            : "Файлов пока нет. Создайте новый — или дождитесь, пока агент создаст файлы."}
         </div>
       )}
 
@@ -145,7 +210,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
             value={open.content}
             onMount={onMount}
             onChange={(v) => setOpen((o) => (o ? { ...o, content: v ?? "", dirty: true } : o))}
-            options={{ fontSize: 13, minimap: { enabled: true }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2 }}
+            options={{ fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, wordWrap: "on" }}
             loading={<p className="flex h-full items-center justify-center text-sm text-white/40"><Loader2 className="size-4 animate-spin" /> Загрузка редактора…</p>}
           />
         </div>

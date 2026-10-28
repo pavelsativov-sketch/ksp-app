@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Bot, ChevronDown, ChevronRight, Loader2, Maximize2, Minimize2, Play, Plus, Sparkles, Square, X,
+  Bot, ChevronRight, Loader2, Maximize2, Minimize2, Play, Plus, Sparkles, Square, X,
   FolderOpen, Globe, LayoutGrid, ScrollText, TerminalSquare, FileCode, Archive, Undo2,
+  BarChart3, ClipboardList, UserRound, Users, Target, SquarePen,
 } from "lucide-react";
 import { AgentComposer } from "@/components/agents/agent-composer";
-import { setActiveAgentTask, useActiveAgentTask } from "@/components/agents/agent-dock";
+import { clearActiveAgentTask, setActiveAgentTask, useActiveAgentTask } from "@/components/agents/agent-dock";
 import { AgentSession, StatusDot, type AgentStatus } from "@/components/agents/agent-session";
 import { CodeEditorApp } from "@/components/workspace/apps/code-editor";
 import { PermissionCard } from "@/components/agents/permission-card";
@@ -36,6 +37,15 @@ const BASE_TABS: TabDef[] = [
   { id: "terminal", label: "Терминал", icon: TerminalSquare },
 ];
 
+/** Готовые конструкторы на стартовом экране чата. */
+const BUILDERS = [
+  { href: "/school/sor-soch", icon: BarChart3, title: "Анализ СОР и СОЧ", hint: "Ввод баллов списком → расчёт качества и отчёт завучу" },
+  { href: "/school/vsk", icon: ClipboardList, title: "Справки ВШК", hint: "Конструктор аналитических справок по урокам и проверкам" },
+  { href: "/school/characteristics", icon: UserRound, title: "Характеристики", hint: "На ученика, класс, для ПМПК и органов опеки" },
+  { href: "/school/homeroom", icon: Users, title: "Классное руководство", hint: "Родительские собрания: повестка, доклад, протокол" },
+  { href: "/school/iom", icon: Target, title: "Маршруты ИОМ", hint: "Индивидуальный план ликвидации пробелов знаний" },
+] as const;
+
 /** Вкладки, которые добавляются кнопкой «+». */
 const EXTRA_TABS: TabDef[] = [{ id: "log", label: "Задача", icon: ScrollText }];
 
@@ -45,11 +55,11 @@ const EXTRA_TABS: TabDef[] = [{ id: "log", label: "Задача", icon: ScrollTe
  * приложений, режимом ручного управления и отдельными действиями задачи.
  */
 export function SchoolWorkspace({
-  sysInfo = "",
   initialTab = "os",
   openComputerUse = false,
   initialUrl,
 }: {
+  /** Больше не выводится здесь (есть общая строка состояния); оставлен для совместимости вызовов. */
   sysInfo?: string;
   initialTab?: OsTab;
   openComputerUse?: boolean;
@@ -100,6 +110,7 @@ export function SchoolWorkspace({
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
+      if (document.hidden) { if (alive) timer = setTimeout(() => void poll(), 4000); return; }
       try {
         const res = await fetch("/api/agents/control", { cache: "no-store" });
         if (res.ok && alive) {
@@ -174,7 +185,7 @@ export function SchoolWorkspace({
   /** Повтор последней задачи: та же формулировка, новая сессия агента. */
   async function startLast() {
     const prompt = task?.prompt;
-    if (!prompt || starting || status === "running" || status === "connecting") return;
+    if (!prompt || starting || status === "running" || status === "queued") return;
     setStarting(true);
     try {
       const res = await fetch("/api/agents/task", {
@@ -192,58 +203,67 @@ export function SchoolWorkspace({
     finally { setStarting(false); }
   }
 
-  const running = Boolean(task) && (status === "running" || status === "connecting");
+  const running = Boolean(task) && status === "running";
 
   return (
     <div className="flex h-full min-h-0">
       {/* ── Левая колонка: чат ── */}
-      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#0b0d13] lg:flex lg:w-[420px]`}>
+      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#0b0d13] lg:flex lg:w-[clamp(320px,34vw,420px)]`}>
         <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5">
           <h1 className="text-sm font-bold text-slate-100">Педагогический ассистент</h1>
-          <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] font-semibold text-sky-200 lg:hidden">
-            <LayoutGrid className="size-3.5" /> Открыть ОС
-          </button>
-          <span
-            className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-slate-300"
-            title="Модель подбирается автоматически с фоллбэком: Gemini → Groq → OpenAI"
-          >
-            Агент Mekty <ChevronDown className="size-3 text-slate-500" />
-          </span>
+          <div className="flex items-center gap-1.5">
+            {task && !running && (
+              <button
+                type="button"
+                onClick={() => clearActiveAgentTask()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20"
+              >
+                <SquarePen className="size-3.5" /> Новая задача
+              </button>
+            )}
+            <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] font-semibold text-sky-200 lg:hidden">
+              <LayoutGrid className="size-3.5" /> Открыть ОС
+            </button>
+          </div>
         </header>
 
-        {/* User control stays obvious while the AI is paused. */}
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 pb-2.5">
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${control === "user" ? "text-sky-300" : "text-emerald-300"}`}>
-            <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-sky-400" : "animate-pulse bg-emerald-400"}`} />
-            {!controlLoaded ? "ПРОВЕРЯЮ СОСТОЯНИЕ" : control === "user" ? "ВЫ УПРАВЛЯЕТЕ" : "AI РАБОТАЕТ"}
-          </span>
-          {control === "ai" ? (
-            <button
-              type="button"
-              onClick={() => void setControl("user")}
-              className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20"
-            >
-              Забрать управление себе
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void setControl("ai")}
-              className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20"
-            >
-              Передать управление ИИ
-            </button>
-          )}
-        </div>
+        {/* Кто управляет — важно только пока задача идёт; без задачи панель не нужна. */}
+        {running && controlLoaded && (
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 pb-2.5">
+            <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${control === "user" ? "text-sky-300" : "text-emerald-300"}`}>
+              <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-sky-400" : "animate-pulse bg-emerald-400"}`} />
+              {control === "user" ? "ВЫ УПРАВЛЯЕТЕ" : "ИИ РАБОТАЕТ"}
+            </span>
+            {control === "ai" ? (
+              <button
+                type="button"
+                onClick={() => void setControl("user")}
+                className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20"
+              >
+                Забрать управление себе
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void setControl("ai")}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20"
+              >
+                Передать управление ИИ
+              </button>
+            )}
+          </div>
+        )}
 
         {pendingCount > 0 && (
           <div
             role="status"
             className="mx-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11px] font-medium text-amber-300"
           >
-            ⚠ Агент ждёт подтверждения действия ({pendingCount}) — откройте «Работу с компьютером» или разрешите в запросе.
+            ⚠ Агент ждёт вашего решения ({pendingCount}) — разрешите или отклоните команду ниже.
           </div>
         )}
+        {/* Карточка подтверждения вне прокручиваемой ленты: её нельзя не заметить. */}
+        <PermissionCard active={status === "running"} />
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3">
           {task ? (
@@ -257,7 +277,6 @@ export function SchoolWorkspace({
                   <p className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-200">Агент Mekty</p>
                   <StatusDot status={status} />
                 </div>
-                <PermissionCard active={status === "running"} />
                 <AgentSession
                   taskId={task.id}
                   variant="chat"
@@ -273,16 +292,6 @@ export function SchoolWorkspace({
                   }}
                 />
               </div>
-              {(status === "running" || status === "connecting") && (
-                <button
-                  type="button"
-                  onClick={() => void stopTask()}
-                  disabled={stopping}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
-                >
-                  {stopping ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />} Отменить задачу
-                </button>
-              )}
             </>
           ) : (
             <div className="space-y-3 pt-2">
@@ -301,75 +310,24 @@ export function SchoolWorkspace({
                   Готовые ИИ-конструкторы
                 </p>
                 <div className="mt-2 grid grid-cols-1 gap-1.5">
-                  <Link
-                    href="/school/sor-soch"
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span className="text-base">📊</span>
-                      <span>
-                        <strong className="block font-semibold text-slate-100">Анализ СОР и СОЧ</strong>
-                        <span className="text-[11px] text-slate-400">Ввод баллов списком → расчёт качества и отчёт завучу</span>
+                  {BUILDERS.map(({ href, icon: Icon, title, hint }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-300">
+                          <Icon className="size-4" />
+                        </span>
+                        <span>
+                          <strong className="block font-semibold text-slate-100">{title}</strong>
+                          <span className="text-[11px] text-slate-400">{hint}</span>
+                        </span>
                       </span>
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
-                  </Link>
-
-                  <Link
-                    href="/school/vsk"
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span className="text-base">📋</span>
-                      <span>
-                        <strong className="block font-semibold text-slate-100">Справки ВШК</strong>
-                        <span className="text-[11px] text-slate-400">Конструктор аналитических справок по урокам и проверкам</span>
-                      </span>
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
-                  </Link>
-
-                  <Link
-                    href="/school/characteristics"
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span className="text-base">👤</span>
-                      <span>
-                        <strong className="block font-semibold text-slate-100">Характеристики</strong>
-                        <span className="text-[11px] text-slate-400">На ученика, класс, для ПМПК и органов опеки</span>
-                      </span>
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
-                  </Link>
-
-                  <Link
-                    href="/school/homeroom"
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span className="text-base">👨‍👩‍👧</span>
-                      <span>
-                        <strong className="block font-semibold text-slate-100">Классное руководство</strong>
-                        <span className="text-[11px] text-slate-400">Родительские собрания: повестка, доклад, протокол</span>
-                      </span>
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
-                  </Link>
-
-                  <Link
-                    href="/school/iom"
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.06]"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span className="text-base">🎯</span>
-                      <span>
-                        <strong className="block font-semibold text-slate-100">Маршруты ИОМ</strong>
-                        <span className="text-[11px] text-slate-400">Индивидуальный план ликвидации пробелов знаний</span>
-                      </span>
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-slate-500" />
-                  </Link>
+                      <ChevronRight className="size-4 shrink-0 text-slate-500" />
+                    </Link>
+                  ))}
                 </div>
               </div>
 
@@ -384,7 +342,7 @@ export function SchoolWorkspace({
         </div>
 
         <div className="shrink-0 border-t border-white/10 p-3">
-          <AgentComposer />
+          <AgentComposer compact={Boolean(task)} running={running} stopping={stopping} onStop={() => void stopTask()} />
         </div>
       </section>
 
@@ -401,17 +359,19 @@ export function SchoolWorkspace({
             для скринридера они не читались как вкладки, и найти их можно было
             только по подписи. */}
         <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#0b0d13] px-2">
-        <div role="tablist" aria-label="Приложения рабочей области" className="flex items-center gap-1">
+        <div role="tablist" aria-label="Приложения рабочей области" className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
           {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
               role="tab"
               aria-selected={tab === id}
+              aria-label={label}
+              title={label}
               onClick={() => setTab(id)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors ${tab === id ? "bg-white/10 font-semibold text-white" : "text-slate-400 hover:bg-white/5"}`}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors ${tab === id ? "bg-white/10 font-semibold text-white" : "text-slate-400 hover:bg-white/5"}`}
             >
-              <Icon className="size-3.5" /> {label}
+              <Icon className="size-3.5" /> <span className="hidden xl:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -486,9 +446,9 @@ export function SchoolWorkspace({
             )}
           </div>
 
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             {tab === "os" && (
-                <span className={"hidden items-center gap-1.5 px-2 text-[10px] font-medium sm:inline-flex " + (running && control === 'ai' ? 'text-emerald-300' : 'text-sky-300')}
+                <span className={"hidden items-center gap-1.5 px-2 text-[10px] font-medium 2xl:inline-flex " + (running && control === 'ai' ? 'text-emerald-300' : 'text-sky-300')}
                 title={running && control === 'ai' ? 'AI управляет браузером' : running ? 'Вы управляете вручную' : 'Рабочий стол открыт'}>
                 <span className={"size-1.5 rounded-full " + (running && control === 'ai' ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400')} />
                 {running && control === 'ai' ? 'ОС включена · AI работает' : running ? 'ОС включена · вы управляете' : 'ОС включена · ваш браузер'}
@@ -503,7 +463,7 @@ export function SchoolWorkspace({
               title="Повторить последнюю задачу агента"
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-40"
             >
-              {starting ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />} Повторить задачу
+              {starting ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />} <span className="hidden 2xl:inline">Повторить задачу</span>
             </button>
             )}
             {task && (
@@ -514,7 +474,7 @@ export function SchoolWorkspace({
               title="Остановить активную задачу"
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-40"
             >
-              {stopping ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />} Остановить задачу
+              {stopping ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />} <span className="hidden 2xl:inline">Остановить задачу</span>
             </button>
             )}
             <button
@@ -562,7 +522,8 @@ export function SchoolWorkspace({
 
         {/* Статус-бар: реальная машина и таймер работы задачи */}
         <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-white/10 bg-[#0b0d13] px-3 text-[11px] text-slate-400">
-          <span className="truncate">{notice ?? (sysInfo || "Mekty Machine")}</span>
+          {/* Описание среды уже есть в общей строке состояния внизу страницы: здесь только уведомления. */}
+          <span className="truncate">{notice ?? ""}</span>
           <span className="ml-auto inline-flex items-center gap-1.5">
             <span className={`inline-block size-1.5 rounded-full ${task && status === "running" ? "bg-emerald-400" : "bg-slate-600"}`} />
             {task && status === "running" ? (elapsed ? `Работает ${elapsed}` : "Работает") : "Ожидание"}

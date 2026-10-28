@@ -14,6 +14,15 @@ try {
   config = JSON.parse(fs.readFileSync("/tmp/runner-config.json", "utf8"));
 } catch {}
 
+// Одна необработанная ошибка в обработчике не должна убивать раннер: он держит
+// браузерные сеансы всех учителей сразу. Логируем и продолжаем работу.
+process.on("uncaughtException", (err) => {
+  console.error("[RUNNER] uncaughtException:", (err && err.message) || err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[RUNNER] unhandledRejection:", (reason && reason.message) || reason);
+});
+
 const PORT = parseInt(process.env.PORT || config.port || "3000", 10);
 const SECRET = process.env.BROWSER_RPC_SECRET || process.env.AUTH_SECRET || config.secret;
 if (!SECRET || SECRET.length < 20) {
@@ -311,6 +320,10 @@ const server = http.createServer(async (req, res) => {
         const id = crypto.randomUUID();
         const context = await browser.newContext({
           viewport: { width: 1280, height: 800 },
+          // Русская локаль: сайты отдают русский интерфейс, а Chromium выбирает
+          // кириллические шрифты вместо запасных иероглифических.
+          locale: "ru-RU",
+          timezoneId: "Asia/Almaty",
           javaScriptEnabled: true,
           serviceWorkers: "block",
         });
@@ -475,8 +488,12 @@ const server = http.createServer(async (req, res) => {
       const browserGone =
         /has been closed|has been disconnected|Target page, context or browser|Connection closed|Protocol error|WebSocket/i.test(message);
       if (browserGone) {
+        // Переменная context объявлена внутри try и здесь недоступна: прежний код бросал
+        // ReferenceError прямо в обработчике ошибки, и процесс раннера падал
+        // целиком вместе со всеми сеансами. Берём контекст из карты сеансов.
+        const dead = sessions.get(sessionId);
         sessions.delete(sessionId);
-        void context.close().catch(() => {});
+        void dead?.context.close().catch(() => {});
         res.writeHead(410, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ error: "Session expired or not found", status: 410 }));
       }

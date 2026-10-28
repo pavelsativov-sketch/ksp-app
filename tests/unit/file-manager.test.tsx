@@ -155,3 +155,43 @@ it("бинарные форматы загрузке недоступны с п�
   await waitFor(() => expect(screen.getByText(/только текстовые форматы/)).toBeTruthy());
   expect(fs.some((entry) => entry.name === "photo.png")).toBe(false);
 });
+
+it("удаление требует подтверждения: «Нет» оставляет файл", async () => {
+  render(<FileManagerApp />);
+  await waitFor(() => expect(screen.getByText("plan.md")).toBeTruthy());
+  await act(async () => { fireEvent.click(screen.getByText("plan.md")); });
+  await waitFor(() => expect(screen.getByText("Удалить")).toBeTruthy());
+
+  fireEvent.click(screen.getByText("Удалить"));
+  expect(screen.getByText("Удалить навсегда?")).toBeTruthy();
+  // Сам файл ещё на месте: один клик ничего не стирает.
+  expect(fs).toHaveLength(1);
+
+  fireEvent.click(screen.getByText("Нет"));
+  expect(screen.queryByText("Удалить навсегда?")).toBeNull();
+  expect(fs).toHaveLength(1);
+});
+
+it("удаление после «Да» стирает файл и сообщает об этом", async () => {
+  render(<FileManagerApp />);
+  await waitFor(() => expect(screen.getByText("plan.md")).toBeTruthy());
+  await act(async () => { fireEvent.click(screen.getByText("plan.md")); });
+  await waitFor(() => expect(screen.getByText("Удалить")).toBeTruthy());
+
+  fireEvent.click(screen.getByText("Удалить"));
+  await act(async () => { fireEvent.click(screen.getByText("Да")); });
+
+  await waitFor(() => expect(screen.getByText("Файл удалён: plan.md")).toBeTruthy());
+  expect(fs).toHaveLength(0);
+});
+
+it("при длинном списке появляется поиск по имени", async () => {
+  fs = Array.from({ length: 8 }, (_, i) => ({ name: `urok-${i}.md`, content: "x" }));
+  fs.push({ name: "otchet.txt", content: "y" });
+  render(<FileManagerApp />);
+  await waitFor(() => expect(screen.getByText("otchet.txt")).toBeTruthy());
+
+  fireEvent.change(screen.getByLabelText("Найти файл"), { target: { value: "otch" } });
+  expect(screen.getByText("otchet.txt")).toBeTruthy();
+  expect(screen.queryByText("urok-1.md")).toBeNull();
+});

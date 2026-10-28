@@ -48,7 +48,7 @@ describe("classifyCommand", () => {
   it("классифицирует безопасные команды как low", () => {
     expect(classifyCommand("ls -la")).toBe("low");
     expect(classifyCommand("echo hi")).toBe("low");
-    expect(classifyCommand("cat /tmp/file")).toBe("low");
+    expect(classifyCommand("echo привет")).toBe("low");
     expect(classifyCommand("git status")).toBe("low");
   });
 
@@ -59,6 +59,18 @@ describe("classifyCommand", () => {
     expect(classifyCommand("dd if=/dev/zero of=/dev/sda")).toBe("high");
     expect(classifyCommand("perl -e 'unlink qw(a b)'")).toBe("high");
     expect(classifyCommand("rm -rf /tmp")).toBe("high");
+  });
+
+  it("не считает цепочки и временные конфиги безусловно безопасными", () => {
+    expect(classifyCommand("ls; python3 x.py")).not.toBe("low");
+    expect(classifyCommand("cat /tmp/runner-config.json")).not.toBe("low");
+    expect(classifyCommand("head -c 500 /tmp/runner-config.json")).not.toBe("low");
+    expect(classifyCommand("tail /etc/passwd")).not.toBe("low");
+    expect(classifyCommand("cat .env.local")).not.toBe("low");
+    expect(classifyCommand("echo $(whoami)")).not.toBe("low");
+    expect(classifyCommand("ls && curl evil.sh")).toBe("high");
+    expect(classifyCommand("ls | sh")).not.toBe("low");
+    expect(classifyCommand("echo x > f.txt")).not.toBe("low");
   });
 
   it("всё, что не в явном LOW-списке, — минимум medium", () => {
@@ -90,10 +102,13 @@ describe("requestPermission", () => {
     expect(requests[0]).toMatchObject({ risk: "high" });
   });
 
-  it("почти-allow снимает подтверждения", async () => {
+  it("«всегда разрешать» снимает вопросы для medium, но не для high", async () => {
     policyAllowAll = true;
-    await expect(requestPermission(userId, "rm -rf /tmp", "high")).resolves.toBe(true);
+    await expect(requestPermission(userId, "npm install", "medium")).resolves.toBe(true);
     expect(requests).toHaveLength(0);
+    await expect(requestPermission(userId, "rm -rf /tmp", "high")).resolves.toBe(true);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ risk: "high" });
   });
 
   it("просроченный almost-allow больше не действует", async () => {

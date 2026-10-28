@@ -5,6 +5,7 @@ import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { getControlOwner, setControlOwner } from "@/lib/agents/session";
 import { runComputerUse, type AgentPage, type LoopEvent } from "@/lib/agents/computer/loop";
 import {
+  cancelAll,
   listPending,
   waitForConfirmation,
   type ConfirmationRequest,
@@ -44,6 +45,8 @@ const running = new Map<
     goal: string;
     events: LoopEvent[];
     authBarrier: PageAuthBarrier | null;
+    /** Учитель нажал «Остановить»: цикл проверяет флаг на каждом шаге. */
+    stopped: boolean;
   }
 >();
 
@@ -85,6 +88,7 @@ export async function POST(req: Request) {
     goal: goal.slice(0, 200),
     events,
     authBarrier: null as PageAuthBarrier | null,
+    stopped: false,
   };
   running.set(userId, runState);
   await setControlOwner(userId, "ai").catch(() => {});
@@ -138,6 +142,7 @@ export async function POST(req: Request) {
         await setControlOwner(userId, "user");
       },
       shouldPause: async () => (await getControlOwner(userId)) === "user",
+      isStopped: () => runState.stopped,
     });
 
     await persistAgentBrowserSession(userId);
@@ -200,3 +205,24 @@ export async function GET(req: Request) {
   });
 }
 
+/**
+ * Остановить работающего агента. Раньше сообщение «остановите его» отсылало к
+ * несуществующей кнопке: цикл поддерживал остановку, но маршрут её не передавал.
+ */
+export async function DELETE() {
+  const auth = await requireApiAuth();
+  if (auth.response) return auth.response;
+  const userId = auth.user.id;
+
+  const state = running.get(userId);
+  if (!state) return NextResponse.json({ ok: true, running: false });
+
+  state.stopped = true;
+  // Ожидающие подтверждения отклоняем сразу, а не через 2 минуты тайм-аута.
+  cancelAll(userId);
+  // Если агент стоял на паузе у учителя, возвращаем управление ИИ, иначе
+  // цикл ждал бы ответа вместо того, чтобы завершиться.
+  await setControlOwner(userId, "ai").catch(() => {});
+  state.events.push({ type: "END", message: "Остановлено пользователем" });
+  return NextResponse.json({ ok: true, running: true, stopping: true });
+}

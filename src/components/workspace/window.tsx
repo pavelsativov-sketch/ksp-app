@@ -3,6 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { useWorkspaceStore } from '@/lib/store/workspace';
 import { Minus, Square, X, Maximize2 } from 'lucide-react';
+import { APP_ICONS } from './app-icons';
 
 interface WindowProps {
   id: string;
@@ -24,10 +25,12 @@ function cascadeOffset(index: number): { x: number; y: number } {
 }
 
 export function Window({ id, title, children, onClose }: WindowProps) {
-  const { windows, closeWindow, minimizeWindow, maximizeWindow, focusWindow } = useWorkspaceStore();
+  const { windows, activeWindowId, closeWindow, minimizeWindow, maximizeWindow, focusWindow } = useWorkspaceStore();
   const windowState = windows.find(w => w.id === id);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 960, h: 640 });
+  // null — размер по умолчанию, зависящий от рабочей области (до 960×640);
+  // числа появляются, когда учитель сам меняет размер окна.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   // Индекс окна в порядке открытия задаёт каскад, а не случайное число.
   const [pos, setPos] = useState(() => cascadeOffset(windows.findIndex(w => w.id === id)));
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, origX: 0, origY: 0 });
@@ -39,6 +42,8 @@ export function Window({ id, title, children, onClose }: WindowProps) {
   // (терминал, редактор, файлы) теряло бы своё состояние при сворачивании.
   const minimized = Boolean(windowState.isMinimized);
   const isMax = windowState.isMaximized;
+  const isActive = activeWindowId === id;
+  const AppIcon = APP_ICONS[windowState.type];
 
   const close = () => {
     closeWindow(id);
@@ -76,7 +81,8 @@ export function Window({ id, title, children, onClose }: WindowProps) {
     // Обработчик объявлен обычной функцией, а не каррированной фабрикой:
     // иначе линтер react-hooks/refs считал запись в ref «доступом во время рендера».
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    resizeRef.current = { resizing: true, edge, startX: e.clientX, startY: e.clientY, origW: size.w, origH: size.h, origX: pos.x, origY: pos.y };
+    const el = containerRef.current;
+    resizeRef.current = { resizing: true, edge, startX: e.clientX, startY: e.clientY, origW: size?.w ?? el?.offsetWidth ?? 960, origH: size?.h ?? el?.offsetHeight ?? 640, origX: pos.x, origY: pos.y };
   };
   const onResizePointerMove = (e: React.PointerEvent) => {
     const r = resizeRef.current;
@@ -111,11 +117,13 @@ export function Window({ id, title, children, onClose }: WindowProps) {
   };
 
   const style: React.CSSProperties = isMax
-    ? { position: 'absolute', top: 0, left: 0, width: '100%', height: 'calc(100% - 48px)', zIndex: windowState.zIndex, borderRadius: 0, display: minimized ? 'none' : undefined }
+    ? { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: windowState.zIndex, borderRadius: 0, display: minimized ? 'none' : undefined }
     // max-* удерживает окно внутри рабочей области: в двухпанельной раскладке
     // колонка уже, чем размер окна по умолчанию (960×640).
     : {
-        position: 'absolute', top: pos.y, left: pos.x, width: size.w, height: size.h,
+        position: 'absolute', top: pos.y, left: pos.x,
+        width: size ? size.w : 'min(960px, 92%)',
+        height: size ? size.h : 'min(640px, 88%)',
         maxWidth: `calc(100% - ${Math.max(0, pos.x)}px)`,
         maxHeight: `calc(100% - ${Math.max(0, pos.y)}px)`,
         zIndex: windowState.zIndex,
@@ -125,20 +133,23 @@ export function Window({ id, title, children, onClose }: WindowProps) {
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col shadow-2xl shadow-black/40 overflow-hidden transition-[border-radius] duration-150 ${isMax ? '' : 'rounded-xl'} border border-white/[0.08]`}
+      className={`flex flex-col overflow-hidden transition-[border-radius,box-shadow] duration-150 animate-in fade-in zoom-in-95 ${isMax ? '' : 'rounded-xl'} border ${isActive ? 'border-white/20 shadow-2xl shadow-black/60' : 'border-white/[0.08] shadow-lg shadow-black/30'}`}
       style={style}
       onMouseDown={() => focusWindow(id)}
     >
       {/* Title Bar */}
       <div
-        className="h-9 bg-[#2b2b3d] flex items-center justify-between px-3 select-none shrink-0"
+        className={`h-9 flex items-center justify-between px-3 select-none shrink-0 transition-colors ${isActive ? 'bg-[#34344b]' : 'bg-[#25253a]'}`}
         style={{ cursor: isMax ? 'default' : 'move' }}
         onPointerDown={onTitlePointerDown}
         onPointerMove={onTitlePointerMove}
         onPointerUp={onTitlePointerUp}
         onDoubleClick={() => maximizeWindow(id)}
       >
-        <span className="text-[12px] text-white/70 font-medium truncate pointer-events-none">{title}</span>
+        <span className={`flex min-w-0 items-center gap-2 text-[12px] font-medium pointer-events-none ${isActive ? 'text-white/90' : 'text-white/50'}`}>
+          <AppIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{title}</span>
+        </span>
         <div className="flex items-center gap-0.5 -mr-1">
           <button
             onClick={e => { e.stopPropagation(); minimizeWindow(id); }}

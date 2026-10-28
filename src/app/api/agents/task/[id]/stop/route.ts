@@ -24,7 +24,7 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
   }
   await db.collection(COL.agentTasks).updateOne(
     { _id: new ObjectId(id), status: "running" },
-    { $set: { status: "stopped", result: "Остановлено пользователем", updatedAt: new Date() } },
+    { $set: { status: "stopped", result: "Остановлено пользователем", updated_at: new Date() } },
   );
   return NextResponse.json({ ok: true, status: "stopped" });
 }

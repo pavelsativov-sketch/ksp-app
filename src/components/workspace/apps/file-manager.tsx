@@ -39,17 +39,23 @@ export function FileManagerApp() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busyOp, setBusyOp] = useState<'upload' | 'rename' | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [filter, setFilter] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     setFiles(null);
     setError(null);
     try {
       const res = await fetch('/api/agents/sandbox', { cache: 'no-store' });
-      if (!res.ok) throw new Error('load failed');
+      if (!res.ok) {
+        // Причину (например, «запустите через start-mekty.cmd») знает сервер.
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? 'Не удалось прочитать рабочую область');
+      }
       const data = (await res.json()) as { files: FsItem[] };
       setFiles(data.files ?? []);
-    } catch {
-      setError('Не удалось прочитать песочницу');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось прочитать рабочую область');
       setFiles([]);
     }
   }, []);
@@ -61,6 +67,14 @@ export function FileManagerApp() {
     // предупреждал о каскадном рендере.
     const timer = setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
+  }, [load]);
+
+  // Агент создаёт файлы, пока менеджер открыт: возвращаясь на вкладку,
+  // сразу показываем актуальный список, не дожидаясь кнопки «Обновить».
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) void load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [load]);
 
   /** Загрузка педагогом своих файлов: текстовые до 200 КБ, как и на API. */
@@ -134,9 +148,23 @@ export function FileManagerApp() {
     setBusyOp(null);
   }
 
+  async function deleteFile(name: string) {
+    try {
+      const res = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Не удалось удалить файл');
+      setSelected(null);
+      setConfirmDelete(false);
+      setNotice(`Файл удалён: ${name}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось удалить файл');
+    }
+  }
+
   async function openFile(name: string) {
     setLoadingFile(true);
     setSelected(null);
+    setConfirmDelete(false);
     try {
       const res = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(name)}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('open failed');
@@ -148,12 +176,14 @@ export function FileManagerApp() {
     setLoadingFile(false);
   }
 
+  const visibleFiles = (files ?? []).filter((f) => f.name.toLowerCase().includes(filter.trim().toLowerCase()));
+
   return (
     <div className="flex h-full flex-col bg-[#141225] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
         <Terminal className="size-3.5 text-emerald-400" />
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/50">
-          /workspace
+          Файлы рабочей области
         </span>
         {(busyOp || notice) && (
           <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-emerald-300" role="status">
@@ -188,6 +218,18 @@ export function FileManagerApp() {
         </button>
       </div>
 
+      {files !== null && files.length > 6 && (
+        <div className="shrink-0 border-b border-white/10 px-3 py-1.5">
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            aria-label="Найти файл"
+            placeholder={`Найти среди ${files.length} файлов…`}
+            className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 outline-none placeholder:text-white/30 focus:border-sky-400/50"
+          />
+        </div>
+      )}
+
       {files === null && (
         <p className="flex flex-1 items-center justify-center gap-2 text-sm text-white/40"><Loader2 className="size-4 animate-spin" /> Читаю песочницу…</p>
       )}
@@ -202,7 +244,7 @@ export function FileManagerApp() {
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {view === 'list' ? (
             <ul className="space-y-0.5">
-              {files.map((f) => (
+              {visibleFiles.map((f) => (
                 <li key={f.name}>
                   <button
                     type="button"
@@ -211,14 +253,14 @@ export function FileManagerApp() {
                   >
                     <FileIcon name={f.name} />
                     <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.name}</span>
-                    <span className="shrink-0 text-[10px] text-white/40">{f.sizeLabel}</span>
+                    <span className="shrink-0 text-[10px] text-white/40">{ago(f.modified) ? `${ago(f.modified)} · ` : ''}{f.sizeLabel}</span>
                   </button>
                 </li>
               ))}
             </ul>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {files.map((f) => (
+              {visibleFiles.map((f) => (
                 <button
                   key={f.name}
                   type="button"
@@ -231,6 +273,9 @@ export function FileManagerApp() {
                 </button>
               ))}
             </div>
+          )}
+          {visibleFiles.length === 0 && (
+            <p className="p-6 text-center text-sm text-white/40">Ничего не найдено по запросу «{filter}».</p>
           )}
         </div>
       )}
@@ -256,13 +301,21 @@ export function FileManagerApp() {
             >
               {busyOp === 'rename' ? <Loader2 className="size-3 animate-spin" /> : <Pencil className="size-3" />} Переименовать
             </button>
-            <button
-              type="button"
-              onClick={() => { void fetch(`/api/agents/sandbox?file=${encodeURIComponent(selected.name)}`, { method: "DELETE" }).then(() => { setSelected(null); void load(); }); }}
-              className="rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-white/10"
-            >
-              Удалить
-            </button>
+            {confirmDelete ? (
+              <span className="inline-flex items-center gap-1 text-[10px]">
+                <span className="text-red-300">Удалить навсегда?</span>
+                <button type="button" onClick={() => void deleteFile(selected.name)} className="rounded bg-red-500/20 px-1.5 py-0.5 text-red-200 hover:bg-red-500/30">Да</button>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="rounded px-1.5 py-0.5 text-white/60 hover:bg-white/10">Нет</button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-white/10"
+              >
+                Удалить
+              </button>
+            )}
             <a
               href={`/api/agents/sandbox?file=${encodeURIComponent(selected.name)}&download=1`}
               download={selected.name}
@@ -284,6 +337,18 @@ export function FileManagerApp() {
       )}
     </div>
   );
+}
+
+/** «5 мин назад» и т.п.; пустая строка, если время не разобрать. */
+function ago(iso: string): string {
+  const time = Date.parse(iso);
+  if (Number.isNaN(time)) return '';
+  const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
+  if (minutes < 1) return 'только что';
+  if (minutes < 60) return `${minutes} мин назад`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  return `${Math.round(hours / 24)} дн назад`;
 }
 
 function FileIcon({ name }: { name: string }) {

@@ -112,7 +112,9 @@ export async function inspectActiveField(page: { evaluate: (fn: () => unknown, a
         // сети — то есть лежит открытым текстом там, где его видно при
         // открытых инструментах разработчика. Интерфейсу хватает длины:
         // он рисует точки по ней.
-        value: isPassword ? "•".repeat(val.length) : val,
+        // Поле может содержать вставленный большой текст; DOM-ответ идёт в
+        // API и журнал инструмента, поэтому не переносим его целиком.
+        value: isPassword ? "•".repeat(Math.min(val.length, 1000)) : val.slice(0, 1000),
         box,
       };
     }) as never);
@@ -144,7 +146,7 @@ export async function detectPageAuthBarrier(page: { evaluate: (fn: () => unknown
 
       // 1. Проверка CAPTCHA
       const captchaEl = document.querySelector(
-        'iframe[src*="recaptcha" i], iframe[src*="turnstile" i], iframe[src*="hcaptcha" i], .g-recaptcha, .cf-turnstile, .h-captcha, [id*="captcha" i]',
+        'iframe[src*="recaptcha" i], iframe[src*="turnstile" i], iframe[src*="hcaptcha" i], .g-recaptcha, .cf-turnstile, .h-captcha',
       );
       if (isVisible(captchaEl)) {
         return {
@@ -158,7 +160,9 @@ export async function detectPageAuthBarrier(page: { evaluate: (fn: () => unknown
       const inputs = Array.from(document.querySelectorAll("input")).filter(isVisible);
       for (const inp of inputs) {
         const meta = `${inp.autocomplete || ""} ${inp.name || ""} ${inp.id || ""} ${inp.placeholder || ""} ${inp.getAttribute("aria-label") || ""}`.toLowerCase();
-        if (/one-time-code|otp|2fa|код из смс|sms.?код|код подтверждения|проверочный код/i.test(meta)) {
+        // `otp`/`2fa` только как отдельные слова: подстрока совпадала с «rootPath»,
+        // «footprint» и т.п., и обычная страница считалась запросом кода из СМС.
+        if (/one-time-code|(?<![a-z0-9])(?:otp|2fa)(?![a-z0-9])|код из смс|sms.?код|код подтверждения|проверочный код/i.test(meta)) {
           return {
             requiresUserAction: true,
             kind: "2fa",

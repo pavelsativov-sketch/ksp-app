@@ -63,12 +63,18 @@ export async function waitForControl(
   isStopped: () => Promise<boolean>,
   /** Пока задача стоит на паузе, бьём редко: запись в БД не чаще раза в 10 секунд. */
   heartbeat?: () => Promise<void>,
-): Promise<"resumed" | "stopped"> {
+  /**
+   * Момент (мс), после которого ждать бессмысленно: серверлесс-функция вот-вот
+   * умрёт по лимиту. Раньше ожидание было бесконечным и «съедало» функцию.
+   */
+  deadlineMs?: number,
+): Promise<"resumed" | "stopped" | "timeout"> {
   let lastBeat = 0;
   for (;;) {
     if (await isStopped()) return "stopped";
     if (await getControlOwner(userId) === "ai") return "resumed";
     const now = Date.now();
+    if (deadlineMs !== undefined && now >= deadlineMs) return "timeout";
     if (heartbeat && now - lastBeat > 10_000) {
       lastBeat = now;
       await heartbeat().catch(() => {}); // пауза не должна ломаться из-за сбоя записи

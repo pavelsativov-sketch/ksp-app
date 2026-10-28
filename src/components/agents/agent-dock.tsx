@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Maximize2, Minimize2, X, Bot } from "lucide-react";
-import { AgentSession, StatusDot } from "./agent-session";
+import { AgentSession, StatusDot, type AgentStatus } from "./agent-session";
+import { RuntimeModeBadge } from "./runtime-mode-badge";
+import type { AgentRuntimeMode } from "@/lib/agents/runtime-mode";
 
 const KEY = "mekty:agent-task";
 
@@ -95,6 +97,8 @@ export function clearActiveAgentTask(): void {
 export function AgentDock() {
   const task = useActiveAgentTask();
   const [expanded, setExpanded] = useState(false);
+  const [status, setStatus] = useState<AgentStatus>("running");
+  const mode: AgentRuntimeMode = "vercel";
 
   // useSyncExternalStore гидрационно-безопасен: на сервере и при первом
   // клиентском рендере task === null, окно появляется сразу после гидрации.
@@ -115,8 +119,9 @@ export function AgentDock() {
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
           <Bot className="size-4 text-emerald-400" />
-          <StatusDot status="running" />
+          <StatusDot status={status} />
           <p className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-200">{task.title}</p>
+          <RuntimeModeBadge mode={mode} />
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
@@ -134,7 +139,7 @@ export function AgentDock() {
             <X className="size-4" />
           </button>
         </header>
-        <AgentSession taskId={task.id} />
+        <AgentSession taskId={task.id} onStatus={setStatus} />
       </section>
     </>
   );

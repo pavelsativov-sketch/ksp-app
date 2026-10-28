@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useWorkspaceStore, type AppType } from '@/lib/store/workspace';
 import {
   Globe, TerminalSquare, FolderOpen, Bot, Code2,
-  Wifi, Battery, Volume2, LayoutGrid, MonitorPlay, Sparkles, X
+  LayoutGrid, MonitorPlay, Sparkles, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -126,17 +126,12 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
         <button
           onClick={onToggleCopilot ?? (() => handleDockClick(DOCK_APPS[0]))}
           className={`h-7 px-2 rounded flex items-center gap-1 transition-colors border ${copilotOpen ? 'bg-purple-500/20 border-purple-500/30 text-purple-300' : 'hover:bg-white/[0.08] border-transparent text-white/50'}`}
-          title="AI Assistant"
-          aria-label="Открыть AI-ассистента"
+          title="Журнал агента"
+          aria-label="Открыть журнал агента"
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span className="text-[10px] font-medium uppercase tracking-wider">AI</span>
         </button>
-        <div className="flex items-center gap-2 text-white/50" aria-hidden="true">
-          <Wifi className="w-3.5 h-3.5" />
-          <Volume2 className="w-3.5 h-3.5" />
-          <Battery className="w-3.5 h-3.5" />
-        </div>
         <div className="flex flex-col items-end rounded px-2 py-1 select-none" aria-label={`Время ${time}, ${date}`}>
           <span className="text-[11px] text-white/80 font-medium leading-tight">{time}</span>
           <span className="text-[10px] text-white/50 leading-tight">{date}</span>

@@ -1,9 +1,10 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getControlOwner, setControlOwner } from "@/lib/agents/session";
 import { hasLiveAgentTask, resurrectStalePausedTask } from "@/lib/agents/orchestrator";
 import { resolveControlOwner } from "@/lib/agents/lease";
 import { listPending } from "@/lib/agents/permissions";
+import { getAgentRuntimeMode } from "@/lib/agents/runtime-mode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function GET() {
   if (owner !== stored) await setControlOwner(auth.user.id, owner).catch(() => {});
   const pending = await listPending(auth.user.id).catch(() => []);
   return NextResponse.json(
-    { control: owner, pendingCount: pending.length },
+    { control: owner, pendingCount: pending.length, mode: getAgentRuntimeMode() },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

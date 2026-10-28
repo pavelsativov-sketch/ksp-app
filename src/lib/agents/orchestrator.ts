@@ -1,4 +1,4 @@
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Collection } from 'mongodb';
 import { after } from 'next/server';
 import { getDb, COL } from '@/lib/mongo';
 import { runAgentTask } from './runner';
@@ -21,6 +21,73 @@ import { runningTaskIsStale } from './lease';
  * конкурирующих вызовов (поллер, триггер из GET, finish) только один получит
  * документ и исполнит задачу; остальные получат null и ничего не делают.
  */
+export type QueuedTask = { _id?: ObjectId; prompt?: string; user_id?: ObjectId };
+
+/**
+ * Атомарно захватывает следующую queued-задачу (queued → running).
+ * Вынесено отдельной функцией, чтобы очередь проверялась тестом без Next.js.
+ */
+export async function claimNextQueuedTask(agentTasks: Collection): Promise<QueuedTask | null> {
+  // Берём не «самую старую задачу вообще», а перебираем кандидатов по
+  // очереди: если у владельца первой уже бежит другая задача, уникальный
+  // индекс «один running на пользователя» даёт E11000. Раньше это
+  // исключение блокировало очередь ВСЕХ остальных пользователей.
+  const candidates = await agentTasks
+    .find({ status: 'queued' }, { projection: { _id: 1, user_id: 1 } })
+    .sort({ created_at: 1 })
+    .limit(25)
+    .toArray();
+  let task: QueuedTask | null = null;
+  const blockedUsers = new Set<string>();
+  const freedUsers = new Set<string>();
+  const pending = [...candidates];
+  while (pending.length) {
+    const candidate = pending.shift()!;
+    const owner = String(candidate.user_id ?? '');
+    if (!owner || blockedUsers.has(owner)) continue;
+    try {
+      // mongodb >= 6 возвращает сам документ (без обёртки { value }).
+      const claimed = await agentTasks.findOneAndUpdate(
+        { _id: candidate._id, status: 'queued' },
+        { $set: { status: 'running', heartbeat_at: new Date(), updated_at: new Date() } },
+        { returnDocument: 'after', includeResultMetadata: false },
+      );
+      if (claimed?._id) {
+        task = claimed as unknown as QueuedTask;
+        break;
+      }
+    } catch (e) {
+      if ((e as { code?: number }).code !== 11000) {
+        console.error('[agent] claim failed', e instanceof Error ? e.message : String(e));
+        continue;
+      }
+      // У пользователя уже есть running. Если это зомби (раннер умер) —
+      // освобождаем слот, иначе его очередь стояла бы вечно.
+      blockedUsers.add(owner);
+      try {
+        const running = await agentTasks.findOne(
+          { user_id: candidate.user_id, status: 'running' },
+          { projection: { _id: 1, heartbeat_at: 1, updated_at: 1, created_at: 1 } },
+        );
+        if (running && runningTaskIsStale(running, Date.now())) {
+          await agentTasks.updateOne(
+            { _id: running._id, status: 'running' },
+            { $set: { status: 'failed', error: 'Задача прервана: раннер агента перестал отвечать.', updated_at: new Date() }, $unset: { heartbeat_at: 1 } },
+          );
+          // Слот освобождён — сразу пробуем эту же задачу ещё раз (один раз).
+          if (!freedUsers.has(owner)) {
+            freedUsers.add(owner);
+            blockedUsers.delete(owner);
+            pending.unshift(candidate);
+          }
+        }
+      } catch { /* проверим на следующем запуске */ }
+    }
+  }
+  if (!task?._id || typeof task.prompt !== 'string' || !task.user_id) return null;
+  return task;
+}
+
 /**
  * Единая точка запуска следующей задачи очереди.
  *
@@ -39,17 +106,14 @@ function tryStartNextFromQueue(): void {
       return;
     }
     const agentTasks = db.collection(COL.agentTasks);
-    const queued = await agentTasks.findOneAndUpdate(
-      { status: 'queued' },
-      { $set: { status: 'running', heartbeat_at: new Date(), updated_at: new Date() } },
-      { sort: { created_at: 1 }, returnDocument: 'after' },
-    );
-    const task = queued?.value as
-      | { _id?: ObjectId; prompt?: string; user_id?: ObjectId }
-      | null;
-    if (!task?._id || typeof task.prompt !== 'string' || !task.user_id) {
+    let task: Awaited<ReturnType<typeof claimNextQueuedTask>>;
+    try {
+      task = await claimNextQueuedTask(agentTasks);
+    } catch (e) {
+      console.error("[agent] tryStartNextFromQueue: не удалось взять задачу из очереди", e instanceof Error ? e.message : String(e));
       return;
     }
+    if (!task?._id || typeof task.prompt !== 'string' || !task.user_id) return;
     const taskId = task._id.toString();
     const userId = String(task.user_id);
     try {
@@ -70,7 +134,7 @@ function tryStartNextFromQueue(): void {
       console.error("[agent] tryStartNextFromQueue execute failed", e instanceof Error ? e.message : String(e));
       await db.collection(COL.agentTasks).updateOne(
         { _id: new ObjectId(taskId), status: "running" },
-        { $set: { status: "error", error: "dispatch failed", updated_at: new Date() } },
+        { $set: { status: "failed", error: "dispatch failed", updated_at: new Date() } },
       ).catch(() => {});
     }
   };
@@ -83,7 +147,7 @@ function tryStartNextFromQueue(): void {
   }
 }
 
-export function dispatchQueuedTask(userId: string): Promise<string | null> {
+export function dispatchQueuedTask(): Promise<string | null> {
   // Сохранён API: сразу запускаем глобальный диспетчер. Задача берётся
   // атомарно и не привязана к userId, если пользователь не указан.
   tryStartNextFromQueue();
@@ -121,7 +185,7 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
       { _id: active._id, status: 'running' },
       {
         $set: {
-          status: 'error',
+          status: 'failed',
           error: 'Задача прервана: сессия агента завершилась по таймауту, пока ждала вас. Запустите задачу заново.',
           updated_at: new Date(),
         },
@@ -292,7 +356,7 @@ export async function resurrectStalePausedTask(userId: string): Promise<{ task: 
  * поллят GET /api/agents/task, тем самым «пробуждают» очередь и дожидаются
  * выполнения следующей задачи.
  */
-export async function maybeDispatchQueuedFromRequest(userId: string): Promise<string | null> {
+export async function maybeDispatchQueuedFromRequest(): Promise<string | null> {
   // «Будильник»: планируем попытку запуска (атомарную) в фоне и сразу
   // возвращаем управление запросу — долгие задачи не блокируют GET.
   tryStartNextFromQueue();
@@ -306,16 +370,7 @@ export async function maybeDispatchQueuedFromRequest(userId: string): Promise<st
  * Атомарный findOneAndUpdate + уникальный частичный индекс защищают от
  * двойного запуска при нескольких инстансах.
  */
-function startQueuePoller() {
-  const POLL_MS = 2000;
-  setInterval(() => {
-    try {
-      // tryStartNextFromQueue сам планирует выполнение, если есть queued.
-      tryStartNextFromQueue();
-    } catch {
-      // сбой — попробуем на следующем тике
-    }
-  }, POLL_MS);
-}
-
-startQueuePoller();
+// Поллер на setInterval убран: в серверлесс-функции после ответа таймеры
+// замораживаются, а на каждом тёплом инстансе он лишний раз бил по Mongo.
+// Очередь двигают три триггера: завершение задачи (runner.finish →
+// dispatchQueuedTask), «будильник» GET /api/agents/task и новый POST.

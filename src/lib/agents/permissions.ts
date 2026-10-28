@@ -42,7 +42,10 @@ const ALWAYS_ALLOW_TTL_MS = 24 * 3600_000;
 
 export function classifyCommand(cmd: string): Risk {
   if (HIGH.some((r) => r.test(cmd))) return "high";
-  if (LOW.some((r) => r.test(cmd.trim()))) return "low";
+  const trimmed = cmd.trim();
+  // Простая read-only команда не может быть частью цепочки или перенаправлять
+  // данные: после `;`, `&&`, `|`, `>` и подстановок начинается другая команда.
+  if (!/[;&|><`]|\$\(/.test(trimmed) && LOW.some((r) => r.test(trimmed)) && !/runner-config|\/(?:tmp|var\/tmp|proc|etc)\/|\.env|\bprintenv\b|\benv\b/i.test(trimmed)) return "low";
   // Всё, что не входит в явный LOW-список, требует подтверждения учителя:
   // раньше «medium» выполнялось без спроса, и опасные команды в обход
   // паттернов (python -c 'shutil.rmtree', find -delete и т.п.) проходили.
@@ -67,10 +70,23 @@ export async function alwaysAllows(userId: string): Promise<boolean> {
 }
 
 /** Wait for an approval persisted in Mongo so the agent and UI may hit different isolates. */
-export async function requestPermission(userId: string, command: string, risk: Risk): Promise<boolean> {
+export interface PermissionWaitOptions {
+  /** Остановка задачи пользователем: ожидание прекращается, запрос закрывается. */
+  signal?: AbortSignal;
+  /** Пульс раннера: вызывается во время ожидания, чтобы задачу не сочли зомби. */
+  onWait?: () => Promise<void> | void;
+  /** Крайний срок задачи (мс): ждать дольше жизни серверлесс-функции нельзя. */
+  deadline?: number;
+}
+
+const HEARTBEAT_EVERY_MS = 10_000;
+
+export async function requestPermission(userId: string, command: string, risk: Risk, opts: PermissionWaitOptions = {}): Promise<boolean> {
   // Низкий риск выполняется без подтверждения; всё остальное (medium и high) —
   // только после явного разрешения учителя.
-  if (risk === "low" || await alwaysAllows(userId)) return true;
+  // «Всегда разрешать» снимает вопросы только для medium; high-risk
+  // (удаление, curl, git push, реверс-шеллы) спрашивается каждый раз.
+  if (risk === "low" || (risk === "medium" && await alwaysAllows(userId))) return true;
 
   const db = await getDb();
   const id = new ObjectId();
@@ -88,13 +104,21 @@ export async function requestPermission(userId: string, command: string, risk: R
     expires_at: expiresAt,
   });
 
-  while (Date.now() < expiresAt.getTime()) {
+  const waitUntil = Math.min(expiresAt.getTime(), opts.deadline ?? Infinity);
+  let lastBeat = 0;
+  while (Date.now() < waitUntil) {
+    if (opts.signal?.aborted) break;
+    if (opts.onWait && Date.now() - lastBeat >= HEARTBEAT_EVERY_MS) {
+      lastBeat = Date.now();
+      try { await opts.onWait(); } catch { /* пульс не должен ломать ожидание */ }
+    }
     const request = await requests.findOne(
       { _id: id, user_id: ownerId(userId) },
       { projection: { status: 1 } },
     );
     if (!request || request.status === "denied" || request.status === "expired") return false;
-    if (request.status === "allowed") return true;
+    // Разрешение, пришедшее уже после «Стоп», не должно запускать команду.
+    if (request.status === "allowed") return !opts.signal?.aborted;
     await new Promise((resolve) => setTimeout(resolve, PERMISSION_POLL_MS));
   }
 

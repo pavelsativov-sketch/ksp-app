@@ -16,19 +16,19 @@
  * причина терялась целиком.
  */
 export function describeBrowserError(error: unknown): string {
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  if (error instanceof Error) return `${error.name}: ${error.message}`.slice(0, 4000);
   if (error && typeof error === "object") {
     const source = error as { message?: unknown; error?: unknown; reason?: unknown };
     const parts = [source.message, source.error, source.reason]
       .filter((value): value is string => typeof value === "string" && value.length > 0);
-    if (parts.length) return parts.join(" · ");
+    if (parts.length) return parts.join(" · ").slice(0, 4000);
     try {
       return JSON.stringify(error).slice(0, 300);
     } catch {
       return "объект ошибки без полей";
     }
   }
-  return String(error);
+  return String(error).slice(0, 4000);
 }
 
 export function browserFailure(error: unknown): { message: string; status: number; starting?: boolean } {

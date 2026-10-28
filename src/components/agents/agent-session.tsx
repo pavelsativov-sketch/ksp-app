@@ -17,7 +17,7 @@ export interface AgentEvent {
   createdAt?: string | null;
 }
 
-type Status = "connecting" | "queued" | "running" | "completed" | "failed" | "stopped";
+type Status = "queued" | "running" | "completed" | "failed" | "stopped";
 
 /**
  * Живой лог сессии агента: подписка на SSE-поток /api/agents/task/[id],
@@ -50,7 +50,7 @@ function AgentSessionStream({
   onBrowserActivity,
 }: Pick<AgentSessionProps, "taskId" | "onStatus" | "onBrowserActivity">) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [status, setStatus] = useState<Status>("connecting");
+  const [status, setStatus] = useState<Status>("running");
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const onBrowserActivityRef = useRef(onBrowserActivity);
@@ -128,7 +128,7 @@ function AgentSessionStream({
     };
     es.onerror = () => {
       if (final) { es.close(); return; }
-      setStatus((prev) => (prev === "running" ? "running" : "connecting"));
+      setStatus((prev) => (prev === "running" ? "running" : "queued"));
     };
     es.onopen = () => setStatus("running");
 
@@ -150,7 +150,7 @@ function AgentSessionStream({
   const progress = plan && plan.length
     ? status === "completed" ? 100 : Math.min(100, Math.round((doneSteps / plan.length) * 100))
     : null;
-  const running = status === "running" || status === "connecting";
+  const running = status === "running";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -366,7 +366,7 @@ function extractResult(ev: AgentEvent): string | null {
 }
 
 export function StatusDot({ status }: { status: Status }) {
-  const color = status === "running" || status === "connecting" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-sky-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
+  const color = status === "running" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-sky-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
   return <span className={`inline-block size-2 rounded-full ${color}`} aria-hidden />;
 }
 

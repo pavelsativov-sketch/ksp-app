@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useSyncExternalStore, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Sparkles, ArrowRight, ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,12 +73,12 @@ export function FirstRunOnboarding() {
   const [dismissed, setDismissed] = useState(false);
   const [step, setStep] = useState(0);
   
-  // Automatically dismiss onboarding when navigating to important pages
-  useEffect(() => {
-    if (pathname.startsWith('/school') || pathname.startsWith('/workspace')) {
-      setDismissed(true);
-    }
-  }, [pathname]);
+  // Automatically dismiss onboarding when navigating to important pages.
+  // Состояние обновляется прямо во время рендера, а не в эффекте: так нет
+  // лишнего каскадного рендера (правило react-hooks/set-state-in-effect).
+  if (!dismissed && (pathname.startsWith('/school') || pathname.startsWith('/workspace'))) {
+    setDismissed(true);
+  }
   
   const open = !completed && !dismissed;
 

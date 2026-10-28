@@ -36,6 +36,15 @@ interface PageAuthBarrier {
   domain: string;
 }
 
+/** Домен текущей страницы для сохранения логина; пустой адрес — BilimClass по умолчанию. */
+function domainOf(pageUrl: string): string {
+  try {
+    return new URL(pageUrl || 'https://bilimclass.kz').hostname.replace(/^www\./, '');
+  } catch {
+    return 'bilimclass.kz';
+  }
+}
+
 export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState('');
@@ -54,12 +63,16 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [credPassword, setCredPassword] = useState('');
   const [credSaving, setCredSaving] = useState(false);
   const [credSaved, setCredSaved] = useState(false);
+  const [credError, setCredError] = useState('');
   // Ожидание первого кадра. Пока ответа нет, сервер поднимает песочницу —
   // это минуты, и вкладка обязана об этом говорить («Запускаю браузер…» с
   // секундами ожидания), а не показывать немой спиннер.
   const [waiting, setWaiting] = useState(false);
   const [waitSec, setWaitSec] = useState(0);
   const waitingRef = useRef(false);
+  // Есть ли уже кадр: колбэки ниже живут дольше одного рендера и не должны
+  // читать устаревшее значение imgSrc из своего замыкания.
+  const hasImageRef = useRef(false);
   // Счётчик подряд идущих 503: после трёх останавливаем polling.
   const consecutive503Ref = useRef(0);
   const unavailableRef = useRef(false);
@@ -187,7 +200,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     if (pendingCountRef.current > 0 || typeBufferRef.current) return undefined;
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
-    if (!imgSrc) beginWait();
+    if (!hasImageRef.current) beginWait();
     try {
       const res = await fetch(`${BASE}?action=screenshot`, { signal: abortRef.current.signal, cache: 'no-store' });
       // Устойчивый 503 — браузер недоступен по окружению (например, вне
@@ -197,7 +210,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         consecutive503Ref.current += 1;
         if (consecutive503Ref.current >= 3) {
           unavailableRef.current = true;
-          setError('Браузер рабочей области доступен только в Vercel-окружении (Sandbox). Повторите позже или разверните приложение на Vercel.');
+          setError('Браузер рабочей области сейчас недоступен. На своём компьютере проверьте, что раннер запущен (npm run dev:local); в облаке — что настроена среда Vercel Sandbox.');
         }
         return undefined;
       }
@@ -213,7 +226,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
   const enqueueAction = useCallback((params: Record<string, string>) => {
     pendingCountRef.current += 1;
-    if (!imgSrc) beginWait();
+    if (!hasImageRef.current) beginWait();
     const isNavigation = !params.action || ['navigate', 'reload', 'back', 'forward'].includes(params.action);
     if (isNavigation) setLoading(true);
     setError('');
@@ -236,7 +249,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         }
       });
     return queueRef.current;
-  }, [acceptFrame]);
+  }, [acceptFrame, beginWait]);
 
   const flushTypedBuffer = useCallback(() => {
     if (typeTimerRef.current) {
@@ -388,7 +401,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       // Let onPaste handle clipboard paste
       return;
     }
-    const specialKeys = ['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    const specialKeys = ['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'];
     if (specialKeys.includes(e.key)) {
       e.preventDefault();
       if (e.key === 'Backspace') {
@@ -426,11 +439,34 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
     void enqueueAction({ action: 'type', text: pasted });
   }, [enqueueAction, flushTypedBuffer]);
 
-  // Handle scroll on the screenshot
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    void doAction({ action: 'scroll', dy: Math.round(e.deltaY).toString() });
-  }, [doAction]);
+  // Прокрутка колесом. Обработчик React для wheel пассивный: preventDefault
+  // в нём не работает и сыплет предупреждения, а страница вокруг тоже
+  // прокручивалась. Вешаем обычный слушатель и копим дельту: десять тиков
+  // колеса — один запрос, а не десять.
+  const wheelAccRef = useRef(0);
+  const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasFrame = Boolean(imgSrc);
+  useEffect(() => { hasImageRef.current = hasFrame; }, [hasFrame]);
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      wheelAccRef.current += e.deltaY;
+      if (wheelTimerRef.current) return;
+      wheelTimerRef.current = setTimeout(() => {
+        wheelTimerRef.current = null;
+        const dy = Math.round(wheelAccRef.current);
+        wheelAccRef.current = 0;
+        if (dy) void doAction({ action: 'scroll', dy: dy.toString() });
+      }, 60);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      if (wheelTimerRef.current) { clearTimeout(wheelTimerRef.current); wheelTimerRef.current = null; }
+    };
+  }, [hasFrame, doAction]);
 
   // Load on mount or sync when initialUrl changes
   const startedRef = useRef(false);
@@ -531,25 +567,25 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               <span className="text-[7px] text-blue-300 font-bold">B</span>
             </div>
           )}
-          <span className="text-[11px] text-white/60 truncate flex-1">{pageTitle || pageUrl || 'New Tab'}</span>
+          <span className="text-[11px] text-white/60 truncate flex-1">{pageTitle || pageUrl || 'Новая вкладка'}</span>
         </div>
       </div>
 
       {/* Navigation Bar */}
       <div className="h-11 bg-[#1e1e2e] border-b border-black/30 flex items-center gap-1.5 px-2 shrink-0">
-        <button type="button" onClick={() => void doAction({ action: 'back' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Назад">
+        <button type="button" onClick={() => void doAction({ action: 'back' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Назад" aria-label="Назад">
           <ArrowLeft className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
-        <button type="button" onClick={() => void doAction({ action: 'forward' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Вперёд">
+        <button type="button" onClick={() => void doAction({ action: 'forward' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Вперёд" aria-label="Вперёд">
           <ArrowRight className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
-        <button type="button" onClick={() => void doAction({ action: 'reload' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Обновить">
+        <button type="button" onClick={() => void doAction({ action: 'reload' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Обновить" aria-label="Обновить страницу">
           <RotateCw className={`w-4 h-4 text-white/50 group-hover:text-white/80 ${loading ? 'animate-spin' : ''}`} />
         </button>
-        <button type="button" onClick={() => void navigate('https://www.google.com')} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Домашняя страница">
+        <button type="button" onClick={() => void navigate('https://www.google.com')} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Домашняя страница" aria-label="Домашняя страница">
           <Home className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
-        <button type="button" onClick={() => void clearSession()} title="Завершить внешние сеансы и очистить сохранённые входы" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+        <button type="button" onClick={() => void clearSession()} title="Завершить внешние сеансы и очистить сохранённые входы" aria-label="Завершить внешний сеанс" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
           <LogOut className="w-4 h-4 text-white/50 group-hover:text-rose-300" />
         </button>
 
@@ -567,6 +603,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           <Shield className="w-3.5 h-3.5 text-green-400 shrink-0" />
           <input
             value={inputUrl}
+            aria-label="Адрес страницы или поисковый запрос"
             onChange={e => setInputUrl(e.target.value)}
             onFocus={() => { addressFocusedRef.current = true; }}
             onBlur={() => { addressFocusedRef.current = false; }}
@@ -581,41 +618,39 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         </form>
 
         {/* Открыть в отдельной вкладке браузера */}
-        <button type="button" onClick={openExternally} title="Открыть страницу в новой вкладке" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
+        <button type="button" onClick={openExternally} title="Открыть страницу в новой вкладке" aria-label="Открыть страницу в новой вкладке" className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group">
           <ExternalLink className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
       </div>
 
       {/* Панель быстрых закладок для учителя */}
-      <div className="h-8 bg-[#181826] border-b border-black/30 flex items-center gap-1.5 px-2.5 shrink-0 text-[11px]">
-        <span className="text-white/40 mr-1">Быстрый переход:</span>
+      <div className="h-8 bg-[#181826] border-b border-black/30 flex items-center gap-1.5 px-2.5 shrink-0 text-[11px] overflow-x-auto [scrollbar-width:none]">
+        <span className="text-white/40 mr-1 shrink-0 hidden sm:inline">Быстрый переход:</span>
         <button
           type="button"
           onClick={() => void navigate('https://www.bilimclass.kz/2026/frontoffice/dashboard')}
-          className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 border border-sky-500/20 font-medium transition-colors"
+          className="shrink-0 whitespace-nowrap px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 border border-sky-500/20 font-medium transition-colors"
         >
           BilimClass — Дэшборд учителя
         </button>
         <button
           type="button"
           onClick={() => void navigate('https://nobd.edu.kz/login')}
-          className="px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 border border-violet-500/20 font-medium transition-colors"
+          className="shrink-0 whitespace-nowrap px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 border border-violet-500/20 font-medium transition-colors"
         >
           НОБД
         </button>
         {/* Кнопка сохранения учётных данных для текущего сайта */}
-        <div className="ml-auto flex items-center">
+        <div className="ml-auto flex shrink-0 items-center">
           <button
             type="button"
             title="Сохранить логин/пароль для авто-входа на этом сайте"
             onClick={() => {
-              const domain = (() => { try { return new URL(pageUrl || 'https://bilimclass.kz').hostname.replace(/^www\./, ''); } catch { return 'bilimclass.kz'; } })();
               setCredUsername('');
               setCredPassword('');
               setCredSaved(false);
+              setCredError('');
               setCredDialog(true);
-              // pre-fill domain hint in title
-              void domain;
             }}
             className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-amber-300/70 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/15 transition-colors"
           >
@@ -627,7 +662,14 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
       {/* Модальное окно сохранения учётных данных */}
       {credDialog && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setCredDialog(false); }}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Сохранить данные для авто-входа"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setCredDialog(false); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setCredDialog(false); } }}
+        >
           <div className="bg-[#1e1e32] border border-white/10 rounded-xl shadow-2xl p-5 w-80 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-medium">
@@ -643,11 +685,13 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               Данные хранятся зашифрованными.
             </p>
             <div className="text-[11px] text-white/40 font-mono truncate">
-              {(() => { try { return new URL(pageUrl || 'https://bilimclass.kz').hostname.replace(/^www\./, ''); } catch { return 'bilimclass.kz'; } })()}
+              {domainOf(pageUrl)}
             </div>
             <input
               type="text"
               placeholder="Логин (email или ИИН)"
+              aria-label="Логин"
+              autoFocus
               value={credUsername}
               onChange={e => setCredUsername(e.target.value)}
               className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-blue-500/50"
@@ -656,6 +700,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             <input
               type="password"
               placeholder="Пароль"
+              aria-label="Пароль"
               value={credPassword}
               onChange={e => setCredPassword(e.target.value)}
               className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-blue-500/50"
@@ -665,7 +710,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               type="button"
               disabled={credSaving || !credUsername || !credPassword}
               onClick={async () => {
-                const domain = (() => { try { return new URL(pageUrl || 'https://bilimclass.kz').hostname.replace(/^www\./, ''); } catch { return 'bilimclass.kz'; } })();
+                const domain = domainOf(pageUrl);
                 setCredSaving(true);
                 try {
                   const res = await fetch('/api/agents/browser-credentials', {
@@ -676,7 +721,12 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
                   if (res.ok) {
                     setCredSaved(true);
                     setTimeout(() => setCredDialog(false), 1500);
+                  } else {
+                    const data = (await res.json().catch(() => ({}))) as { error?: string };
+                    setCredError(data.error ?? 'Не удалось сохранить данные');
                   }
+                } catch {
+                  setCredError('Нет связи с сервером. Данные не сохранены.');
                 } finally {
                   setCredSaving(false);
                 }
@@ -685,6 +735,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             >
               {credSaved ? <><Check className="w-4 h-4" /> Сохранено!</> : credSaving ? 'Сохранение...' : <><KeyRound className="w-4 h-4" /> Сохранить</>}
             </button>
+            {credError && <p className="text-[11px] text-rose-300" role="alert">{credError}</p>}
           </div>
         </div>
       )}
@@ -757,10 +808,9 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             <img
               ref={imgRef}
               src={imgSrc}
-              alt="Browser viewport"
+              alt="Экран браузера"
               draggable={false}
               onClick={handleImageClick}
-              onWheel={handleWheel}
               style={{
                 width: '100%',
                 height: '100%',

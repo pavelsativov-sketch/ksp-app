@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { getDb, COL } from "@/lib/mongo";
 import { browserRpc, BrowserRpcError, createBrowserRpcSession } from "@/lib/agents/browser-rpc";
 import { log } from "@/lib/logger";
+import { getBrowserTarget } from "@/lib/agents/runtime-mode";
 export { browserFailure } from "@/lib/agents/browser-failure";
 
 export interface AgentBrowserSession {
@@ -123,10 +124,11 @@ export async function clearAgentBrowserSession(userId: string): Promise<void> {
   if (session) {
     await session.context.close().catch(() => {});
     await session.browser.close().catch(() => {});
-  } else if (process.env.VERCEL === "1" || process.env.BROWSER_RPC_URL) {
+  } else if (getBrowserTarget() !== "none") {
     const stored = await readStoredState(userId).catch(() => undefined);
     if (stored?.sessionId) {
-      await browserRpc(userId, "close", { sessionId: stored.sessionId, rpcUrl: process.env.BROWSER_RPC_URL }).catch(() => {});
+      // Адрес раннера выбирает resolveRunnerUrl: персональная Vercel Sandbox.
+      await browserRpc(userId, "close", { sessionId: stored.sessionId }).catch(() => {});
     }
   }
   const db = await getDb();
@@ -221,37 +223,15 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
 
   const stored = await readStoredState(userId).catch(() => undefined);
 
-  // Временный тестовый раннер в GitHub Codespaces. Адрес задаётся только
-  // server-side secret, а сам раннер принимает лишь HMAC-подписанные запросы.
-  const externalRpcUrl = process.env.BROWSER_RPC_URL;
-  if (externalRpcUrl) {
-    try {
-      const rpcUrl = new URL(externalRpcUrl);
-      if (rpcUrl.protocol !== "https:") throw new Error("BROWSER_RPC_URL должен использовать https");
-      if (stored?.sessionId) {
-        const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now, rpcUrl.toString());
-        if (await remote.remote!.validate()) return remote;
-        sessions.delete(userId);
-      }
-      const created = await createBrowserRpcSession(userId, {
-        storageState: stored?.storageState,
-        currentUrl: stored?.currentUrl,
-        rpcUrl: rpcUrl.toString(),
-      });
-      return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl.toString());
-    } catch (e) {
-      log.error("browser-session: external runner unavailable", { userId, error: String(e) });
-      throw new BrowserRpcError(e instanceof Error ? e.message : "Тестовый браузер временно недоступен. Попробуйте ещё раз.", 503);
-    }
-  }
+  const browserTarget = getBrowserTarget();
 
   // Браузер рабочей области существует только в персональной Vercel Sandbox.
   // Раньше здесь была ветка «Chromium в процессе Node», чтобы ОС работала
   // при `npm run dev`: она создавала второй браузер с другим поведением
   // (другой SSRF-контур, без общего состояния с агентом) и только размывала
-  // смысл единой сессии. Локально браузер проверяется отдельно —
+  // смысл единой сессии. Код раннера проверяется отдельно —
   // `node scripts/check-runner.mjs` и `tests/integration/os-browser-flow.test.ts`.
-  if (process.env.VERCEL !== "1") {
+  if (browserTarget !== "vercel-sandbox") {
     throw new BrowserRpcError(
       "Браузер рабочей области доступен только на Vercel. Разверните приложение на Vercel.",
       503,
@@ -295,7 +275,6 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
   let currentInteractionState = initialInteractionState;
   let closed = false;
   let closeRequest: Promise<void> | undefined;
-  let lastValidatedAt = 0;
 
   const send = async <T,>(action: string, args?: Record<string, unknown>, allowedOrigin?: string, captureScreenshot = false) => {
     if (closed && action !== "close") throw new BrowserRpcError("Browser session is closed", 410);
@@ -405,7 +384,6 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
         try {
           const status = await send<{ open: boolean; url: string }>("status");
           currentUrl = status?.result?.url || currentUrl;
-          lastValidatedAt = Date.now();
           return Boolean(status?.result?.open);
         } catch {
           return false;

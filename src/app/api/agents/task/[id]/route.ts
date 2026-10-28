@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getDb, COL } from "@/lib/mongo";
+import { runningTaskIsStale } from "@/lib/agents/lease";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -137,14 +138,9 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           // функция Vercel/Cloudflare уже убита без обновления статуса.
           // Исправляем статус в БД, чтобы пользователь не видел вечный спиннер.
           //
-          // Считаем «возраст» от последнего heartbeat, а не от created_at:
-          // при паузе на ручном входе учителя задача легально живёт дольше
-          // 12 минут, и heartbeat продолжает обновляться.
-          const MAX_TASK_AGE_MS = 12 * 60_000; // 12 мин — выше потолка Vercel Pro (10 мин) + запас
-          const taskStarted = (task.created_at ?? task.createdAt)?.getTime() ?? 0;
-          const lastBeat = (task.heartbeat_at as Date | undefined)?.getTime?.() ?? 0;
-          const lastActivity = Math.max(taskStarted, lastBeat);
-          if (task.status === "running" && lastActivity > 0 && Date.now() - lastActivity > MAX_TASK_AGE_MS) {
+          // Единый порог и порядок heartbeat → updated_at → created_at
+          // определены в lease.ts и используются также очередью.
+          if (task.status === "running" && runningTaskIsStale(task, Date.now())) {
             const staleMsg = "Задача превысила лимит времени и была остановлена автоматически.";
             try {
               await agentTasks.updateOne(

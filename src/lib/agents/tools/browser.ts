@@ -14,6 +14,12 @@ import { classifyClick, classifyTyping } from '../computer/safety';
 import { requestPermission } from '../permissions';
 import { detectPageAuthBarrier } from '../browser-dom';
 import { executeWithFallback } from '@/lib/ai/providers';
+import { boundedResult } from './bounded-result';
+
+function navigationTimedOut(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /navigation timeout|timeout .* exceeded|timed out.*navigat/i.test(message);
+}
 
 async function extractPageSnapshot(page: {
   url: () => string;
@@ -23,9 +29,28 @@ async function extractPageSnapshot(page: {
   const title = await page.title().catch(() => '');
   const content = (await page
     .evaluate(() => {
-      const doc = window.document.cloneNode(true) as Document;
-      doc.querySelectorAll('script, style, nav, footer, iframe').forEach((el) => el.remove());
-      return (doc.body?.innerText ?? '').slice(0, 2000);
+      // Обходим живой документ и берём только видимые текстовые узлы. Раньше
+      // текст брался из клона документа: у отсоединённого DOM нет вёрстки, и
+      // содержимое <noscript> попадало в ответ сырой HTML-разметкой.
+      const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'NAV', 'FOOTER', 'IFRAME', 'SVG', 'HEAD']);
+      const lines: string[] = [];
+      let size = 0;
+      const walk = (el: Element) => {
+        if (size > 2000 || skip.has(el.tagName.toUpperCase())) return;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return;
+        el.childNodes.forEach((node) => {
+          if (size > 2000) return;
+          if (node.nodeType === 3) {
+            const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+            if (text) { lines.push(text); size += text.length + 1; }
+          } else if (node.nodeType === 1) {
+            walk(node as Element);
+          }
+        });
+      };
+      if (document.body) walk(document.body);
+      return lines.join('\n').slice(0, 2000);
     })
     .catch(() => '')) as string;
   const interactables = await readInteractables(page as never);
@@ -61,15 +86,22 @@ export const browserTools = {
 
       const session = await getAgentBrowserSession(ctx.userId);
       await installRequestGuard(session.page);
-      await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
+      try {
+        await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
+      } catch (error) {
+        // A single retry tolerates a transient load timeout without turning a
+        // permanently slow site into an endless agent loop.
+        if (!navigationTimedOut(error)) throw error;
+        await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
+      }
       if (/bilimclass\.kz/i.test(checked.url.hostname)) {
         await session.page.waitForTimeout(1500);
       }
       await persistAgentBrowserSession(ctx.userId);
       const snap = await extractPageSnapshot(session.page);
-      return { success: true, ...snap };
+      return boundedResult({ success: true, ...snap });
     } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'navigation failed' };
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'navigation failed' });
     }
   },
 
@@ -85,6 +117,7 @@ export const browserTools = {
 
     try {
       const session = await getAgentBrowserSession(ctx.userId);
+      const beforeUrl = session.page.url();
       const probe = await probeElement(session.page as never, px, py);
       const decision = classifyClick(probe.label);
       if (decision.requiresConfirmation) {
@@ -102,13 +135,16 @@ export const browserTools = {
       await session.page.waitForTimeout(1500);
       await persistAgentBrowserSession(ctx.userId);
       const snap = await extractPageSnapshot(session.page);
-      return {
+      const pageUnchanged = beforeUrl === snap.url;
+      return boundedResult({
         success: true,
         clicked: probe.label || `(${px}, ${py})`,
+        pageUnchanged,
+        ...(pageUnchanged ? { notice: 'адрес страницы не изменился; на одностраничных сайтах содержимое могло обновиться — сверь content и interactables' } : {}),
         ...snap,
-      };
+      });
     } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'click failed' };
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'click failed' });
     }
   },
 
@@ -157,13 +193,13 @@ export const browserTools = {
       await session.page.waitForTimeout(1000);
       await persistAgentBrowserSession(ctx.userId);
       const snap = await extractPageSnapshot(session.page);
-      return {
+      return boundedResult({
         success: true,
         typed: text.slice(0, 80),
         ...snap,
-      };
+      });
     } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'type failed' };
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'type failed' });
     }
   },
 
@@ -197,13 +233,13 @@ export const browserTools = {
         });
         return resp.choices[0]?.message?.content ?? '';
       });
-      return {
+      return boundedResult({
         success: true,
         url: session.page.url(),
         description: String(description).trim().slice(0, 3000),
-      };
+      });
     } catch (e) {
-      return { success: false, error: e instanceof Error ? e.message : 'vision failed' };
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'vision failed' });
     }
   },
 };

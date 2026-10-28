@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDown, ArrowRight, ArrowUpRight, BookOpen, Check, FileText, Languages, Layers, Leaf, PencilLine, Presentation } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, BookOpen, Bot, Check, FileText, Languages, Layers, Leaf, PencilLine, Presentation, Sparkles } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDict } from "@/lib/i18n/server";
 import { KitPreview, PlantIllustration } from "@/components/landing/kit-preview";
@@ -30,7 +30,13 @@ export default async function HomePage() {
           <div className={s.heroActions}><Link className={s.primary} href={createHref}>{createLabel}<ArrowUpRight size={19} /></Link><a className={s.textAction} href="#kit"><span className={s.playCircle}><ArrowDown size={16} /></span>{l.whatYouGet}</a></div>
           <div className={s.heroFine}><Check size={15} /><span>{l.freeNoteA}</span><span className={s.fineDivider} /><span>{l.freeNoteB}</span></div>
         </div>
-        <KitPreview />
+        <div className={s.heroVisual}>
+          <KitPreview />
+          {/* Декоративные метки: названия продуктов одинаковы на русском и казахском. */}
+          <div className={`${s.floatChip} ${s.chipA}`} aria-hidden="true"><span><Bot size={15} /></span>BilimClass<Check size={14} /></div>
+          <div className={`${s.floatChip} ${s.chipB}`} aria-hidden="true"><span><Sparkles size={15} /></span>КСП · СОР · СОЧ</div>
+          <div className={`${s.floatChip} ${s.chipC}`} aria-hidden="true"><span><FileText size={15} /></span>.docx · .pptx</div>
+        </div>
       </div>
     </section>
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
+import { getWorkspaceTarget } from "@/lib/agents/runtime-mode";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: result.exitCode === 0, ...result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось выполнить команду";
-    const sandboxConfigured = process.env.VERCEL === "1" || process.env.WORKSPACE_RUNTIME === "vercel-sandbox";
+    const sandboxConfigured = getWorkspaceTarget() !== "none";
     return NextResponse.json({ success: false, error: message }, { status: sandboxConfigured ? 500 : 503 });
   }
 }

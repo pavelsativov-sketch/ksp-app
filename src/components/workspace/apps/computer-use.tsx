@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   MonitorPlay, Loader2, Play, ShieldAlert, ShieldCheck, Check, X,
-  Lock, Hand,
+  Lock, Hand, Square,
 } from "lucide-react";
 
 /**
@@ -75,6 +75,13 @@ const RISK_LABEL: Record<string, string> = {
 
 
 
+/** Быстрый старт: типичные поручения, чтобы не придумывать формулировку с нуля. */
+const GOAL_EXAMPLES = [
+  { label: "BilimClass: провести урок", goal: "Открыть дэшборд учителя в BilimClass и отметить урок проведённым", url: "https://www.bilimclass.kz/login" },
+  { label: "НОБД: открыть отчёты", goal: "Войти в НОБД и открыть раздел отчётов", url: "https://nobd.edu.kz/login" },
+  { label: "Найти материалы", goal: "Найти на открытой странице материалы по теме «Дроби» и открыть раздел с упражнениями", url: "" },
+] as const;
+
 export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: string; initialUrl?: string } = {}) {
   const [goal, setGoal] = useState(
     initialGoal ?? (initialUrl?.includes("bilimclass")
@@ -107,6 +114,9 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   const [activeField, setActiveField] = useState<ActiveFieldInfo | null>(null);
   const [liveText, setLiveText] = useState("");
   const [screenBusy, setScreenBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [hasFrame, setHasFrame] = useState<boolean | null>(null);
+  const sawRunningRef = useRef(false);
 
   const [imgLayout, setImgLayout] = useState<{ width: number; height: number } | null>(null);
 
@@ -126,7 +136,11 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [log]);
 
   const applyFrameResponse = useCallback(async (res: Response) => {
-    if (!res.ok || !res.headers.get("content-type")?.startsWith("image/")) return;
+    if (!res.ok || !res.headers.get("content-type")?.startsWith("image/")) {
+      if (res.status === 404) setHasFrame(false);
+      return;
+    }
+    setHasFrame(true);
     const rawActiveField = res.headers.get("X-Active-Field");
     const rawAuthBarrier = res.headers.get("X-Auth-Barrier");
     if (rawActiveField) {
@@ -178,6 +192,28 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     return () => window.clearInterval(poll);
   }, [running, refreshScreenshot]);
 
+  // Окно могли закрыть и открыть снова, пока агент работает на сервере:
+  // возвращаем состояние «работает», чтобы не запустить второго агента и
+  // иметь возможность остановить текущего.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/agents/computer", { cache: "no-store" });
+        if (!res.ok || !alive) return;
+        const data = (await res.json()) as { running?: boolean; events?: LogLine[]; control?: "ai" | "user" };
+        if (!alive || !data.running) return;
+        sawRunningRef.current = true;
+        setRunning(true);
+        if (data.events?.length) setLog(data.events.slice(-200));
+        if (data.control) setControl(data.control);
+      } catch {
+        // состояние восстановить не удалось — окно просто начнёт с нуля
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   // Опрашиваем живые события, барьер входа и запросы подтверждения
   useEffect(() => {
     if (!running) return;
@@ -190,7 +226,19 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           events?: LogLine[];
           authBarrier?: PageAuthBarrier | null;
           control?: "ai" | "user";
+          running?: boolean;
         };
+        if (data.running) sawRunningRef.current = true;
+        // Агент закончил, а ответ на исходный запрос до окна не дошёл
+        // (окно переоткрывали): завершаем состояние по данным опроса.
+        if (data.running === false && sawRunningRef.current) {
+          sawRunningRef.current = false;
+          setRunning(false);
+          setPending([]);
+          setStopping(false);
+          void refreshScreenshot();
+          return;
+        }
         if (data.pending) setPending(data.pending);
         if (data.events && data.events.length > 0) {
           setLog(data.events.slice(-200));
@@ -202,7 +250,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       }
     }, 1500);
     return () => window.clearInterval(poll);
-  }, [running]);
+  }, [running, refreshScreenshot]);
 
   const enqueueScreenAction = useCallback((params: Record<string, string>) => {
     setScreenBusy(true);
@@ -327,6 +375,18 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     }
   }, []);
 
+  const stop = useCallback(async () => {
+    setStopping(true);
+    setPending([]);
+    try {
+      await fetch("/api/agents/computer", { method: "DELETE" });
+      appendLog({ type: "WARNING", message: "Останавливаю агента…" });
+    } catch {
+      setError("Не удалось остановить агента");
+      setStopping(false);
+    }
+  }, [appendLog]);
+
   const start = useCallback(async () => {
     const task = goal.trim();
     if (task.length < 3 || running) return;
@@ -364,6 +424,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       setError(e instanceof Error ? e.message : "Сбой связи с агентом");
     } finally {
       setRunning(false);
+      setStopping(false);
       setPending([]);
     }
   }, [goal, startUrl, running, appendLog, refreshScreenshot]);
@@ -412,14 +473,30 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#0d0f1a] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
-        <MonitorPlay className="size-4 text-sky-400" />
-        <span className="text-xs font-semibold">Агент: работа с компьютером</span>
+        <MonitorPlay className="size-4 shrink-0 text-sky-400" />
+        <span className="min-w-0 truncate text-xs font-semibold">Агент браузера</span>
         {running && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] text-sky-300">
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] text-sky-300">
             <Loader2 className="size-3 animate-spin" /> {control === "user" ? "ждёт вашего ввода" : "работает"}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1.5">
+        {pending.length > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+            <ShieldAlert className="size-3" /> ждёт решения: {pending.length}
+          </span>
+        )}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {running && (
+            <button
+              type="button"
+              onClick={() => void stop()}
+              disabled={stopping}
+              title="Остановить агента"
+              className="inline-flex items-center gap-1 rounded-md border border-rose-400/40 bg-rose-500/10 px-2.5 py-1 text-[10px] font-semibold text-rose-200 hover:bg-rose-500/20 disabled:opacity-50"
+            >
+              {stopping ? <Loader2 className="size-3 animate-spin" /> : <Square className="size-3 fill-current" />} {stopping ? "Останавливаю…" : "Остановить"}
+            </button>
+          )}
           {control === "user" ? (
             <button
               type="button"
@@ -448,6 +525,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           id="computer-goal"
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void start(); }}
           rows={2}
           disabled={running}
           placeholder="Например: найди на сайте материалы по теме «Дроби» и открой раздел с упражнениями"
@@ -466,6 +544,21 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-sky-500/60 disabled:opacity-60"
         />
 
+        {!running && goal.trim().length === 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Примеры задач">
+            {GOAL_EXAMPLES.map((example) => (
+              <button
+                key={example.label}
+                type="button"
+                onClick={() => { setGoal(example.goal); setStartUrl(example.url); }}
+                className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-400 hover:border-sky-400/40 hover:text-slate-200"
+              >
+                {example.label}
+              </button>
+            ))}
+          </div>
+        )}
+
 
         <button
           type="button"
@@ -476,6 +569,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
           Запустить агента
         </button>
+        <span className="ml-2 text-[10px] text-slate-500">Ctrl+Enter</span>
 
         {error && (
           <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-300">
@@ -523,6 +617,12 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           className="absolute left-0 top-0 h-0 w-0 opacity-0 pointer-events-none p-0 m-0 border-0"
           tabIndex={-1}
         />
+
+        {!screenshot && hasFrame === false && (
+          <div className="mt-3 flex aspect-[8/5] items-center justify-center rounded-lg border border-dashed border-white/10 bg-black/20 p-4 text-center text-xs text-slate-500">
+            Браузер ещё не открыт. Запустите агента — экран появится здесь, и вы сможете кликать по нему и вводить данные.
+          </div>
+        )}
 
         {screenshot && (
           <figure className="relative mt-3">

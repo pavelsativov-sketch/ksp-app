@@ -1,9 +1,9 @@
 import { ObjectId } from 'mongodb';
 import { getDb, COL } from '@/lib/mongo';
-import { tools } from './tools';
-import OpenAI from 'openai';
+import { tools, type ToolCtx } from './tools';
 import { executeWithFallback } from '@/lib/ai/providers';
 import { getControlOwner, releaseControlToUser, setControlOwner, waitForControl } from './session';
+import { buildCheckpoint, compactMessages, parseCheckpoint, repairTranscript, type AgentMessage } from './checkpoint';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
 import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
 
@@ -13,7 +13,7 @@ const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekt
 Не читай переменные окружения, служебные credentials или данные другого пользователя.
 Опасные команды требуют подтверждения в панели пользователя; если команда отклонена, не повторяй её обходными путями.
 Доступные инструменты:
-- runCommand — выполнить ограниченную по времени команду в отдельной Linux-песочнице пользователя;
+- runCommand — выполнить ограниченную по времени команду в изолированной Linux-песочнице пользователя;
 - writeFile / readFile / listFiles — файлы в той же рабочей папке пользователя;
 - browserNavigate — открыть публичную страницу в облачном браузере и получить её текст + список кликабельных элементов с координатами (x, y);
 - browserClick — кликнуть в облачном браузере по координатам (x, y) из списка interactables;
@@ -48,7 +48,9 @@ const TOOL_SCHEMAS = [
   { type: 'function' as const, function: { name: 'finishTask', description: 'Завершить задачу с итогом', parameters: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } } },
 ];
 
-const MAX_LOOPS = 12;
+// Общий лимит шагов на задачу (все провайдеры и перезапуски вместе). 12 шагов
+// не хватало даже на «открыть страницу → найти → кликнуть → проверить».
+const MAX_LOOPS = 30;
 // Leave headroom under Vercel Hobby's five-minute function ceiling.
 const TIME_BUDGET_MS = 4 * 60_000 + 50_000;
 
@@ -77,15 +79,19 @@ export async function runAgentTask(
   const finish = async (status: 'completed' | 'failed' | 'stopped', patch: Record<string, unknown> = {}) => {
     await agentTasks.updateOne(
       { _id: new ObjectId(taskId) },
-      { $set: { status, updatedAt: new Date(), ...patch } },
+      { $set: { status, updated_at: new Date(), ...patch }, $unset: { heartbeat_at: 1, checkpoint: 1 } },
     );
     // Задача окончена — общая рабочая область возвращается учителю. Иначе
     // панель навсегда оставляла «AI РАБОТАЕТ» и кнопку «Забрать управление
     // себе», хотя управлять было уже некому.
     await releaseControlToUser(userId, taskId).catch(() => {});
-    // Освободился слот — следующее поручение из очереди подхватит поллер
-    // (startQueuePoller). Он работает вне контекста запроса и не зависит от
-    // завершения текущего выполнения.
+    // Освободился слот — пробуем запустить следующее поручение из очереди.
+    // Если фоновый запуск потеряется, его подхватит «будильник» GET
+    // /api/agents/task, который опрашивает интерфейс.
+    try {
+      const { dispatchQueuedTask } = await import('./orchestrator');
+      await dispatchQueuedTask();
+    } catch { /* очередь не должна ломать завершение задачи */ }
   };
 
   // Сердцебиение: «пока статус running, раннер жив». Если серверлесс-функция
@@ -121,7 +127,8 @@ export async function runAgentTask(
     await beat(); // раннер поднялся — фиксируем жизнь до медленной проверки песочницы
     await log({ type: 'START', message: `Задача запущена (${taskId})` }).catch(() => {});
     const workspace = await getWorkspaceRuntime(userId);
-    const shellAvailable = (await workspace.getSandboxStatus()).available;
+    const sandboxStatus = await workspace.getSandboxStatus();
+    const shellAvailable = sandboxStatus.available;
     const activeTools = shellAvailable
       ? tools
       : Object.fromEntries(Object.entries(tools).filter(([name]) => name !== 'runCommand'));
@@ -160,6 +167,31 @@ export async function runAgentTask(
       ? `${baseSystemPrompt}\n\n${bilimClassInstructions()}`
       : baseSystemPrompt) + memoryBlock;
     const deadline = Date.now() + TIME_BUDGET_MS;
+
+    // Контрольная точка: после падения функции или паузы агент продолжает с
+    // сохранённого транскрипта, а не начинает задачу с нуля.
+    const stored = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { checkpoint: 1 } });
+    const resumed = parseCheckpoint(stored?.checkpoint);
+    let transcript: AgentMessage[] | null = resumed
+      ? [{ role: 'system', content: systemPrompt }, ...resumed.messages.slice(1)]
+      : null;
+    let stepsUsed = resumed?.step ?? 0;
+    let pausedForTimeout = false;
+    let incompleteReason: 'steps' | 'time' | undefined;
+    if (resumed) {
+      await log({ type: 'RESUMED', message: `Продолжаю с шага ${resumed.step + 1}: прежний ход работы сохранён.` }).catch(() => {});
+    }
+    const saveCheckpoint = async (completedSteps = stepsUsed) => {
+      if (!transcript) return;
+      try {
+        await agentTasks.updateOne(
+          { _id: new ObjectId(taskId) },
+          { $set: { checkpoint: buildCheckpoint(completedSteps, transcript) } },
+        );
+      } catch {
+        // точка — страховка; сбой записи не должен валить задачу
+      }
+    };
     // Сообщение о жёстком ограничении браузера (дневной лимит, 429):
     // только такие ошибки прерывают весь цикл. Мягкие ошибки (таймаут
     // загрузки, недоступная страница) возвращаются модели — она сама
@@ -171,7 +203,8 @@ export async function runAgentTask(
     // loop перезапускается на следующем провайдере.
     const summaryFinal = await executeWithFallback('tasks', async (client, model, config, signal) => {
       // ── План: короткий чеклист из 3–5 шагов для чата (как у Devin) ──
-      try {
+      // План строится один раз; при продолжении с контрольной точки он уже есть.
+      if (!transcript) try {
         const planResp = await client.chat.completions.create(
           {
             model,
@@ -197,17 +230,27 @@ export async function runAgentTask(
         // план не обязателен — без него просто выполняем задачу
       }
 
-      let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ];
+      // Транскрипт живёт снаружи колбэка: при сбое провайдера следующий
+      // продолжает с того же места, а не с пустого листа (раньше повторялись
+      // уже сделанные действия в браузере). Висячие вызовы инструментов
+      // после обрыва вычищаются.
+      let messages: AgentMessage[] = transcript
+        ? repairTranscript(transcript)
+        : [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt },
+          ];
+      transcript = messages;
       let done = false;
       let summary = '';
       let textOnlyStreak = 0;
 
-      for (let step = 1; step <= MAX_LOOPS && !done; step++) {
+      while (stepsUsed < MAX_LOOPS && !done) {
+        const step = ++stepsUsed;
         if (Date.now() > deadline) {
           await log({ type: 'WARNING', message: 'Истёк пятиминутный лимит задачи. Остановка.' });
+          stepsUsed--; // шаг не выполнялся
+          incompleteReason = 'time';
           break;
         }
 
@@ -220,6 +263,10 @@ export async function runAgentTask(
           return 'Остановлено пользователем';
         }
 
+        // Страховка: состояние на начало шага. Если функция погибнет, новый
+        // раннер продолжит именно отсюда.
+        await saveCheckpoint(step - 1);
+
         // TAKE CONTROL: пока управление у пользователя — агент стоит на паузе
         // (не выполняет ни одного действия) и ждёт «GIVE CONTROL TO AI».
         if (await getControlOwner(userId) === 'user') {
@@ -227,11 +274,25 @@ export async function runAgentTask(
           const outcome = await waitForControl(userId, async () => {
             const t = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
             return !!t && t.status !== 'running';
-          }, beat);
+          }, beat, deadline);
           if (outcome === 'stopped') {
             await log({ type: 'END', message: 'Остановлено пользователем' });
             await finish('stopped', { result: 'Остановлено пользователем' });
             return 'Остановлено пользователем';
+          }
+          if (outcome === 'timeout') {
+            // Жизни функции почти не осталось. Не делаем вид, что ждём вечно:
+            // сохраняем точку и помечаем пульс «давно умершим», чтобы кнопка
+            // «Передать управление ИИ» сразу перезапустила задачу отсюда.
+            stepsUsed--;
+            await saveCheckpoint(stepsUsed);
+            await agentTasks.updateOne(
+              { _id: new ObjectId(taskId), status: 'running' },
+              { $set: { heartbeat_at: new Date(0) } },
+            ).catch(() => {});
+            await log({ type: 'WARNING', message: 'Сессия агента скоро закончится, пока вы работаете вручную. Прогресс сохранён: нажмите «Передать управление ИИ» — задача продолжится с этого места.' });
+            pausedForTimeout = true;
+            return 'paused';
           }
           await log({ type: 'RESUMED', message: 'Управление возвращено агенту. Продолжаю.' });
           // После паузы агент должен увидеть актуальный URL — браузер живёт в песочнице.
@@ -254,7 +315,8 @@ export async function runAgentTask(
 
         await log({ type: 'THINK', message: `Шаг ${step}: обдумываю следующий ход…` });
 
-        messages = trimMessages(messages);
+        messages = compactMessages(messages);
+        transcript = messages;
         const response = await client.chat.completions.create(
           {
             model,
@@ -316,13 +378,17 @@ export async function runAgentTask(
           await log({ type: 'END', message: summary || 'Задача завершена' });
           done = true;
         } else {
-          const tool = (activeTools as unknown as Record<string, (a: Record<string, unknown>, c: { taskId: string; userId: string }) => Promise<unknown>>)[name];
+          const tool = (activeTools as unknown as Record<string, (a: Record<string, unknown>, c: ToolCtx) => Promise<unknown>>)[name];
           if (!tool) {
             resultStr = JSON.stringify({ success: false, error: `Неизвестный инструмент: ${name}` });
           } else {
             try {
-              const res = await tool(args, { taskId, userId });
-              resultStr = JSON.stringify(res).slice(0, 4000);
+              const res = await tool(args, { taskId, userId, signal: abortController.signal, beat, deadline });
+              // Браузерные инструменты уже укладываются в ~5000 символов
+              // (boundedResult). Обрезка JSON посреди строки ломала разбор
+              // authBarrier ниже, поэтому режем только прочие результаты.
+              const rawResult = JSON.stringify(res);
+              resultStr = name.startsWith('browser') ? rawResult.slice(0, 6000) : rawResult.slice(0, 4000);
             } catch (e) {
               resultStr = JSON.stringify({ success: false, error: e instanceof Error ? e.message : 'tool failed' });
             }
@@ -374,13 +440,28 @@ export async function runAgentTask(
       }
 
       if (!done) {
-        // Все шаги израсходованы этим провайдером — сигнализируем наверх,
-        // чтобы фоллбэк попробовал следующего (если шаги кончились и там, задачи не будет).
-        await log({ type: 'WARNING', message: 'Лимит шагов у провайдера. Пробую другого…' });
-        throw new Error('max loops reached');
+        // Лимит шагов общий для всех провайдеров, поэтому смена провайдера
+        // его не продлит: прежде такой «перебор» перезапускал задачу с нуля
+        // и повторял действия. Завершаем честно, прогресс остаётся в точке.
+        incompleteReason = incompleteReason ?? 'steps';
+        await saveCheckpoint(stepsUsed);
       }
       return summary;
-    });
+    }, { signal: abortController.signal, budgetMs: TIME_BUDGET_MS });
+
+    // Агент ждал учителя, пока функция не начала умирать: статус остаётся
+    // running с «давним» пульсом, кнопка «Передать управление ИИ» перезапустит
+    // задачу с контрольной точки.
+    if (pausedForTimeout) return;
+
+    if (incompleteReason) {
+      const error = incompleteReason === 'steps'
+        ? `Достигнут лимит шагов (${MAX_LOOPS}), а задача не завершена. Уточните поручение или разбейте его на части.`
+        : 'Время сессии агента вышло до завершения задачи. Запустите её ещё раз — прогресс сохранён.';
+      await log({ type: 'ERROR', message: error });
+      await finish('failed', { error });
+      return;
+    }
 
     if (hardBrowserFailure) {
       await finish('failed', { error: hardBrowserFailure });
@@ -395,7 +476,7 @@ export async function runAgentTask(
   } catch (error) {
     // AbortError — пользователь остановил задачу (watchdog) или сервер оборвал
     // соединение: это не сбой, завершаем аккуратно статусом stopped.
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (abortController.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
       const afterStop = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
       if (afterStop?.status !== 'stopped') {
         await finish('stopped', { result: 'Остановлено пользователем' });
@@ -412,13 +493,14 @@ export async function runAgentTask(
 
 function humanToolCall(name: string, args: Record<string, unknown>): string {
   switch (name) {
-    case 'runCommand': return `Выполняю команду в Linux-песочнице: ${String(args.command ?? '').slice(0, 100)}`;
+    case 'runCommand': return `Выполняю команду в песочнице: ${String(args.command ?? '').slice(0, 100)}`;
     case 'writeFile': return `Создаю файл ${String(args.filename ?? '')}`;
     case 'readFile': return `Читаю файл ${String(args.filename ?? '')}`;
     case 'listFiles': return 'Смотрю файлы рабочей области';
     case 'browserNavigate': return `Открываю страницу ${String(args.url ?? '')}`.slice(0, 300);
     case 'browserClick': return `Нажимаю (${String(args.x ?? '?')}, ${String(args.y ?? '?')})${args.intent ? ` — ${String(args.intent)}` : ''}`.slice(0, 300);
     case 'browserType': return `Ввожу текст «${String(args.text ?? '').slice(0, 80)}»`.slice(0, 300);
+    case 'browserDescribeScreen': return 'Смотрю на экран браузера';
     case 'finishTask': return 'Завершаю задачу';
     default: return `Вызов ${name}`;
   }
@@ -443,28 +525,4 @@ function shrinkArgs(name: string, args: Record<string, unknown>): Record<string,
     return { filename: args.filename, contentLength: args.content.length };
   }
   return args;
-}
-
-/**
- * Держит транскрипт в границах контекста провайдера.
- *
- * Раньше messages рос без ограничений: результаты инструментов (до 4000
- * символов каждый) накапливались на всех 12 шагах, и на длинных задачах
- * контекст переполнялся. Сохраняем system + исходное задание, а середину
- * сжимаем до короткой пометки, оставляя последние шаги.
- */
-function trimMessages(
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
-  if (messages.length <= 32) return messages;
-  const head = messages.slice(0, 2);
-  const tail = messages.slice(-24);
-  return [
-    ...head,
-    {
-      role: 'system',
-      content: '(Промежуточные шаги опущены для экономии контекста; продолжайте с текущего состояния.)',
-    },
-    ...tail,
-  ];
 }

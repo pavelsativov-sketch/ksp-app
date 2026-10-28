@@ -57,7 +57,7 @@ describe('BrowserApp: прямой ввод с клавиатуры прямо �
     render(<BrowserApp initialUrl="https://www.bilimclass.kz/login" />);
 
     await waitFor(() => {
-      expect(screen.getByAltText('Browser viewport')).toBeDefined();
+      expect(screen.getByAltText('Экран браузера')).toBeDefined();
     });
 
     // Отдельная нижняя панель ввода отсутствует
@@ -79,10 +79,10 @@ describe('BrowserApp: прямой ввод с клавиатуры прямо �
     render(<BrowserApp initialUrl="https://www.bilimclass.kz/login" />);
 
     await waitFor(() => {
-      expect(screen.getByAltText('Browser viewport')).toBeDefined();
+      expect(screen.getByAltText('Экран браузера')).toBeDefined();
     });
 
-    const img = screen.getByAltText('Browser viewport');
+    const img = screen.getByAltText('Экран браузера');
     // Мокируем getBoundingClientRect
     vi.spyOn(img, 'getBoundingClientRect').mockReturnValue({
       left: 0,

@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useActiveAgentTask } from "./agent-dock";
 
-export type ActiveTaskStatus = "idle" | "running" | "completed" | "failed" | "stopped";
+export type ActiveTaskStatus = "idle" | "queued" | "running" | "completed" | "failed" | "stopped";
 
 const API_STATUS: Record<string, ActiveTaskStatus> = {
+  queued: "queued",
   running: "running",
   completed: "completed",
   failed: "failed",
@@ -45,6 +46,7 @@ export function useActiveTaskStatus(): {
     let alive = true;
 
     const read = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
         const res = await fetch("/api/agents/task", { cache: "no-store" });
         if (!res.ok) return;

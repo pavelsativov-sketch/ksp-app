@@ -207,7 +207,3 @@ export async function installRequestGuard(page: Routeable): Promise<void> {
   });
 }
 
-function getDnsErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object" || !("code" in error)) return undefined;
-  return typeof error.code === "string" ? error.code : undefined;
-}

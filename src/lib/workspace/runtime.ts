@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { getDb, COL } from "@/lib/mongo";
 import type { Sandbox } from "@vercel/sandbox";
+import { getWorkspaceTarget, workspaceUnavailableMessage } from "@/lib/agents/runtime-mode";
+import { ROOT, MAX_FILE_BYTES, splitFileName } from "./paths";
 
-const ROOT = "workspace";
-/** Максимальный размер файла рабочей области (в байтах UTF-8). */
-export const MAX_FILE_BYTES = 200_000;
+export { MAX_FILE_BYTES, splitFileName };
+
 const MAX_SNAPSHOT_BYTES = 2_000_000;
 const MAX_SNAPSHOTS = 10;
 
@@ -47,8 +48,7 @@ const COMMAND_TIMEOUT_MS = 90_000;
 const SANDBOX_REGION = (process.env.SANDBOX_REGION ?? "bom1") as "bom1";
 
 function usesVercelSandbox(): boolean {
-  if (process.env.WORKSPACE_RUNTIME === "off") return false;
-  return process.env.WORKSPACE_RUNTIME === "vercel-sandbox" || process.env.VERCEL === "1";
+  return getWorkspaceTarget() === "vercel-sandbox";
 }
 
 /**
@@ -81,7 +81,7 @@ export async function deleteAccountWorkspaceSandbox(userId: string): Promise<voi
 
 export async function getAccountSandbox(userId: string): Promise<Sandbox> {
   validateOwner(userId);
-  if (!usesVercelSandbox()) throw new Error("Для Linux-среды разверните приложение на Vercel с включённым Vercel Sandbox");
+  if (!usesVercelSandbox()) throw new Error(workspaceUnavailableMessage());
   const files = await ownedFiles(userId);
   const { Sandbox: VercelSandbox } = await import("@vercel/sandbox");
   let sandbox = await VercelSandbox.getOrCreate({
@@ -230,30 +230,6 @@ async function makeVercelRuntime(userId: string) {
   };
 }
 
-/**
- * Разбор имени файла на (путь, имя) с защитой от path traversal.
- *
- * Запрещаем сегменты:
- *  - пустые («//»), "." и ".." — обход каталога;
- *  - начинающиеся с точки (dotfiles) — в песочнице они не нужны, а имена
- *    вида ".", "..", "...", "..hidden" на части ОС трактуются неочевидно;
- *  - заканчивающиеся пробелом/точкой — на Windows такие имена запрещены.
- */
-export function splitFileName(input: string): { path: string; name: string } {
-  const normalized = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
-  const segments = normalized.split("/");
-  const invalid = (part: string) =>
-    !part ||
-    part.length > 200 ||
-    part.startsWith(".") ||
-    /\.$/.test(part);
-  if (!normalized || normalized.length > 1000 || segments.some(invalid)) {
-    throw new Error("Некорректный путь файла");
-  }
-  const name = segments.pop()!;
-  return { path: segments.length ? `${ROOT}/${segments.join("/")}` : ROOT, name };
-}
-
 async function ownedFiles(userId: string) {
   validateOwner(userId);
   return (await getDb()).collection<WorkspaceFileDoc>(COL.workspaceFiles);
@@ -261,7 +237,8 @@ async function ownedFiles(userId: string) {
 
 /** Persistent account workspace stored in the application's MongoDB database. */
 export async function getWorkspaceRuntime(userId: string) {
-  if (usesVercelSandbox()) return makeVercelRuntime(userId);
+  const target = getWorkspaceTarget();
+  if (target === "vercel-sandbox") return makeVercelRuntime(userId);
   const files = await ownedFiles(userId);
 
   return {
@@ -303,7 +280,7 @@ export async function getWorkspaceRuntime(userId: string) {
       void command; void timeoutMs;
       // Команды выполняются только в Linux-среде Vercel Sandbox;
       // Mongo-хранение хранит файлы и снимки, но не исполняет команды.
-      throw new Error("Команды доступны только в Linux-среде (Vercel Sandbox)");
+      throw new Error(workspaceUnavailableMessage());
     },
 
     async getSandboxStatus() {

@@ -16,7 +16,6 @@
     "test": "vitest run",
     "test:agent": "vitest run --config vitest.live.config.ts",
     "check:runner": "node scripts/check-runner.mjs",
-    "start:local-browser-runner": "node scripts/local-browser-runner.mjs",
     "check:providers": "node scripts/check-providers.mjs",
     "check:prod": "node scripts/smoke-production.mjs",
     "check:prod:agent": "node scripts/check-agent-production.mjs",
@@ -28,7 +27,10 @@
     "e2e:reset-limits": "node scripts/reset-test-rate-limits.mjs",
     "e2e:ci": "node scripts/reset-test-rate-limits.mjs && playwright test",
     "postinstall": "node scripts/postinstall-418.mjs && node scripts/copy-monaco.mjs",
-    "prebuild": "node scripts/copy-monaco.mjs"
+    "prebuild": "node scripts/copy-monaco.mjs",
+    "check:agents": "node scripts/agents-full-check.mjs",
+    "check:runner:security": "node scripts/check-runner-security.mjs",
+    "check:deploy": "node scripts/check-deploy.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Play, Sparkles, MonitorPlay, AlertCircle } from "lucide-react";
+import { Loader2, Play, Sparkles, MonitorPlay, AlertCircle, Square, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { setActiveAgentTask } from "./agent-dock";
 import { useWorkspaceStore } from "@/lib/store/workspace";
@@ -32,7 +32,13 @@ const BROWSER_EXAMPLES = [
 ];
 
 /** Педагогический композер задач ИИ-ассистента */
-export function AgentComposer() {
+export function AgentComposer({ compact = false, running = false, stopping = false, onStop }: {
+  /** Узкий режим для чата с идущей или готовой задачей: одна строка вместо большой карточки. */
+  compact?: boolean;
+  running?: boolean;
+  stopping?: boolean;
+  onStop?: () => void;
+} = {}) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [pending, setPending] = useState(false);
@@ -86,6 +92,52 @@ export function AgentComposer() {
   }
 
   const currentExamples = wantsBrowser ? BROWSER_EXAMPLES : PEDAGOGICAL_EXAMPLES;
+
+  if (compact) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 focus-within:border-emerald-500/50">
+          <label htmlFor="agent-prompt" className="sr-only">Опишите задачу для ИИ-ассистента Mekty</label>
+          <textarea
+            id="agent-prompt"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void run();
+            }}
+            rows={prompt.length > 90 || prompt.includes("\n") ? 3 : 1}
+            maxLength={4000}
+            placeholder={running ? "Добавить поручение в очередь…" : "Новая задача для ассистента…"}
+            className="min-h-8 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-xs leading-relaxed text-slate-100 outline-none placeholder:text-slate-500"
+          />
+          {running && onStop && (
+            <button
+              type="button"
+              onClick={onStop}
+              disabled={stopping}
+              aria-label="Остановить задачу"
+              title="Остановить задачу"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+            >
+              {stopping ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-3.5 fill-current" />}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void run()}
+            disabled={pending || prompt.trim().length < 3}
+            aria-label="Запустить агента"
+            title="Запустить агента (Ctrl+Enter)"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40"
+          >
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <SendHorizontal className="size-4" />}
+          </button>
+        </div>
+        {error && <p className="px-1 text-xs text-red-400">{error}</p>}
+        {notice && <p className="px-1 text-xs text-sky-300">{notice}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -141,7 +193,12 @@ export function AgentComposer() {
         {notice && <p className="mt-2 text-xs text-sky-300">{notice}</p>}
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <details className="group">
+        <summary className="cursor-pointer list-none px-1 text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-200 [&::-webkit-details-marker]:hidden">
+          <span className="group-open:hidden">Показать примеры задач ▾</span>
+          <span className="hidden group-open:inline">Скрыть примеры ▴</span>
+        </summary>
+      <div className="mt-2 flex flex-wrap gap-1.5">
         {currentExamples.map((ex) => (
           <button
             key={ex}
@@ -153,6 +210,7 @@ export function AgentComposer() {
           </button>
         ))}
       </div>
+      </details>
     </div>
   );
 }

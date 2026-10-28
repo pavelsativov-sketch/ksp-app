@@ -13,17 +13,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const runCommand = vi.fn();
 const writeFile = vi.fn();
+const readFile = vi.fn();
 const domain = vi.fn(() => "https://sandbox-3000.example.vercel.run");
 
 vi.mock("@/lib/workspace/runtime", () => ({
   getAccountSandbox: async () => ({
     domain,
-    fs: { writeFile },
+    fs: { writeFile, readFile },
     runCommand,
   }),
 }));
 
 const USER = "user-1";
+process.env.AUTH_SECRET = "test-secret-that-is-definitely-longer-than-32-chars";
 
 // Петля ожидания готовности раннера по умолчанию живёт 45 секунд. Здесь её
 // укорачиваем: проверяем логику, а не скорость Vercel Sandbox.
@@ -47,6 +49,7 @@ describe("запуск раннера в Vercel Sandbox", () => {
     vi.resetModules();
     runCommand.mockReset();
     writeFile.mockReset().mockResolvedValue(undefined);
+    readFile.mockReset().mockResolvedValue("");
     domain.mockClear();
     runCommand.mockImplementation(async (cmd: { cmd: string }) => {
       if (cmd.cmd === "bash") return commandOutput("READY");
@@ -95,10 +98,12 @@ describe("запуск раннера в Vercel Sandbox", () => {
     expect(kill).not.toBe(start);
   });
 
-  it("готовый раннер берётся сразу и песочница не трогается", async () => {
+  it("готовый раннер с актуальным секретом берётся сразу и не перезапускается", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
+    const { getRunnerRpcSecret } = await import("@/lib/agents/browser-rpc");
+    readFile.mockResolvedValue(JSON.stringify({ secret: getRunnerRpcSecret(USER), port: 3000 }));
 
     const url = await getSandboxBrowserRpcUrl(USER);
 
@@ -144,5 +149,23 @@ describe("запуск раннера в Vercel Sandbox", () => {
       status: 503,
       message: expect.stringContaining("около минуты"),
     });
+  });
+
+  it("раннер со старым (общим) секретом в конфиге перезапускается с персональным", async () => {
+    // Раннер жив, но в конфиге лежит чужой секрет — как у песочниц до исправления.
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }))
+      .mockRejectedValue(new Error("нет сети"));
+    vi.stubGlobal("fetch", fetchMock);
+    readFile.mockResolvedValue(JSON.stringify({ secret: "runner-secret-shared-by-everyone-0123456789", port: 3000 }));
+    const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
+    const { getRunnerRpcSecret } = await import("@/lib/agents/browser-rpc");
+
+    await expect(getSandboxBrowserRpcUrl(USER)).rejects.toBeTruthy();
+
+    const config = writeFile.mock.calls.find((call) => call[0] === "/tmp/runner-config.json");
+    expect(config, "конфиг должен быть перезаписан").toBeTruthy();
+    expect(JSON.parse(String(config![1])).secret).toBe(getRunnerRpcSecret(USER));
+    expect(bashCommands().some((c) => c.includes("nohup")), "раннер должен быть перезапущен").toBe(true);
   });
 });

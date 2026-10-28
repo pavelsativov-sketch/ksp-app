@@ -9,10 +9,9 @@ const AUTH_SECRET = "test-secret-that-is-definitely-longer-than-32-chars";
 const RPC_URL = "https://sandbox-3000.example.vercel.run/_agent/browser";
 
 /**
- * Браузер ОС живёт в персональной Vercel Sandbox. Раньше адрес можно было
- * ещё и задать переменной `BROWSER_RPC_URL` (остаток от Codespaces), но на
- * Vercel она всё равно не читалась — остался только второй путь, который
- * ничего не включал.
+ * Браузер ОС живёт либо в персональной Vercel Sandbox, либо на внешнем
+ * раннере (ПК учителя за Cloudflare Tunnel), если задан `BROWSER_RPC_URL`.
+ * Общий `BROWSER_RPC_SECRET` относится только ко второму случаю.
  */
 describe("browserRpc configuration", () => {
   beforeEach(() => {
@@ -48,12 +47,9 @@ describe("browserRpc configuration", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("resolves the runner url from the Vercel sandbox, not from the environment", async () => {
+  it("without BROWSER_RPC_URL the runner url comes from the Vercel sandbox", async () => {
     process.env.VERCEL = "1";
-    // Раньше адрес можно было задать переменной BROWSER_RPC_URL. На Vercel она
-    // всё равно не читалась — теперь такой путь не существует вовсе.
-    process.env.BROWSER_RPC_URL = "https://obsolete-codespaces-host.example/_agent/browser";
-
+    delete process.env.BROWSER_RPC_URL;
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true, result: { open: true } }), {
         headers: { "content-type": "application/json" },
@@ -86,29 +82,34 @@ describe("browserRpc configuration", () => {
     const headers = init.headers as Record<string, string>;
     const rawBody = init.body as string;
     const timestamp = headers["x-mekty-timestamp"];
-    // Без BROWSER_RPC_SECRET подпись считается производным секретом пользователя.
+    // Подпись считается производным секретом пользователя.
     const expected = createHmac("sha256", Buffer.from(getRunnerRpcSecret("user-1")))
       .update(`${timestamp}.${rawBody}`)
       .digest("base64url");
     expect(headers["x-mekty-signature"]).toBe(expected);
   });
 
-  it("uses a dedicated runner secret when it is configured", async () => {
+  it("signs sandbox requests with a per-user secret derived from AUTH_SECRET (the global secret never leaves the app)", async () => {
     const runnerSecret = "runner-secret-that-is-definitely-longer-than-32-chars";
     process.env.BROWSER_RPC_SECRET = runnerSecret;
+    process.env.BROWSER_RPC_URL = "https://browser.example.com/_agent/browser";
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true, result: { open: true } }), { headers: { "content-type": "application/json" } }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
+    // Даже если в окружении остался старый BROWSER_RPC_SECRET, он не используется.
     await browserRpc("user-1", "status", { rpcUrl: RPC_URL, sessionId: "s-1" });
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     const headers = init.headers as Record<string, string>;
-    const expected = createHmac("sha256", Buffer.from(runnerSecret))
+    const derived = createHmac("sha256", Buffer.from(getRunnerRpcSecret("user-1")))
       .update(`${headers["x-mekty-timestamp"]}.${init.body as string}`)
       .digest("base64url");
-    expect(headers["x-mekty-signature"]).toBe(expected);
+    expect(headers["x-mekty-signature"]).toBe(derived);
+    expect(getRunnerRpcSecret("user-1")).not.toBe(runnerSecret);
+    // Разным пользователям — разные ключи: утечка одного не открывает чужие песочницы.
+    expect(getRunnerRpcSecret("user-1")).not.toBe(getRunnerRpcSecret("user-2"));
   });
 
   it("forwards action arguments and the screenshot flag to the runner", async () => {

@@ -58,8 +58,16 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
       .catch(() => false);
 
     if (alive) {
-      runnerCache.set(userId, { url: domainUrl, verifiedAt: now });
-      return `${domainUrl}/_agent/browser`;
+      // Раннер, поднятый старой версией, мог получить общий BROWSER_RPC_SECRET.
+      // Сверяем секрет в конфиге песочницы с персональным и, если он другой,
+      // идём дальше: конфиг перезапишется, раннер перезапустится.
+      const expectedSecret = getRunnerRpcSecret(userId);
+      const currentConfig = await sandbox.fs.readFile("/tmp/runner-config.json", "utf8").catch(() => "");
+      if (currentConfig.includes(JSON.stringify(expectedSecret))) {
+        runnerCache.set(userId, { url: domainUrl, verifiedAt: now });
+        return `${domainUrl}/_agent/browser`;
+      }
+      log.warn("sandbox-browser: секрет раннера устарел, перезапускаем", { userId });
     }
 
     log.info("sandbox-browser: Starting browser runner inside Vercel Sandbox...", { userId });
@@ -89,6 +97,7 @@ const INSTALL_SCRIPT = `
 set -u
 READY=/tmp/pw-ready
 DEPS=/tmp/pw-deps-ready
+FONTS=/tmp/pw-fonts-ready
 LOCK=/tmp/pw-lock
 LOG=/tmp/pw-install.log
 
@@ -111,6 +120,19 @@ if mkdir "$LOCK" 2>/dev/null; then
   if [ ! -f "$DEPS" ] && [ -f "$READY" ]; then
     $SUDO npx playwright install-deps chromium >>"$LOG" 2>&1
     if ldconfig -p 2>/dev/null | grep -q libglib-2.0; then touch "$DEPS"; fi
+  fi
+  # Шрифты. Образ песочницы приходит без них, и Chromium рисует кириллицу и
+  # казахские буквы (ә ғ қ ң ө ұ ү һ і) пустыми «квадратиками» — учитель видит
+  # «иероглифы» вместо текста страницы. Noto Sans покрывает латиницу и всю
+  # кириллицу, включая казахские буквы. Шаг необязательный: при сбое сети
+  # браузер всё равно работает, а установка повторится при следующем запуске.
+  if [ ! -f "$FONTS" ]; then
+    mkdir -p "$HOME/.fonts"
+    for f in NotoSans-Regular NotoSans-Bold NotoSans-Italic NotoSans-BoldItalic; do
+      [ -s "$HOME/.fonts/$f.ttf" ] || curl -fsSL --max-time 60 -o "$HOME/.fonts/$f.ttf"         "https://github.com/notofonts/notofonts.github.io/raw/main/fonts/NotoSans/hinted/ttf/$f.ttf" >>"$LOG" 2>&1 || rm -f "$HOME/.fonts/$f.ttf"
+    done
+    command -v fc-cache >/dev/null 2>&1 && fc-cache -f >>"$LOG" 2>&1
+    if [ -s "$HOME/.fonts/NotoSans-Regular.ttf" ]; then touch "$FONTS"; fi
   fi
   rmdir "$LOCK" 2>/dev/null
 else
@@ -159,7 +181,7 @@ if [ -f "$READY" ] && [ -f "$DEPS" ]; then echo READY; else echo NOT_READY; fi
     });
     await sandbox.runCommand({
       cmd: "bash",
-      args: ["-lc", "cd /tmp && nohup node /tmp/runner.mjs > /tmp/runner.log 2>&1 &"],
+      args: ["-lc", "cd /tmp && LANG=C.UTF-8 LC_ALL=C.UTF-8 nohup node /tmp/runner.mjs > /tmp/runner.log 2>&1 &"],
       detached: true,
     });
 

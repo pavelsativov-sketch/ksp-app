@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Lora, Geist_Mono, Manrope, Nunito } from "next/font/google";
+import { Inter, Lora, Geist_Mono, Manrope, Nunito, Unbounded } from "next/font/google";
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import Image from "next/image";
@@ -25,6 +25,9 @@ const lora = Lora({ variable: "--font-lora", subsets: ["latin", "cyrillic"], sty
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin", "cyrillic"], display: "swap" });
 const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin", "cyrillic"], display: "swap" });
 const nunito = Nunito({ variable: "--font-nunito", subsets: ["latin", "cyrillic"], display: "swap" });
+// Выразительный широкий шрифт для крупных заголовков (есть кириллица). В плотных
+// интерфейсах не используется: только лендинг, вход и заставки.
+const unbounded = Unbounded({ variable: "--font-unbounded", subsets: ["latin", "cyrillic"], weight: ["500", "700", "800"], display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -116,7 +119,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   );
 
   return (
-    <html lang={locale} data-scroll-behavior="smooth" suppressHydrationWarning className={`${inter.variable} ${lora.variable} ${geistMono.variable} ${manrope.variable} ${nunito.variable} h-full antialiased`}>
+    <html lang={locale} data-scroll-behavior="smooth" suppressHydrationWarning className={`${inter.variable} ${lora.variable} ${geistMono.variable} ${manrope.variable} ${nunito.variable} ${unbounded.variable} h-full antialiased`}>
       <head>
         {/* Тема применяется до первой отрисовки — иначе при перезагрузке
             страница на мгновение показывается светлой. */}

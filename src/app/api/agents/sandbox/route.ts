@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getDb, COL } from "@/lib/mongo";
-import { getWorkspaceRuntime, MAX_FILE_BYTES } from "@/lib/workspace/runtime";
+import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
+// Константа живёт в paths.ts: реэкспорт через runtime.ts не виден сборке
+// (предупреждение «not exported»), и проверка размера молча не срабатывала.
+import { MAX_FILE_BYTES } from "@/lib/workspace/paths";
 
 export const dynamic = "force-dynamic";
 

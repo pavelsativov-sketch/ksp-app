@@ -61,7 +61,7 @@ export async function GET() {
   try {
     // «Будильник» очереди: любой активный запрос запускает следующую queued-
     // задачу, если слот свободен (атомарная защита от дублей).
-    await maybeDispatchQueuedFromRequest(auth.user.id).catch(() => {});
+    await maybeDispatchQueuedFromRequest().catch(() => {});
     const tasks = await listAgentTasks(auth.user.id);
     return NextResponse.json({ tasks }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {

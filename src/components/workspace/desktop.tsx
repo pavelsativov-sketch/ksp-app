@@ -42,7 +42,7 @@ export const DESKTOP_APPS: DesktopApp[] = [
   },
   {
     id: 'files-main', title: 'Файлы задачи', type: 'file-manager', Icon: FolderOpen, color: '#f59e0b',
-    hint: 'Файлы, созданные агентом в песочнице',
+    hint: 'Файлы, созданные агентом в рабочей папке',
   },
   {
     id: 'code-editor', title: 'Редактор кода', type: 'code-editor', Icon: Code2, color: '#0ea5e9',
@@ -54,7 +54,7 @@ export const DESKTOP_APPS: DesktopApp[] = [
   },
   {
     id: 'terminal-main', title: 'Терминал', type: 'terminal', Icon: TerminalSquare, color: '#64748b',
-    hint: 'Команды в песочнице задачи',
+    hint: 'Команды в рабочей среде задачи',
   },
   {
     id: 'ksp-builder', title: 'Конструктор КСП', type: 'iframe', url: '/plans/new', Icon: FileEdit, color: '#22c55e',
@@ -81,6 +81,7 @@ export const DESKTOP_APPS: DesktopApp[] = [
  */
 export function Desktop() {
   const openWindow = useWorkspaceStore((s) => s.openWindow);
+  const windows = useWorkspaceStore((s) => s.windows);
 
   return (
     <div className="absolute inset-0 flex h-full max-h-full flex-col flex-wrap content-start items-start gap-x-1 gap-y-0 p-5">
@@ -88,19 +89,22 @@ export function Desktop() {
         <button
           key={app.id}
           type="button"
-          className="w-[84px] h-[96px] flex flex-col items-center justify-start pt-2 gap-1.5 rounded-lg hover:bg-white/[0.08] active:bg-white/[0.14] cursor-default select-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus:bg-white/[0.08]"
+          className="group w-[84px] h-[96px] flex flex-col items-center justify-start pt-2 gap-1.5 rounded-xl hover:bg-white/[0.08] active:bg-white/[0.14] cursor-default select-none transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ffb81c]/80 focus:bg-white/[0.08]"
           onClick={() => openWindow(app.id, app.title, app.type, app.url)}
           title={`Открыть «${app.title}» — ${app.hint}`}
         >
           <div
-            className="w-12 h-12 rounded-[14px] flex items-center justify-center shadow-lg"
-            style={{ background: `linear-gradient(135deg, ${app.color}dd, ${app.color}88)` }}
+            className="w-12 h-12 rounded-[15px] flex items-center justify-center shadow-lg shadow-black/40 ring-1 ring-white/25 transition-transform duration-200 group-hover:scale-110"
+            style={{ background: `linear-gradient(145deg, ${app.color}f2, ${app.color}99)` }}
           >
             <app.Icon className="w-6 h-6 text-white drop-shadow" strokeWidth={1.8} />
           </div>
           <span className="text-[11px] text-white/90 text-center leading-tight font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] line-clamp-2 px-0.5">
             {app.title}
           </span>
+          {windows.some((w) => w.id === app.id) && (
+            <span aria-hidden="true" className="-mt-0.5 h-1 w-1 rounded-full bg-sky-300" />
+          )}
         </button>
       ))}
     </div>

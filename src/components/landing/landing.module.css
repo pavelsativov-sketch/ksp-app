@@ -2378,3 +2378,294 @@
     scroll-behavior: auto !important;
   }
 }
+
+
+/* ============================================================
+   Редизайн «Небо и золото»
+   Ночное небо с северным сиянием в «герое», золотой акцент, орнамент,
+   широкий шрифт для заголовков. Слой лежит в конце файла, чтобы
+   переопределять прежние правила без их переписывания.
+   ============================================================ */
+
+.landing {
+  --bg: #fbf8f1;
+  --text: #121a3a;
+  --muted: #666e88;
+  --blue: #2f4cf5;
+  --blue-dark: #1f37c9;
+  --yellow: #ffb81c;
+  --line: #eee7d8;
+  --soft-shadow: 0 12px 35px rgba(60, 50, 20, 0.1);
+  --card-shadow: 0 2px 12px rgba(60, 50, 20, 0.06);
+  --card-shadow-hover: 0 16px 44px rgba(60, 50, 20, 0.14);
+}
+
+.landing h1,
+.landing h2 {
+  font-family: var(--font-display), var(--font-nunito), sans-serif;
+}
+
+.landing h2 {
+  font-size: clamp(27px, 3.6vw, 44px);
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+}
+
+/* ---------- Герой: ночное небо ---------- */
+.hero {
+  padding: 76px 0 128px;
+  color: #f4f6ff;
+  isolation: isolate;
+  background:
+    var(--ornament) 0 0 / 120px 120px,
+    radial-gradient(60% 50% at 16% 10%, rgba(0, 180, 216, 0.3) 0%, transparent 62%),
+    radial-gradient(52% 44% at 90% 20%, rgba(139, 92, 246, 0.32) 0%, transparent 64%),
+    radial-gradient(48% 40% at 66% 112%, rgba(255, 184, 28, 0.26) 0%, transparent 62%),
+    linear-gradient(168deg, #060c26 0%, #0a1650 60%, #0d2f78 100%);
+}
+
+/* Орнамент «рога барана» + звёзды вместо прежней сетки. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 22%, #fff 50%, transparent 52%),
+    radial-gradient(1px 1px at 34% 64%, #cfe4ff 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 58% 16%, #fff 50%, transparent 52%),
+    radial-gradient(1px 1px at 76% 72%, #ffe7ad 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 90% 38%, #fff 50%, transparent 52%),
+    radial-gradient(1px 1px at 46% 86%, #cfe4ff 50%, transparent 52%);
+  mask-image: radial-gradient(90% 80% at 50% 38%, #000 30%, transparent 85%);
+  -webkit-mask-image: radial-gradient(90% 80% at 50% 38%, #000 30%, transparent 85%);
+  opacity: 0.8;
+  animation: skyTwinkle 7s ease-in-out infinite;
+}
+
+/* Северное сияние: размытый дрейфующий градиент. */
+.hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -10%;
+  right: -10%;
+  top: -30%;
+  height: 90%;
+  background: conic-gradient(from 200deg at 50% 60%, rgba(0, 180, 216, 0) 0deg, rgba(0, 220, 190, 0.28) 70deg, rgba(139, 92, 246, 0.3) 140deg, rgba(0, 180, 216, 0) 220deg);
+  filter: blur(70px);
+  opacity: 0.8;
+  animation: auroraDrift 16s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes skyTwinkle {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes auroraDrift {
+  0% { transform: translate3d(-4%, 0, 0) rotate(-3deg) scale(1); }
+  100% { transform: translate3d(5%, 6%, 0) rotate(4deg) scale(1.12); }
+}
+
+.hero .eyebrow {
+  color: #ffe9b0;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.hero .eyebrow::before {
+  background: var(--yellow);
+  box-shadow: 0 0 0 4px rgba(255, 184, 28, 0.25);
+}
+
+.hero h1 {
+  max-width: 660px;
+  color: #fff;
+  font-size: clamp(31px, 3.9vw, 52px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  text-shadow: 0 6px 40px rgba(0, 20, 90, 0.5);
+}
+
+.hero .accent {
+  background: linear-gradient(100deg, #ffd45e 0%, #ffb81c 46%, #ff8d3c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero .accent svg {
+  color: #ffb81c;
+  opacity: 0.9;
+}
+
+.hero .heroLead {
+  color: rgba(226, 232, 255, 0.82);
+}
+
+.hero .primary {
+  color: #1b1300;
+  background: linear-gradient(135deg, #ffd45e 0%, #ffb81c 55%, #ff9a2e 100%);
+  box-shadow: 0 12px 36px rgba(255, 184, 28, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.hero .primary:hover {
+  background: linear-gradient(135deg, #ffe08a 0%, #ffc23a 55%, #ffa646 100%);
+  box-shadow: 0 18px 46px rgba(255, 184, 28, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.hero .textAction {
+  color: #fff;
+}
+
+.hero .textAction:hover {
+  color: #ffd45e;
+}
+
+.hero .playCircle {
+  color: #ffd45e;
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.hero .heroFine,
+.hero .heroFine span {
+  color: rgba(226, 232, 255, 0.66);
+}
+
+.hero .fineDivider {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.hero .stageTop,
+.hero .stageNote {
+  color: rgba(226, 232, 255, 0.7);
+}
+
+/* ---------- Плавающие «стеклянные» метки вокруг превью ---------- */
+.heroVisual {
+  position: relative;
+}
+
+.floatChip {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px 9px 10px;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: linear-gradient(145deg, rgba(10, 22, 80, 0.86), rgba(6, 12, 38, 0.82));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 16px 40px rgba(0, 10, 60, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: chipFloat 7s ease-in-out infinite;
+}
+
+.floatChip > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #1b1300;
+  background: linear-gradient(135deg, #ffd45e, #ffb81c);
+}
+
+.chipA { left: -34px; top: 16%; }
+.chipB { right: -22px; top: 44%; animation-delay: -2.4s; }
+.chipC { left: 8%; bottom: -20px; animation-delay: -4.6s; }
+
+@keyframes chipFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+@media (max-width: 980px) {
+  .floatChip { display: none; }
+  .hero { padding: 56px 0 96px; }
+}
+
+/* ---------- Полоса преимуществ и секции ---------- */
+.benefitStrip {
+  background: linear-gradient(90deg, #fff7e3, #fffdf6 40%, #fff7e3);
+  border-color: #f0e4c4;
+}
+
+.kicker {
+  color: #b87500;
+  letter-spacing: 0.08em;
+}
+
+.stepNum {
+  font-family: var(--font-display), sans-serif;
+  background: linear-gradient(135deg, #ffd45e, #ffb81c);
+  color: #1b1300;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+}
+
+.finalCta {
+  background:
+    radial-gradient(50% 70% at 20% 0%, rgba(0, 180, 216, 0.22) 0%, transparent 60%),
+    radial-gradient(45% 60% at 90% 100%, rgba(255, 184, 28, 0.22) 0%, transparent 60%),
+    linear-gradient(165deg, #060c26, #0a1650 70%, #0d2f78);
+}
+
+.finalCta .ctaBox,
+.finalCta .ctaBox h2,
+.finalCta .ctaBox p {
+  color: #fff;
+}
+
+.finalCta .ctaBox .kicker {
+  color: #ffd45e;
+}
+
+.finalCta .primary {
+  color: #1b1300;
+  background: linear-gradient(135deg, #ffd45e 0%, #ffb81c 55%, #ff9a2e 100%);
+  box-shadow: 0 12px 36px rgba(255, 184, 28, 0.38);
+}
+
+.dark .landing {
+  --bg: #0a0f20;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero::before,
+  .hero::after,
+  .floatChip {
+    animation: none;
+  }
+}
+
+/* Карточка примера на тёмном небе: плотный светлый фон, чтобы текст читался. */
+.hero .document {
+  background: linear-gradient(180deg, #ffffff 0%, #fbf8f1 100%);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 40px 100px rgba(0, 8, 40, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.4);
+  backdrop-filter: none;
+}
+
+.hero .backPaper {
+  box-shadow: 0 30px 70px rgba(0, 8, 40, 0.45);
+}
+
+/* Герой задаёт светлый текст для ночного неба; карточкам примера нужен тёмный. */
+.hero .document,
+.hero .backPaper,
+.hero .readyBadge {
+  color: var(--text);
+}

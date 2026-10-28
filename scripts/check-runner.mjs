@@ -98,6 +98,13 @@ try {
   check("Chromium прогревается при старте раннера", warm);
   if (!started) throw new Error(`runner не ответил на /health.\n${runnerLog.slice(-1500)}`);
 
+  const unsigned = await fetch(`${URL_BASE}/_agent/browser`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "create", userId: "probe-user" }),
+  });
+  check("запрос без подписи отклоняется (401)", unsigned.status === 401, String(unsigned.status));
+
   const created = await rpc({ action: "create", userId: "probe-user" });
   const sessionId = created.sessionId;
   check("create возвращает sessionId", Boolean(sessionId), sessionId);
