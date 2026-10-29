@@ -38,5 +38,33 @@ describe("playbook агента BilimClass", () => {
     expect(prompt).toContain("Не закрывай/не завершай журнал");
     expect(prompt).toContain("не утверждай об успехе");
   });
-});
 
+  it("описывает порядок работы с любым разделом и типовые поручения", () => {
+    const prompt = bilimClassInstructions();
+    // Общий порядок: прочитать или изменить, фильтры, прокрутка, проверка результата.
+    expect(prompt).toContain("общий порядок для ЛЮБОГО поручения");
+    expect(prompt).toContain("browserScroll");
+    expect(prompt).toContain("browserWait");
+    expect(prompt).toContain("browserPressKey Escape");
+    // Разделы и операции.
+    for (const phrase of ["«Журнал» (/2026/control/journal/groups)", "Оценка:", "Посещаемость:", "Массовые изменения", "«Мои СОР/СОЧ» (/2026/content/lessons)", "«Мои уроки» (/2026/content/lectures)", "«Моё расписание» (/2026/schedule)", "«Чат с учеником» (/2026/control/chat)", "Отчёты, мониторинг и аналитика"]) {
+      expect(prompt, `нет раздела: ${phrase}`).toContain(phrase);
+    }
+  });
+
+  it("не отходит от правил безопасности: подтверждения, чужие данные, вход", () => {
+    const prompt = bilimClassInstructions();
+    expect(prompt).toContain("ОТПРАВКА сообщения — только по явной просьбе");
+    expect(prompt).toContain("дождись подтверждения");
+    expect(prompt).toContain("не вводи логин, пароль и коды");
+    expect(prompt).toContain("Не вноси оценки и посещаемость, которых учитель не называл");
+    expect(prompt).toContain("Не копируй персональные данные учеников");
+  });
+
+  it("нумерация разделов идёт подряд и ссылки на разделы существуют", () => {
+    const prompt = bilimClassInstructions();
+    const numbers = [...prompt.matchAll(/^(\d)\. /gm)].map((m) => Number(m[1]));
+    expect(numbers).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(prompt).toContain("правилам подтверждения из раздела 6");
+  });
+});

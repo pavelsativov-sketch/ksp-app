@@ -17,6 +17,16 @@ import { detectPageAuthBarrier } from '../browser-dom';
 import { executeWithFallback } from '@/lib/ai/providers';
 import { boundedResult } from './bounded-result';
 
+/** Один «экран» прокрутки в пикселях (высота окна браузера 800, небольшой нахлёст). */
+const SCREEN_STEP_PX = 700;
+
+/** Разрешённые служебные клавиши: регистронезависимо → каноническое имя Playwright. */
+export const ALLOWED_KEYS = new Map<string, string>([
+  ['escape', 'Escape'], ['esc', 'Escape'], ['tab', 'Tab'],
+  ['arrowup', 'ArrowUp'], ['arrowdown', 'ArrowDown'], ['arrowleft', 'ArrowLeft'], ['arrowright', 'ArrowRight'],
+  ['pageup', 'PageUp'], ['pagedown', 'PageDown'], ['home', 'Home'], ['end', 'End'],
+]);
+
 function navigationTimedOut(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /navigation timeout|timeout .* exceeded|timed out.*navigat/i.test(message);
@@ -203,6 +213,87 @@ export const browserTools = {
       });
     } catch (e) {
       return boundedResult({ success: false, error: e instanceof Error ? e.message : 'type failed' });
+    }
+  },
+
+  /**
+   * Прокрутка страницы. Без неё агент видел только первый экран: журналы,
+   * таблицы оценок и длинные списки BilimClass оставались недоступными.
+   */
+  browserScroll: async (
+    { direction, amount }: { direction?: string; amount?: number },
+    ctx?: { userId?: string },
+  ) => {
+    if (!ctx?.userId) return { success: false, error: 'Нужна пользовательская сессия' };
+    const dir = direction === 'up' || direction === 'left' || direction === 'right' ? direction : 'down';
+    // amount — число «экранов» (по умолчанию один), не больше пяти за вызов.
+    const screens = Math.min(Math.max(Number(amount) || 1, 0.25), 5);
+    const delta = Math.round(screens * SCREEN_STEP_PX);
+    try {
+      const snap = await withBrowserSession(ctx.userId, async (session) => {
+        const dx = dir === 'left' ? -delta : dir === 'right' ? delta : 0;
+        const dy = dir === 'up' ? -delta : dir === 'down' ? delta : 0;
+        await session.page.mouse.wheel(dx, dy);
+        await session.page.waitForTimeout(700);
+        return extractPageSnapshot(session.page);
+      });
+      return boundedResult({ success: true, scrolled: `${dir} ${screens}`, ...snap });
+    } catch (e) {
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'scroll failed' });
+    }
+  },
+
+  /**
+   * Служебные клавиши без риска отправки формы: закрыть окно (Escape),
+   * перейти по полям (Tab), стрелки, постраничная прокрутка. Enter сюда не
+   * входит: подтверждение форм идёт через browserType с проверкой политики.
+   */
+  browserPressKey: async ({ key }: { key?: string }, ctx?: { userId?: string }) => {
+    if (!ctx?.userId) return { success: false, error: 'Нужна пользовательская сессия' };
+    const allowed = ALLOWED_KEYS.get(String(key ?? '').toLowerCase());
+    if (!allowed) {
+      return { success: false, error: `Клавиша не разрешена. Доступны: ${[...new Set(ALLOWED_KEYS.values())].join(', ')}. Для Enter используй browserType с pressEnter.` };
+    }
+    try {
+      const snap = await withBrowserSession(ctx.userId, async (session) => {
+        await session.page.keyboard.press(allowed);
+        await session.page.waitForTimeout(500);
+        return extractPageSnapshot(session.page);
+      });
+      return boundedResult({ success: true, pressed: allowed, ...snap });
+    } catch (e) {
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'key failed' });
+    }
+  },
+
+  /** Назад по истории браузера. */
+  browserGoBack: async (_args: Record<string, never>, ctx?: { userId?: string }) => {
+    if (!ctx?.userId) return { success: false, error: 'Нужна пользовательская сессия' };
+    try {
+      const snap = await withBrowserSession(ctx.userId, async (session) => {
+        await session.page.goBack({ timeout: 15000 });
+        await session.page.waitForTimeout(800);
+        await persistAgentBrowserSession(ctx.userId!);
+        return extractPageSnapshot(session.page);
+      });
+      return boundedResult({ success: true, ...snap });
+    } catch (e) {
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'back failed' });
+    }
+  },
+
+  /** Подождать загрузку: журналы BilimClass подгружают таблицу не сразу. */
+  browserWait: async ({ seconds }: { seconds?: number }, ctx?: { userId?: string }) => {
+    if (!ctx?.userId) return { success: false, error: 'Нужна пользовательская сессия' };
+    const ms = Math.round(Math.min(Math.max(Number(seconds) || 2, 1), 10) * 1000);
+    try {
+      const snap = await withBrowserSession(ctx.userId, async (session) => {
+        await session.page.waitForTimeout(ms);
+        return extractPageSnapshot(session.page);
+      });
+      return boundedResult({ success: true, waited: ms / 1000, ...snap });
+    } catch (e) {
+      return boundedResult({ success: false, error: e instanceof Error ? e.message : 'wait failed' });
     }
   },
 

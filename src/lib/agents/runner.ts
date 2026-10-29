@@ -19,6 +19,10 @@ const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekt
 - browserNavigate — открыть публичную страницу в облачном браузере и получить её текст + список кликабельных элементов с координатами (x, y);
 - browserClick — кликнуть в облачном браузере по координатам (x, y) из списка interactables;
 - browserType — ввести текст в поле на странице в облачном браузере (с опциональными координатами x, y поля и нажатием Enter);
+- browserScroll — прокрутить страницу (direction: up/down/left/right, amount — число экранов) и получить обновлённый список элементов: нужно для журналов и длинных таблиц;
+- browserPressKey — служебная клавиша: Escape (закрыть окно), Tab, стрелки, PageUp/PageDown, Home/End;
+- browserGoBack — назад по истории браузера;
+- browserWait — подождать загрузку страницы (1–10 секунд);
 - browserDescribeScreen — показать текущий экран браузера vision-модели и получить текстовое описание того, что видно (заголовки, кнопки, графики, ошибки);
 - createKsp — создать настоящий КСП (краткосрочный план урока) в аккаунте учителя: передай grade (класс), subject (предмет), topic (тема), при необходимости language ('ru' или 'kz') и objectives. Возвращает planId и ссылки на страницу, Word и PowerPoint;
 - listPlans — список последних планов учителя (planId, тема), нужен, чтобы выбрать план для КТП;
@@ -49,6 +53,10 @@ const TOOL_SCHEMAS = [
   { type: 'function' as const, function: { name: 'browserNavigate', description: 'Открыть URL в браузере, вернуть заголовок, видимый текст и список кликабельных элементов interactables с координатами (x, y)', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } },
   { type: 'function' as const, function: { name: 'browserClick', description: 'Кликнуть в браузере по координатам (x, y) из списка interactables текущей страницы и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, intent: { type: 'string', description: 'Краткое пояснение, на какую кнопку нажимаем' } }, required: ['x', 'y'] } } },
   { type: 'function' as const, function: { name: 'browserType', description: 'Ввести текст в поле на странице браузера (опционально кликнув по координатам x, y из interactables) и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, text: { type: 'string' }, pressEnter: { type: 'boolean' } }, required: ['text'] } } },
+  { type: 'function' as const, function: { name: 'browserScroll', description: 'Прокрутить страницу и вернуть обновлённый экран и список interactables. Используй, когда нужный элемент не виден: журналы, таблицы, длинные списки', parameters: { type: 'object', properties: { direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] }, amount: { type: 'number', description: 'Сколько экранов прокрутить, 0.25–5, по умолчанию 1' } }, required: [] } } },
+  { type: 'function' as const, function: { name: 'browserPressKey', description: 'Нажать служебную клавишу: Escape, Tab, ArrowUp/Down/Left/Right, PageUp, PageDown, Home, End. Enter не поддерживается — для него browserType с pressEnter', parameters: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } } },
+  { type: 'function' as const, function: { name: 'browserGoBack', description: 'Вернуться на предыдущую страницу истории браузера', parameters: { type: 'object', properties: {}, required: [] } } },
+  { type: 'function' as const, function: { name: 'browserWait', description: 'Подождать загрузку страницы (секунды 1–10) и вернуть обновлённый экран', parameters: { type: 'object', properties: { seconds: { type: 'number' } }, required: [] } } },
   { type: 'function' as const, function: { name: 'browserDescribeScreen', description: 'Получить текстовое описание того, что сейчас видно на экране браузера (зрение): заголовки, кнопки, графики, ошибки. Полезно, когда текст страницы не даёт ответа', parameters: { type: 'object', properties: {}, required: [] } } },
   { type: 'function' as const, function: { name: 'createKsp', description: 'Создать КСП (краткосрочный план урока) и сохранить в аккаунте учителя; вернёт planId и ссылки на страницу, Word и PowerPoint', parameters: { type: 'object', properties: { grade: { type: 'number', description: 'Класс, 1–11' }, subject: { type: 'string', description: 'Предмет, например «Математика»' }, topic: { type: 'string', description: 'Тема урока' }, language: { type: 'string', enum: ['ru', 'kz'] }, objectives: { type: 'array', items: { type: 'string' }, description: 'Цели обучения (необязательно)' } }, required: ['grade', 'subject', 'topic'] } } },
   { type: 'function' as const, function: { name: 'listPlans', description: 'Список последних планов учителя: planId, название, тема', parameters: { type: 'object', properties: { limit: { type: 'number' } }, required: [] } } },
@@ -205,6 +213,11 @@ export async function runAgentTask(
     // загрузки, недоступная страница) возвращаются модели — она сама
     // решает, повторить или завершить задачу.
     let hardBrowserFailure: string | undefined;
+    // Навык BilimClass подключается и тогда, когда агент оказался на сайте по ходу
+    // работы (например, «открой журнал» без слова BilimClass в поручении): иначе
+    // он видел бы незнакомый интерфейс без подсказок.
+    let bilimSkillInjected = isBilimClassContext(prompt, '');
+    let bilimSeenOnPage = false;
 
     // Мульти-провайдерный фоллбэк: Groq → Cerebras → Gemini → OpenRouter.
     // Провайдер используется для всего цикла; при его сбое (лимит 429 и т.п.)
@@ -403,7 +416,7 @@ export async function runAgentTask(
           }
           await beat(); // каждый сделанный шаг инструмента — подтверждение жизни
           await log({ type: 'TOOL_RESULT', message: humanToolResult(name, resultStr), data: { tool: name, result: resultStr } });
-          if (name === 'browserNavigate' || name === 'browserClick' || name === 'browserType') {
+          if (name === 'browserNavigate' || name === 'browserClick' || name === 'browserType' || name === 'browserScroll' || name === 'browserPressKey' || name === 'browserGoBack' || name === 'browserWait') {
             try {
               const browserResult = JSON.parse(resultStr) as {
                 success?: boolean;
@@ -411,6 +424,7 @@ export async function runAgentTask(
                 url?: string;
                 authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string; domain?: string };
               };
+              if (!bilimSkillInjected && browserResult.url && isBilimClassContext('', browserResult.url)) bilimSeenOnPage = true;
               if (browserResult.success === false) {
                 const errMsg = browserResult.error ?? 'Браузер не смог выполнить действие';
                 // Жёсткая остановка — только когда браузер не поднять в принципе
@@ -444,6 +458,13 @@ export async function runAgentTask(
 
         messages.push({ role: 'tool', tool_call_id: (call as { id?: string }).id ?? '', content: resultStr });
         if (hardBrowserFailure) break;
+      }
+
+      if (bilimSeenOnPage && !bilimSkillInjected) {
+        bilimSkillInjected = true;
+        messages.push({ role: 'user', content: `Ты оказался на BilimClass. Используй эту инструкцию для дальнейшей работы.
+${bilimClassInstructions()}` });
+        await log({ type: 'THINK', message: 'Подключаю навык BilimClass: разделы, журнал, расписание, КТП.' }).catch(() => {});
       }
       }
 
@@ -523,6 +544,10 @@ function humanToolCall(name: string, args: Record<string, unknown>): string {
     case 'browserClick': return `Нажимаю (${String(args.x ?? '?')}, ${String(args.y ?? '?')})${args.intent ? ` — ${String(args.intent)}` : ''}`.slice(0, 300);
     case 'browserType': return `Ввожу текст «${String(args.text ?? '').slice(0, 80)}»`.slice(0, 300);
     case 'browserDescribeScreen': return 'Смотрю на экран браузера';
+    case 'browserScroll': return `Прокручиваю страницу: ${args.direction === 'up' ? 'вверх' : args.direction === 'left' ? 'влево' : args.direction === 'right' ? 'вправо' : 'вниз'}`;
+    case 'browserPressKey': return `Нажимаю клавишу ${String(args.key ?? '')}`.slice(0, 120);
+    case 'browserGoBack': return 'Возвращаюсь на предыдущую страницу';
+    case 'browserWait': return `Жду загрузку страницы (${String(args.seconds ?? 2)} с)`;
     case 'createKsp': return `Создаю КСП: ${String(args.subject ?? '')}, ${String(args.grade ?? '?')} класс — ${String(args.topic ?? '')}`.slice(0, 300);
     case 'createKtp': return 'Составляю календарно-тематический план (КТП)';
     case 'listPlans': return 'Смотрю ваши планы';

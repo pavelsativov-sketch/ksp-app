@@ -165,6 +165,19 @@ describe("createKtp", () => {
     expect(String(text)).toContain("| № | Тема | Часы | Дата | Цели |");
   });
 
+  it("берёт цели КТП из целей урока, если у плана нет целей обучения", async () => {
+    mock.getPlanById.mockResolvedValue({
+      ...plan,
+      content: { topic: "Дроби", learningObjectives: [], lessonObjectives: ["Сравнивает обыкновенные дроби", "Складывает дроби"] },
+    });
+    await productTools.createKtp({ planId: PLAN_ID, topics: ["Дроби"], startDate: "2026-09-01" }, { userId: USER, taskId: "t" });
+    const text = String(mock.writeFile.mock.calls[0]![1]);
+    expect(text).toContain("Цель 1 — Сравнивает обыкновенные дроби");
+    expect(text).toContain("Цель 2 — Складывает дроби");
+    // Колонка «Цели» больше не пустая.
+    expect(text).not.toMatch(/\| — \|\s*$/m);
+  });
+
   it("на бесплатном тарифе честно сообщает, что нужен Pro", async () => {
     mock.getPlanForUser.mockResolvedValue({ limits: { ktp: false } });
     const result = await productTools.createKtp({ planId: PLAN_ID }, { userId: USER, taskId: "t" });

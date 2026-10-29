@@ -173,7 +173,12 @@ export const productTools = {
       if (!plan || plan.owner_id !== ctx.userId) return { success: false, error: 'План не найден среди ваших планов' };
       const subject = plan.subject_id ? await getSubjectById(plan.subject_id) : null;
       const subjectName = subject ? (plan.language === 'kz' ? subject.name_kz || subject.name_ru : subject.name_ru) : '';
-      const ktp = buildKtp(plan, subjectName, request.data);
+      // КСП, созданный агентом, хранит цели в lessonObjectives, а КТП берёт цели
+      // из learningObjectives: без переноса колонка «Цели» оставалась пустой.
+      const objectives = plan.content.learningObjectives.length
+        ? plan.content.learningObjectives
+        : (plan.content.lessonObjectives ?? []).map((text, index) => ({ code: `Цель ${index + 1}`, text }));
+      const ktp = buildKtp({ ...plan, content: { ...plan.content, learningObjectives: objectives } }, subjectName, request.data);
 
       const file = await saveCopyToWorkspace(ctx.userId, `ktp-${slugForFile(plan.content.topic || plan.title)}.md`, ktpToMarkdown(ktp));
       return {
