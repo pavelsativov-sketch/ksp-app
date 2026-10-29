@@ -5,15 +5,23 @@
  * реагировать на `isStopped`, а маршрут этот колбэк не передавал и не имел DELETE.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeDb } from "../helpers/fake-mongo";
 
 const mock = vi.hoisted(() => ({
   apiAuth: vi.fn(),
   rate: vi.fn(),
   runLoop: vi.fn(),
-  cancelAll: vi.fn(),
   setControl: vi.fn(),
+  db: null as unknown as ReturnType<typeof import("../helpers/fake-mongo").fakeDb>,
 }));
 
+vi.mock("server-only", () => ({}));
+// Настоящие run-state и confirm работают поверх имитации Mongo: так проверяется
+// именно общее хранилище, а не память одного процесса.
+vi.mock("@/lib/mongo", () => ({
+  COL: { agentComputerRuns: "agent_computer_runs", agentComputerConfirms: "agent_computer_confirms" },
+  getDb: () => mock.db.getDb(),
+}));
 vi.mock("@/lib/api-auth", () => ({ requireApiAuth: mock.apiAuth }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: mock.rate }));
 vi.mock("@/lib/agents/ssrf", () => ({
@@ -25,11 +33,6 @@ vi.mock("@/lib/agents/session", () => ({
   setControlOwner: mock.setControl,
 }));
 vi.mock("@/lib/agents/computer/loop", () => ({ runComputerUse: mock.runLoop }));
-vi.mock("@/lib/agents/computer/confirm", () => ({
-  cancelAll: mock.cancelAll,
-  listPending: vi.fn(async () => []),
-  waitForConfirmation: vi.fn(),
-}));
 vi.mock("@/lib/logger", () => ({ log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }));
 vi.mock("@/lib/agents/browser-session", () => ({
   browserFailure: () => ({ status: 502, message: "x" }),
@@ -55,6 +58,7 @@ const isRunning = async () => (await (await GET(new Request("http://x/api/agents
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mock.db = fakeDb();
   mock.apiAuth.mockResolvedValue({ user: { id: userId } });
   mock.rate.mockResolvedValue({ ok: true });
   mock.setControl.mockResolvedValue(undefined);
@@ -83,7 +87,6 @@ describe("остановка агента «Работа с компьютеро
 
     const stop = await DELETE();
     expect(await stop.json()).toMatchObject({ ok: true, running: true, stopping: true });
-    expect(mock.cancelAll).toHaveBeenCalledWith(userId);
 
     const body = await (await running).json();
     expect(stoppedSeen).toBe(true);

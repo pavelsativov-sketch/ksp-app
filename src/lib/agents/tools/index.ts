@@ -1,5 +1,6 @@
 import { browserTools } from './browser';
 import { fileSystemTools } from './file-system';
+import { productTools } from './product';
 
 export interface ToolCtx {
   taskId: string;
@@ -15,6 +16,7 @@ export interface ToolCtx {
 export const tools = {
   ...browserTools,
   ...fileSystemTools,
+  ...productTools,
 };
 
 export type ToolName = keyof typeof tools;

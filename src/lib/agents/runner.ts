@@ -6,6 +6,7 @@ import { getControlOwner, releaseControlToUser, setControlOwner, waitForControl 
 import { buildCheckpoint, compactMessages, parseCheckpoint, repairTranscript, type AgentMessage } from './checkpoint';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
 import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
+import { appBaseUrl, decideContinuation, MAX_CONTINUATIONS, triggerContinuation } from './continuation';
 
 const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekty (сервис для учителей Казахстана).
 Файлы пользователя сохраняются в отдельной рабочей области аккаунта. Не пытайся обращаться
@@ -19,7 +20,11 @@ const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekt
 - browserClick — кликнуть в облачном браузере по координатам (x, y) из списка interactables;
 - browserType — ввести текст в поле на странице в облачном браузере (с опциональными координатами x, y поля и нажатием Enter);
 - browserDescribeScreen — показать текущий экран браузера vision-модели и получить текстовое описание того, что видно (заголовки, кнопки, графики, ошибки);
+- createKsp — создать настоящий КСП (краткосрочный план урока) в аккаунте учителя: передай grade (класс), subject (предмет), topic (тема), при необходимости language ('ru' или 'kz') и objectives. Возвращает planId и ссылки на страницу, Word и PowerPoint;
+- listPlans — список последних планов учителя (planId, тема), нужен, чтобы выбрать план для КТП;
+- createKtp — составить календарно-тематический план (КТП) по существующему плану: planId, topics (список тем, к теме можно дописать « · 2 ч.» или « | 2026-09-01») и startDate (ГГГГ-ММ-ДД). Доступен на тарифе Pro;
 - finishTask — завершить задачу с итоговым summary.
+Если просят составить КСП или КТП — используй createKsp и createKtp, а не пиши план обычным текстом: так материал сохранится в аккаунте и его можно скачать. В итоге перечисли, что создано, и дай ссылки.
 Правила: делай шаги по одному, после каждого инструмента анализируй результат.
 Никогда не выдумывай результаты инструментов — они приходят в следующих сообщениях.
 Для browserNavigate передавай любой обычный адрес http:// или https:// и пробуй открыть
@@ -45,12 +50,15 @@ const TOOL_SCHEMAS = [
   { type: 'function' as const, function: { name: 'browserClick', description: 'Кликнуть в браузере по координатам (x, y) из списка interactables текущей страницы и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, intent: { type: 'string', description: 'Краткое пояснение, на какую кнопку нажимаем' } }, required: ['x', 'y'] } } },
   { type: 'function' as const, function: { name: 'browserType', description: 'Ввести текст в поле на странице браузера (опционально кликнув по координатам x, y из interactables) и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, text: { type: 'string' }, pressEnter: { type: 'boolean' } }, required: ['text'] } } },
   { type: 'function' as const, function: { name: 'browserDescribeScreen', description: 'Получить текстовое описание того, что сейчас видно на экране браузера (зрение): заголовки, кнопки, графики, ошибки. Полезно, когда текст страницы не даёт ответа', parameters: { type: 'object', properties: {}, required: [] } } },
+  { type: 'function' as const, function: { name: 'createKsp', description: 'Создать КСП (краткосрочный план урока) и сохранить в аккаунте учителя; вернёт planId и ссылки на страницу, Word и PowerPoint', parameters: { type: 'object', properties: { grade: { type: 'number', description: 'Класс, 1–11' }, subject: { type: 'string', description: 'Предмет, например «Математика»' }, topic: { type: 'string', description: 'Тема урока' }, language: { type: 'string', enum: ['ru', 'kz'] }, objectives: { type: 'array', items: { type: 'string' }, description: 'Цели обучения (необязательно)' } }, required: ['grade', 'subject', 'topic'] } } },
+  { type: 'function' as const, function: { name: 'listPlans', description: 'Список последних планов учителя: planId, название, тема', parameters: { type: 'object', properties: { limit: { type: 'number' } }, required: [] } } },
+  { type: 'function' as const, function: { name: 'createKtp', description: 'Составить КТП по существующему плану (planId из listPlans или createKsp). Тариф Pro', parameters: { type: 'object', properties: { planId: { type: 'string' }, topics: { type: 'array', items: { type: 'string' } }, startDate: { type: 'string', description: 'ГГГГ-ММ-ДД' } }, required: ['planId'] } } },
   { type: 'function' as const, function: { name: 'finishTask', description: 'Завершить задачу с итогом', parameters: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } } },
 ];
 
 // Общий лимит шагов на задачу (все провайдеры и перезапуски вместе). 12 шагов
 // не хватало даже на «открыть страницу → найти → кликнуть → проверить».
-const MAX_LOOPS = 30;
+const MAX_LOOPS = 120;
 // Leave headroom under Vercel Hobby's five-minute function ceiling.
 const TIME_BUDGET_MS = 4 * 60_000 + 50_000;
 
@@ -248,7 +256,7 @@ export async function runAgentTask(
       while (stepsUsed < MAX_LOOPS && !done) {
         const step = ++stepsUsed;
         if (Date.now() > deadline) {
-          await log({ type: 'WARNING', message: 'Истёк пятиминутный лимит задачи. Остановка.' });
+          await log({ type: 'WARNING', message: 'Время этой сессии вышло: сохраняю прогресс.' });
           stepsUsed--; // шаг не выполнялся
           incompleteReason = 'time';
           break;
@@ -454,6 +462,20 @@ export async function runAgentTask(
     // задачу с контрольной точки.
     if (pausedForTimeout) return;
 
+    // Время сессии вышло, а задача не закончена: продолжаем в новом запросе с
+    // контрольной точки, а не требуем от учителя запускать задачу заново.
+    if (incompleteReason === 'time') {
+      const row = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { continuations: 1, status: 1 } });
+      const continuations = Number(row?.continuations ?? 0);
+      if (row?.status === 'running' && decideContinuation({ reason: incompleteReason, continuations, appUrl: appBaseUrl() }) === 'continue') {
+        await saveCheckpoint(stepsUsed);
+        await agentTasks.updateOne({ _id: new ObjectId(taskId) }, { $inc: { continuations: 1 }, $set: { heartbeat_at: new Date() } });
+        await log({ type: 'RESUMED', message: `Задача большая: продолжаю в новой сессии (${continuations + 1} из ${MAX_CONTINUATIONS}), прогресс сохранён.` }).catch(() => {});
+        if (await triggerContinuation(taskId)) return;
+        await log({ type: 'WARNING', message: 'Не удалось автоматически продолжить задачу.' }).catch(() => {});
+      }
+    }
+
     if (incompleteReason) {
       const error = incompleteReason === 'steps'
         ? `Достигнут лимит шагов (${MAX_LOOPS}), а задача не завершена. Уточните поручение или разбейте его на части.`
@@ -501,6 +523,9 @@ function humanToolCall(name: string, args: Record<string, unknown>): string {
     case 'browserClick': return `Нажимаю (${String(args.x ?? '?')}, ${String(args.y ?? '?')})${args.intent ? ` — ${String(args.intent)}` : ''}`.slice(0, 300);
     case 'browserType': return `Ввожу текст «${String(args.text ?? '').slice(0, 80)}»`.slice(0, 300);
     case 'browserDescribeScreen': return 'Смотрю на экран браузера';
+    case 'createKsp': return `Создаю КСП: ${String(args.subject ?? '')}, ${String(args.grade ?? '?')} класс — ${String(args.topic ?? '')}`.slice(0, 300);
+    case 'createKtp': return 'Составляю календарно-тематический план (КТП)';
+    case 'listPlans': return 'Смотрю ваши планы';
     case 'finishTask': return 'Завершаю задачу';
     default: return `Вызов ${name}`;
   }
@@ -513,6 +538,8 @@ function humanToolResult(name: string, resultStr: string): string {
     if (name === 'browserClick') return parsed.clicked ? `Нажато: ${parsed.clicked} → ${parsed.title || parsed.url || ''}` : parsed.error ?? '';
     if (name === 'browserType') return parsed.typed ? `Введено: «${parsed.typed}»` : parsed.error ?? '';
     if (name === 'runCommand') return parsed.error ?? `Код завершения ${String(parsed.exitCode ?? '?')}: ${String(parsed.stdout ?? parsed.stderr ?? '').slice(0, 250)}`;
+    if (name === 'createKsp' || name === 'createKtp') return parsed.success === false ? (parsed.error ?? 'Не удалось создать материал') : (parsed.message ?? 'Готово');
+    if (name === 'listPlans') return parsed.success === false ? (parsed.error ?? '') : 'Планы получены';
     if (name === 'listFiles') return parsed.files?.length ? parsed.files.join(', ') : '(песочница пуста)';
     return parsed.message ?? parsed.error ?? parsed.output?.slice(0, 200) ?? 'готово';
   } catch {

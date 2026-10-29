@@ -63,3 +63,30 @@ it("does not label a failed task as completed", () => {
   expect(screen.queryByText("Задача выполнена")).toBeNull();
   expect(screen.getByText("0%")).toBeTruthy();
 });
+
+it("показывает карточку результата со ссылками на созданный КСП", () => {
+  render(<AgentSession taskId="ksp" variant="chat" />);
+  act(() => {
+    FakeEventSource.instances[0]!.emit({
+      type: "TOOL_RESULT",
+      message: "готово",
+      data: {
+        tool: "createKsp",
+        result: JSON.stringify({ success: true, title: "Математика: Дроби", url: "/plans/p1", docxUrl: "/api/export/docx/p1", pptxUrl: "/api/export/pptx/p1", file: "ksp-дроби.md" }),
+      },
+    });
+  });
+
+  expect(screen.getByRole("region", { name: "Результат работы агента" })).toBeTruthy();
+  expect(screen.getByText("Готов КСП")).toBeTruthy();
+  expect(screen.getByRole("link", { name: /Открыть/ }).getAttribute("href")).toBe("/plans/p1");
+  expect(screen.getByRole("link", { name: /Word/ }).getAttribute("href")).toBe("/api/export/docx/p1");
+  expect(screen.getByRole("link", { name: /PowerPoint/ }).getAttribute("href")).toBe("/api/export/pptx/p1");
+  expect(screen.getByText(/ksp-дроби\.md/)).toBeTruthy();
+});
+
+it("без созданных материалов карточки результата нет", () => {
+  render(<AgentSession taskId="none" variant="chat" />);
+  act(() => FakeEventSource.instances[0]!.emit({ type: "TOOL_RESULT", message: "x", data: { tool: "listFiles", result: "{}" } }));
+  expect(screen.queryByRole("region", { name: "Результат работы агента" })).toBeNull();
+});

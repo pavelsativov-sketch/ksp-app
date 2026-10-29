@@ -10,6 +10,15 @@ import {
   waitForConfirmation,
   type ConfirmationRequest,
 } from "@/lib/agents/computer/confirm";
+import {
+  beginRun,
+  endRun,
+  getRunState,
+  isRunStopRequested,
+  pushRunEvent,
+  requestRunStop,
+  setRunAuthBarrier,
+} from "@/lib/agents/computer/run-state";
 import { log } from "@/lib/logger";
 import {
   browserFailure,
@@ -37,19 +46,6 @@ export const maxDuration = 300;
 
 const MAX_TURNS = 25;
 
-/** Живой цикл, выполняемый прямо в этом запросе. */
-const running = new Map<
-  string,
-  {
-    startedAt: number;
-    goal: string;
-    events: LoopEvent[];
-    authBarrier: PageAuthBarrier | null;
-    /** Учитель нажал «Остановить»: цикл проверяет флаг на каждом шаге. */
-    stopped: boolean;
-  }
->();
-
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
@@ -75,22 +71,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Опишите задачу подробнее" }, { status: 400 });
   }
 
-  if (running.has(userId)) {
+  // Слот запуска занимается в Mongo: так второй запуск (и со второго инстанса
+  // функции) получает 409, а «Остановить» видит работающего агента.
+  const slot = await beginRun(userId, goal);
+  if (!slot) {
     return NextResponse.json(
       { error: "Агент уже работает. Дождитесь окончания или остановите его." },
       { status: 409 },
     );
   }
-
   const events: LoopEvent[] = [];
-  const runState = {
-    startedAt: Date.now(),
-    goal: goal.slice(0, 200),
-    events,
-    authBarrier: null as PageAuthBarrier | null,
-    stopped: false,
-  };
-  running.set(userId, runState);
   await setControlOwner(userId, "ai").catch(() => {});
 
   try {
@@ -122,8 +112,9 @@ export async function POST(req: Request) {
       maxTurns: MAX_TURNS,
       log: async (event) => {
         events.push(event);
+        await pushRunEvent(userId, event).catch(() => {});
         if (event.type === "RESUMED") {
-          runState.authBarrier = null;
+          await setRunAuthBarrier(userId, null).catch(() => {});
           await setControlOwner(userId, "ai").catch(() => {});
           await persistAgentBrowserSession(userId).catch(() => {});
         }
@@ -138,11 +129,11 @@ export async function POST(req: Request) {
       confirm: (action, decision, probe) =>
         waitForConfirmation(userId, action, decision, probe),
       onAuthBarrier: async (barrier) => {
-        runState.authBarrier = barrier;
+        await setRunAuthBarrier(userId, barrier).catch(() => {});
         await setControlOwner(userId, "user");
       },
       shouldPause: async () => (await getControlOwner(userId)) === "user",
-      isStopped: () => runState.stopped,
+      isStopped: () => isRunStopRequested(userId).catch(() => false),
     });
 
     await persistAgentBrowserSession(userId);
@@ -155,7 +146,7 @@ export async function POST(req: Request) {
     const message = failure.status === 429 ? failure.message : "Агент не смог выполнить задачу";
     return NextResponse.json({ error: message, events, detail: reason.slice(0, 300) }, { status: failure.status === 429 ? 429 : 502 });
   } finally {
-    running.delete(userId);
+    await endRun(userId).catch(() => {});
   }
 }
 
@@ -193,12 +184,12 @@ export async function GET(req: Request) {
     }
   }
 
-  const pending: ConfirmationRequest[] = await listPending(userId);
-  const state = running.get(userId);
+  const pending: ConfirmationRequest[] = await listPending(userId).catch(() => []);
+  const state = await getRunState(userId).catch(() => null);
   const control = await getControlOwner(userId);
   return NextResponse.json({
     pending,
-    running: Boolean(state),
+    running: state?.active === true,
     events: state?.events ?? [],
     authBarrier: state?.authBarrier ?? null,
     control,
@@ -214,15 +205,14 @@ export async function DELETE() {
   if (auth.response) return auth.response;
   const userId = auth.user.id;
 
-  const state = running.get(userId);
-  if (!state) return NextResponse.json({ ok: true, running: false });
+  const stopped = await requestRunStop(userId);
+  if (!stopped) return NextResponse.json({ ok: true, running: false });
 
-  state.stopped = true;
   // Ожидающие подтверждения отклоняем сразу, а не через 2 минуты тайм-аута.
-  cancelAll(userId);
+  await cancelAll(userId).catch(() => {});
   // Если агент стоял на паузе у учителя, возвращаем управление ИИ, иначе
   // цикл ждал бы ответа вместо того, чтобы завершиться.
   await setControlOwner(userId, "ai").catch(() => {});
-  state.events.push({ type: "END", message: "Остановлено пользователем" });
+  await pushRunEvent(userId, { type: "END", message: "Остановлено пользователем" }).catch(() => {});
   return NextResponse.json({ ok: true, running: true, stopping: true });
 }

@@ -4,6 +4,7 @@ import { getDb, COL } from '@/lib/mongo';
 import { runAgentTask } from './runner';
 import { setControlOwner } from './session';
 import { runningTaskIsStale } from './lease';
+import { MAX_CONTINUATIONS } from './continuation';
 
 /**
  * Создаёт задачу агента и запускает реальное выполнение в фоне.
@@ -252,6 +253,47 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
   }
 
   return { id: taskId, status: 'running' };
+}
+
+/**
+ * Продолжение длинной задачи в новой сессии функции.
+ *
+ * Вызывается служебным маршрутом /api/agents/task/continue (по подписи) после
+ * того, как раннер сохранил контрольную точку и вышел по времени. Задача
+ * остаётся `running`; выполнение стартует в after() этого запроса.
+ */
+export async function continueAgentTask(taskId: string): Promise<'started' | 'not_running' | 'limit'> {
+  if (!/^[a-f\d]{24}$/i.test(taskId)) return 'not_running';
+  const db = await getDb();
+  const task = await db.collection(COL.agentTasks).findOne(
+    { _id: new ObjectId(taskId), status: 'running' },
+    { projection: { prompt: 1, user_id: 1, continuations: 1 } },
+  );
+  if (!task || typeof task.prompt !== 'string' || !task.user_id) return 'not_running';
+  if (Number(task.continuations ?? 0) > MAX_CONTINUATIONS) return 'limit';
+
+  const userId = String(task.user_id);
+  const prompt = task.prompt;
+  const log = async (event: { type: string; message: string; data?: Record<string, unknown> }) => {
+    try {
+      await db.collection(COL.agentExecutions).insertOne({
+        task_id: new ObjectId(taskId),
+        type: event.type,
+        message: event.message,
+        data: event.data ?? null,
+        created_at: new Date(),
+      });
+    } catch {
+      // журнал не критичен
+    }
+  };
+  const execute = () => runAgentTask(taskId, prompt, userId, log);
+  try {
+    after(execute);
+  } catch {
+    void execute().catch(() => {});
+  }
+  return 'started';
 }
 
 export async function listAgentTasks(userId: string, limit = 20) {

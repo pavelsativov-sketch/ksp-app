@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, CircleCheck, CircleX, Globe, Lock, ExternalLink } from "lucide-react";
+import { Loader2, CircleCheck, CircleX, Globe, Lock, ExternalLink, FileText, Download, Presentation } from "lucide-react";
+import { extractDeliverables } from "@/lib/agents/deliverables";
 import { useOsShellStore } from "@/lib/store/os-shell";
 
 export interface AgentEvent {
@@ -151,9 +152,39 @@ function AgentSessionStream({
     ? status === "completed" ? 100 : Math.min(100, Math.round((doneSteps / plan.length) * 100))
     : null;
   const running = status === "running";
+  // Созданные агентом КСП и КТП: готовые ссылки, чтобы не искать результат в логе.
+  const deliverables = extractDeliverables(events);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {deliverables.length > 0 && (
+        <section aria-label="Результат работы агента" className="mx-3 mt-3 shrink-0 space-y-2">
+          {deliverables.map((item) => (
+            <div key={`${item.kind}:${item.url}`} className="rounded-xl border border-emerald-400/30 bg-emerald-400/[0.07] p-3">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-200">
+                <FileText className="size-3.5" /> {item.kind === "ksp" ? "Готов КСП" : "Готов КТП"}
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-slate-100">{item.title}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-slate-950 hover:bg-emerald-400">
+                  <ExternalLink className="size-3" /> Открыть
+                </a>
+                {item.docxUrl && (
+                  <a href={item.docxUrl} className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+                    <Download className="size-3" /> Word
+                  </a>
+                )}
+                {item.pptxUrl && (
+                  <a href={item.pptxUrl} className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+                    <Presentation className="size-3" /> PowerPoint
+                  </a>
+                )}
+              </div>
+              {item.workspaceFile && <p className="mt-1.5 text-[10px] text-slate-400">Копия в файлах рабочей области: {item.workspaceFile}</p>}
+            </div>
+          ))}
+        </section>
+      )}
       {plan && plan.length > 0 && (
         <div className="mx-3 mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <div className="mb-2 flex items-center justify-between gap-2">

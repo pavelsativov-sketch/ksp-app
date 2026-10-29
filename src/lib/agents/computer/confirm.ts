@@ -1,10 +1,18 @@
 import "server-only";
-
+import { ObjectId } from "mongodb";
+import { getDb, COL } from "@/lib/mongo";
 import type { ProposedAction } from "./loop";
 import type { SafetyDecision } from "./safety";
 import type { ElementProbe } from "./screen";
 
-/** Cross-request confirmation requests for the computer-use agent. */
+/**
+ * Подтверждения опасных действий агента «Работа с компьютером».
+ *
+ * Хранятся в Mongo, а не в памяти процесса: на Vercel агент, ответ учителя и
+ * опрос списка могут обслуживать разные инстансы функции, и с массивом в памяти
+ * кнопки «Разрешить» и «Остановить» не доходили бы до работающего агента.
+ * Отсутствие ответа за TIMEOUT_MS — отказ.
+ */
 export interface ConfirmationRequest {
   id: string;
   action: ProposedAction;
@@ -12,70 +20,78 @@ export interface ConfirmationRequest {
   probe: ElementProbe;
 }
 
-interface PendingConfirmation extends ConfirmationRequest {
-  userId: string;
-  createdAt: number;
-  resolve: (allowed: boolean) => void;
+export const CONFIRM_TIMEOUT_MS = 120_000;
+const POLL_MS = 700;
+
+type ConfirmDoc = {
+  _id: ObjectId;
+  user_id: string;
+  action: ProposedAction;
+  decision: SafetyDecision;
+  probe: ElementProbe;
+  status: "pending" | "allowed" | "denied" | "expired";
+  created_at: Date;
+  expires_at: Date;
+};
+
+async function confirms() {
+  return (await getDb()).collection<ConfirmDoc>(COL.agentComputerConfirms);
 }
 
-const TIMEOUT_MS = 120_000;
-const pending: PendingConfirmation[] = [];
-
-export function listPending(userId: string): ConfirmationRequest[] {
-  return pending
-    .filter((entry) => entry.userId === userId)
-    .map(({ id, action, decision, probe }) => ({ id, action, decision, probe }));
+function validId(id: string): ObjectId | null {
+  return /^[a-f\d]{24}$/i.test(id) ? new ObjectId(id) : null;
 }
 
-export function resolveConfirmation(userId: string, id: string, allowed: boolean): boolean {
-  const pos = pending.findIndex((entry) => entry.userId === userId && entry.id === id);
-  if (pos === -1) return false;
-  const entry = pending[pos];
-  if (!entry) return false;
-  pending.splice(pos, 1);
-  entry.resolve(allowed);
-  return true;
+export async function listPending(userId: string): Promise<ConfirmationRequest[]> {
+  const rows = await (await confirms())
+    .find({ user_id: userId, status: "pending", expires_at: { $gt: new Date() } })
+    .sort({ created_at: 1 })
+    .limit(20)
+    .toArray();
+  return rows.map((row) => ({ id: row._id.toString(), action: row.action, decision: row.decision, probe: row.probe }));
 }
 
-export function cancelAll(userId: string): void {
-  for (let i = pending.length - 1; i >= 0; i -= 1) {
-    const entry = pending[i];
-    if (entry?.userId !== userId) continue;
-    pending.splice(i, 1);
-    entry.resolve(false);
-  }
+/** Один раз и только владельцу: чужой или уже решённый запрос не принимается. */
+export async function resolveConfirmation(userId: string, id: string, allowed: boolean): Promise<boolean> {
+  const oid = validId(id);
+  if (!oid) return false;
+  const result = await (await confirms()).updateOne(
+    { _id: oid, user_id: userId, status: "pending", expires_at: { $gt: new Date() } },
+    { $set: { status: allowed ? "allowed" : "denied" } },
+  );
+  return result.modifiedCount === 1;
 }
 
-export function countPending(userId: string): number {
-  return pending.filter((entry) => entry.userId === userId).length;
+/** Отклоняет все ожидающие запросы пользователя (кнопка «Остановить»). */
+export async function cancelAll(userId: string): Promise<void> {
+  await (await confirms()).updateMany({ user_id: userId, status: "pending" }, { $set: { status: "denied" } });
 }
 
-let counter = 0;
+export async function countPending(userId: string): Promise<number> {
+  return (await confirms()).countDocuments({ user_id: userId, status: "pending", expires_at: { $gt: new Date() } });
+}
 
-export function waitForConfirmation(
+export async function waitForConfirmation(
   userId: string,
   action: ProposedAction,
   decision: SafetyDecision,
   probe: ElementProbe,
+  opts: { timeoutMs?: number; pollMs?: number } = {},
 ): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const entry: PendingConfirmation = {
-      id: `${Date.now().toString(36)}-${(counter += 1).toString(36)}`,
-      userId,
-      action,
-      decision,
-      probe,
-      createdAt: Date.now(),
-      resolve: (allowed) => {
-        clearTimeout(timer);
-        resolve(allowed);
-      },
-    };
-    const timer = setTimeout(() => {
-      const pos = pending.indexOf(entry);
-      if (pos !== -1) pending.splice(pos, 1);
-      resolve(false);
-    }, TIMEOUT_MS);
-    pending.push(entry);
-  });
+  const timeoutMs = opts.timeoutMs ?? CONFIRM_TIMEOUT_MS;
+  const pollMs = opts.pollMs ?? POLL_MS;
+  const collection = await confirms();
+  const id = new ObjectId();
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + timeoutMs);
+  await collection.insertOne({ _id: id, user_id: userId, action, decision, probe, status: "pending", created_at: createdAt, expires_at: expiresAt });
+
+  while (Date.now() < expiresAt.getTime()) {
+    const row = await collection.findOne({ _id: id }, { projection: { status: 1 } });
+    if (!row || row.status === "denied" || row.status === "expired") return false;
+    if (row.status === "allowed") return true;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  await collection.updateOne({ _id: id, status: "pending" }, { $set: { status: "expired" } });
+  return false;
 }
