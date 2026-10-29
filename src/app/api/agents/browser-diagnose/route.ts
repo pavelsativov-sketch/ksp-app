@@ -59,6 +59,13 @@ const probe = async () => {
     navigation: nav
       ? { domContentLoadedMs: Math.round(nav.domContentLoadedEventEnd), loadMs: Math.round(nav.loadEventEnd), responseStatus: (nav as unknown as { responseStatus?: number }).responseStatus }
       : null,
+    // Что делает сайт после попытки входа: последние запросы к его API и состояние оверлея загрузки.
+    overlay: document.querySelector(".v-loading-screen")?.className ?? null,
+    inputs: Array.from(document.querySelectorAll("input")).slice(0, 8).map((i) => ({ type: i.type, name: i.name.slice(0, 20), valueLength: i.value.length })),
+    apiCalls: resources
+      .filter((r) => /api\./.test(new URL(r.name).hostname))
+      .slice(-14)
+      .map((r) => ({ path: new URL(r.name).pathname.slice(0, 60), startMs: Math.round(r.startTime), ms: Math.round(r.duration) })),
     resourceCount: resources.length,
     hosts,
     failed,
