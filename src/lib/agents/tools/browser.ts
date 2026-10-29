@@ -78,6 +78,17 @@ async function extractPageSnapshot(page: {
   };
 }
 
+/** SPA BilimClass показывает индикатор загрузки, пока не ответит API: ждём до ~12 с, а не читаем пустой экран. */
+async function waitForBilimReady(page: Parameters<typeof extractPageSnapshot>[0] & { waitForTimeout(ms: number): Promise<void> }) {
+  for (let i = 0; i < 12; i += 1) {
+    const loading = await page
+      .evaluate(() => !!document.querySelector('.v-loading-screen.is-loading') || (document.body?.innerText ?? '').trim().length === 0)
+      .catch(() => false);
+    if (!loading) return;
+    await page.waitForTimeout(1000);
+  }
+}
+
 /**
  * Снимок страницы с автовходом: если открыта форма входа известного сайта
  * (BilimClass), а учитель уже сохранил данные, вход выполняется сам, без
@@ -139,7 +150,7 @@ export const browserTools = {
           await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
         }
         if (/bilimclass\.kz/i.test(checked.url.hostname)) {
-          await session.page.waitForTimeout(1500);
+          await waitForBilimReady(session.page);
         }
         await persistAgentBrowserSession(userId);
         return snapshotWithAutoLogin(ctx.userId!, session.page);

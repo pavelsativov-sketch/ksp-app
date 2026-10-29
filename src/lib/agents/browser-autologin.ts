@@ -183,7 +183,15 @@ export async function loginWithSavedCredentials(userId: string, page: LoginPage)
   const result = (status: AutoLoginStatus): AutoLoginResult => ({ status, ...site });
   const config = KNOWN_LOGIN_SITES[site.domain]!;
   try {
-    if (!(await page.evaluate(hasVisiblePassword as never))) return result("no-form");
+    // SPA BilimClass рисует форму только после ответов API (до 10–15 с): на странице
+    // входа ждём её появления, а не считаем, что формы нет.
+    let hasForm = Boolean(await page.evaluate(hasVisiblePassword as never));
+    const onLoginPath = /\/login/i.test(page.url());
+    for (let i = 0; i < 12 && !hasForm && onLoginPath; i += 1) {
+      await page.waitForTimeout(1000);
+      hasForm = Boolean(await page.evaluate(hasVisiblePassword as never));
+    }
+    if (!hasForm) return result("no-form");
     const creds = await getCredentials(userId, site.domain);
     if (!creds) return result("no-credentials");
 

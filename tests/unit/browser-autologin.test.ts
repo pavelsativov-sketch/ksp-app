@@ -26,14 +26,19 @@ import { knownLoginSite, loginWithSavedCredentials, saveCredentials } from "@/li
 
 process.env.AUTH_SECRET = "x".repeat(40);
 
-function fakePage(opts: { url?: string; passwordStaysAfterLogin?: boolean; noForm?: boolean } = {}) {
+function fakePage(opts: { url?: string; passwordStaysAfterLogin?: boolean; noForm?: boolean; formAfterChecks?: number } = {}) {
   const typed: string[] = [];
   const pressed: string[] = [];
   let submitted = false;
+  let checks = 0;
   const page = {
     url: () => opts.url ?? "https://www.bilimclass.kz/login",
     evaluate: async (fn: { name: string }) => {
-      if (fn.name === "hasVisiblePassword") return !opts.noForm && (!submitted || !!opts.passwordStaysAfterLogin);
+      if (fn.name === "hasVisiblePassword") {
+        checks += 1;
+        if (checks <= (opts.formAfterChecks ?? 0)) return false;
+        return !opts.noForm && (!submitted || !!opts.passwordStaysAfterLogin);
+      }
       return true; // focusField
     },
     keyboard: {
@@ -97,6 +102,13 @@ describe("loginWithSavedCredentials", () => {
     const second = fakePage({ passwordStaysAfterLogin: true });
     expect((await loginWithSavedCredentials("u4", second.page as never)).status).toBe("throttled");
     expect(second.typed).toEqual([]);
+  });
+
+  it("ждёт, пока SPA нарисует форму входа, и только потом вводит данные", async () => {
+    await saveCredentials("u6", "bilimclass.kz", "login", "pass");
+    const { page, typed } = fakePage({ formAfterChecks: 4 });
+    expect((await loginWithSavedCredentials("u6", page as never)).status).toBe("logged-in");
+    expect(typed).toEqual(["login", "pass"]);
   });
 
   it("на странице без формы входа ничего не делает", async () => {
