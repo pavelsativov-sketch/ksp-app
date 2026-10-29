@@ -148,9 +148,11 @@ function AgentSessionStream({
 
   const metaEv = events.find((e) => e.type === "META") as unknown as (AgentEvent & { plan?: string[] }) | undefined;
   const plan = metaEv?.plan ?? (metaEv?.data as unknown as { plan?: string[] } | undefined)?.plan ?? null;
-  const doneSteps = events.filter((e) => e.type === "TOOL_RESULT").length;
+  // Шагом считается только удачный результат инструмента: ошибки («сеанс истёк»,
+  // «нет квоты») раньше засчитывались, и остановленная задача показывала 100%.
+  const doneSteps = events.filter((e) => e.type === "TOOL_RESULT" && !/"success"\s*:\s*false/.test(String(e.data?.result ?? ""))).length;
   const progress = plan && plan.length
-    ? status === "completed" ? 100 : Math.min(100, Math.round((doneSteps / plan.length) * 100))
+    ? status === "completed" ? 100 : Math.min(95, Math.round((doneSteps / plan.length) * 100))
     : null;
   const running = status === "running";
   // Созданные агентом КСП и КТП: готовые ссылки, чтобы не искать результат в логе.
@@ -240,7 +242,7 @@ function AgentSessionStream({
           )}
           <ul className="space-y-1.5 text-[11px] leading-snug">
             {plan.map((step, idx) => {
-              const stepDone = status === "completed" || idx < doneSteps;
+              const stepDone = status === "completed" || (status !== "stopped" && status !== "failed" ? idx < doneSteps : idx < Math.min(doneSteps, plan.length - 1));
               const stepCurrent = running && idx === doneSteps;
               return (
                 <li key={idx} className={`flex items-start gap-2 ${stepDone ? "text-slate-400" : stepCurrent ? "text-slate-100" : "text-slate-500"}`}>

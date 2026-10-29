@@ -109,3 +109,29 @@ it("единый экран: показывает текущий шаг, фай�
   expect(screen.queryByText(/Сейчас:/)).toBeNull();
   expect(screen.getByRole("region", { name: "Итог задачи" }).textContent).toContain("Отчёт составлен и сохранён.");
 });
+
+it("ошибки инструментов не засчитываются шагами: остановленная задача не показывает 100%", () => {
+  render(<AgentSession taskId="errors" variant="chat" />);
+  act(() => {
+    const es = FakeEventSource.instances[0]!;
+    es.emit({ type: "META", plan: ["один", "два", "три"] });
+    for (let i = 0; i < 4; i += 1) {
+      es.emit({ type: "TOOL_RESULT", message: "x", data: { tool: "browserNavigate", result: JSON.stringify({ success: false, error: "Session expired or not found" }) } });
+    }
+    es.emit({ type: "STATUS_UPDATE", status: "stopped" });
+  });
+  expect(screen.getAllByText("Задача остановлена").length).toBeGreaterThan(0);
+  expect(screen.getByText("0%")).toBeTruthy();
+  expect(screen.queryByText("100%")).toBeNull();
+});
+
+it("удачные результаты двигают прогресс, но до завершения он не достигает 100%", () => {
+  render(<AgentSession taskId="progress" variant="chat" />);
+  act(() => {
+    const es = FakeEventSource.instances[0]!;
+    es.emit({ type: "META", plan: ["один", "два"] });
+    es.emit({ type: "TOOL_RESULT", message: "x", data: { tool: "listFiles", result: JSON.stringify({ success: true }) } });
+    es.emit({ type: "TOOL_RESULT", message: "x", data: { tool: "listFiles", result: JSON.stringify({ success: true }) } });
+  });
+  expect(screen.getByText("95%")).toBeTruthy();
+});
