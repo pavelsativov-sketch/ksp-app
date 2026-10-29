@@ -182,6 +182,30 @@ function reapSessions(now = Date.now()): void {
  */
 const VALIDATE_INTERVAL_MS = 15_000;
 
+/** Раннер сообщил, что сеанс браузера больше не существует (HTTP 410). */
+export function isSessionGone(error: unknown): boolean {
+  if (error instanceof BrowserRpcError) return error.status === 410;
+  return error instanceof Error && /session expired or not found|сеанс браузера завершён/i.test(error.message);
+}
+
+/**
+ * Выполняет действие в браузерной сессии, а если сеанс оказался мёртвым —
+ * один раз повторяет его на свежей. Агент не должен тратить шаги на ошибку,
+ * которую приложение может исправить само.
+ */
+export async function withBrowserSession<T>(
+  userId: string,
+  run: (session: AgentBrowserSession) => Promise<T>,
+  getSession: (userId: string) => Promise<AgentBrowserSession> = getAgentBrowserSession,
+): Promise<T> {
+  try {
+    return await run(await getSession(userId));
+  } catch (error) {
+    if (!isSessionGone(error)) throw error;
+    return run(await getSession(userId));
+  }
+}
+
 /** Один настоящий браузерный контекст на пользователя, общий для UI и агента. */
 export async function getAgentBrowserSession(userId: string): Promise<AgentBrowserSession> {
   if (!userId || userId.length > 128) throw new Error("Invalid browser session owner");
@@ -278,16 +302,29 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
 
   const send = async <T,>(action: string, args?: Record<string, unknown>, allowedOrigin?: string, captureScreenshot = false) => {
     if (closed && action !== "close") throw new BrowserRpcError("Browser session is closed", 410);
-    const response = await browserRpc<T>(userId, action, {
-      sessionId,
-      currentUrl,
-      interactionState: currentInteractionState,
-      rpcUrl,
-      ...(allowedOrigin ? { allowedOrigin } : {}),
-      ...(captureScreenshot ? { captureScreenshot: true } : {}),
-      ...(args ? { args } : {}),
-      timeoutMs: action === "navigate" ? 35_000 : 55_000,
-    });
+    let response: Awaited<ReturnType<typeof browserRpc<T>>>;
+    try {
+      response = await browserRpc<T>(userId, action, {
+        sessionId,
+        currentUrl,
+        interactionState: currentInteractionState,
+        rpcUrl,
+        ...(allowedOrigin ? { allowedOrigin } : {}),
+        ...(captureScreenshot ? { captureScreenshot: true } : {}),
+        ...(args ? { args } : {}),
+        timeoutMs: action === "navigate" ? 35_000 : 55_000,
+      });
+    } catch (error) {
+      // 410 — раннер забыл сеанс (песочница уснула или перезапустилась). Раньше
+      // мёртвая сессия оставалась в кэше, и все шаги агента падали одинаково,
+      // пока не истекал интервал проверки. Теперь сбрасываем её сразу: следующий
+      // запрос поднимет новую.
+      if (isSessionGone(error) && action !== "close") {
+        closed = true;
+        if (sessions.get(userId)?.page === page) sessions.delete(userId);
+      }
+      throw error;
+    }
     if (response.currentUrl) currentUrl = response.currentUrl;
     if ("storageState" in response && response.storageState !== undefined && response.storageState !== null) currentStorageState = response.storageState;
     if ("interactionState" in response && response.interactionState !== undefined) currentInteractionState = response.interactionState;

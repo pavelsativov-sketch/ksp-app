@@ -84,6 +84,8 @@ describe("единый экран задачи: файлы, текущий ша�
     ])).toBe("Создаю файл a.md");
     expect(currentActivity([{ type: "REASONING", message: "Нужно\n  открыть   сайт" }])).toBe("Нужно открыть сайт");
     expect(currentActivity([{ type: "TOOL_CALL", message: "x".repeat(500) }]).length).toBeLessThanOrEqual(140);
+    // Разметка Markdown не попадает в строку «Сейчас».
+    expect(currentActivity([{ type: "REASONING", message: "- **План:** Математика 5 класс — `Дроби`" }])).toBe("- План: Математика 5 класс — Дроби");
   });
 
   it("итог — последнее END, но не ручная остановка", () => {

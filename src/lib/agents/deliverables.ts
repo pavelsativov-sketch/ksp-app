@@ -98,7 +98,8 @@ export function currentActivity(events: RichEventLike[]): string {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i]!;
     if ((event.type === "TOOL_CALL" || event.type === "REASONING") && event.message?.trim()) {
-      return event.message.trim().replace(/\s+/g, " ").slice(0, 140);
+      // Разметку Markdown (**жирный**, # заголовки, `код`) убираем: в строке «Сейчас» она выглядит мусором.
+      return event.message.replace(/[*_`#>]+/g, "").replace(/\s+/g, " ").trim().slice(0, 140);
     }
   }
   return "";

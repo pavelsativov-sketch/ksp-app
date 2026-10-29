@@ -1,6 +1,7 @@
 import {
   getAgentBrowserSession,
   persistAgentBrowserSession,
+  withBrowserSession,
 } from '../browser-session';
 import { checkPublicUrl, installRequestGuard } from '../ssrf';
 import {
@@ -84,21 +85,23 @@ export const browserTools = {
       const checked = await checkPublicUrl(url);
       if (!checked.ok) return { success: false, error: checked.error };
 
-      const session = await getAgentBrowserSession(ctx.userId);
-      await installRequestGuard(session.page);
-      try {
-        await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
-      } catch (error) {
-        // A single retry tolerates a transient load timeout without turning a
-        // permanently slow site into an endless agent loop.
-        if (!navigationTimedOut(error)) throw error;
-        await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
-      }
-      if (/bilimclass\.kz/i.test(checked.url.hostname)) {
-        await session.page.waitForTimeout(1500);
-      }
-      await persistAgentBrowserSession(ctx.userId);
-      const snap = await extractPageSnapshot(session.page);
+      const userId = ctx.userId;
+      const snap = await withBrowserSession(userId, async (session) => {
+        await installRequestGuard(session.page);
+        try {
+          await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
+        } catch (error) {
+          // A single retry tolerates a transient load timeout without turning a
+          // permanently slow site into an endless agent loop.
+          if (!navigationTimedOut(error)) throw error;
+          await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
+        }
+        if (/bilimclass\.kz/i.test(checked.url.hostname)) {
+          await session.page.waitForTimeout(1500);
+        }
+        await persistAgentBrowserSession(userId);
+        return extractPageSnapshot(session.page);
+      });
       return boundedResult({ success: true, ...snap });
     } catch (e) {
       return boundedResult({ success: false, error: e instanceof Error ? e.message : 'navigation failed' });
