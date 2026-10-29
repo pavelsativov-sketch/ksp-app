@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { checkPublicUrl } from "@/lib/agents/ssrf";
 import { browserFailure, getAgentBrowserSession } from "@/lib/agents/browser-session";
 
 export const runtime = "nodejs";
@@ -72,9 +73,22 @@ export async function GET(req: Request) {
   const rl = await checkRateLimitAsync(`agent:browser-diagnose:${auth.user.id}`, 10, 60_000);
   if (!rl.ok) return NextResponse.json({ error: "Слишком много запросов" }, { status: 429 });
 
-  const reload = new URL(req.url).searchParams.get("reload") === "1";
+  const params = new URL(req.url).searchParams;
+  const reload = params.get("reload") === "1";
+  // Переход и замер в одном запросе: запросы могут попасть на разные экземпляры функции.
+  const target = params.get("url");
+  const waitMs = Math.min(Math.max(Number(params.get("wait")) || 8000, 1000), 20_000);
   try {
     const session = await getAgentBrowserSession(auth.user.id);
+    if (target) {
+      const checked = await checkPublicUrl(target);
+      if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: checked.status });
+      const started = Date.now();
+      const navigation = await session.page.goto(checked.url.toString(), { waitUntil: "domcontentloaded", timeout: 25_000 }).then(() => "ok", (e: unknown) => String(e).slice(0, 200));
+      await session.page.waitForTimeout(waitMs);
+      const report = await session.page.evaluate(`(${probe.toString()})` as never);
+      return NextResponse.json({ ok: true, navigation, navigationMs: Date.now() - started, report });
+    }
     if (reload) {
       await session.page.reload({ timeout: 30_000 }).catch(() => undefined);
       await session.page.waitForTimeout(5000);
