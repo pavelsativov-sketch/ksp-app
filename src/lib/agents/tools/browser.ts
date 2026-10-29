@@ -51,6 +51,9 @@ async function extractPageSnapshot(page: {
         if (size > 2000 || skip.has(el.tagName.toUpperCase())) return;
         const style = window.getComputedStyle(el);
         if (style.display === 'none' || style.visibility === 'hidden') return;
+        // Боковое меню занимает весь лимит текста, и содержимое страницы (расписание,
+        // журнал) в ответ не попадает: агент принимал вошедшего учителя за гостя.
+        if (el.getAttribute('role') === 'navigation' || /sidebar|side-menu|navbar/i.test(String(el.className))) return;
         el.childNodes.forEach((node) => {
           if (size > 2000) return;
           if (node.nodeType === 3) {

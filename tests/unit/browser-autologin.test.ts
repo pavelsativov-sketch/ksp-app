@@ -26,11 +26,12 @@ import { knownLoginSite, loginWithSavedCredentials, saveCredentials } from "@/li
 
 process.env.AUTH_SECRET = "x".repeat(40);
 
-function fakePage(opts: { url?: string; passwordStaysAfterLogin?: boolean; noForm?: boolean; formAfterChecks?: number } = {}) {
+function fakePage(opts: { url?: string; passwordStaysAfterLogin?: boolean; noForm?: boolean; formAfterChecks?: number; slowRedirectChecks?: number } = {}) {
   const typed: string[] = [];
   const pressed: string[] = [];
   let submitted = false;
   let checks = 0;
+  let afterSubmit = 0;
   const page = {
     url: () => opts.url ?? "https://www.bilimclass.kz/login",
     evaluate: async (script: unknown) => {
@@ -40,6 +41,10 @@ function fakePage(opts: { url?: string; passwordStaysAfterLogin?: boolean; noFor
       if (!(script as string).includes("selector")) {
         checks += 1;
         if (checks <= (opts.formAfterChecks ?? 0)) return false;
+        if (submitted && opts.slowRedirectChecks) {
+          afterSubmit += 1;
+          if (afterSubmit <= opts.slowRedirectChecks) return true;
+        }
         return !opts.noForm && (!submitted || !!opts.passwordStaysAfterLogin);
       }
       return true; // focusField
@@ -112,6 +117,12 @@ describe("loginWithSavedCredentials", () => {
     const { page, typed } = fakePage({ formAfterChecks: 4 });
     expect((await loginWithSavedCredentials("u6", page as never)).status).toBe("logged-in");
     expect(typed).toEqual(["login", "pass"]);
+  });
+
+  it("медленный редирект после входа не считается отказом сайта", async () => {
+    await saveCredentials("u7", "bilimclass.kz", "login", "pass");
+    const { page } = fakePage({ slowRedirectChecks: 4 });
+    expect((await loginWithSavedCredentials("u7", page as never)).status).toBe("logged-in");
   });
 
   it("на странице без формы входа ничего не делает", async () => {

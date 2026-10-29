@@ -213,7 +213,14 @@ export async function loginWithSavedCredentials(userId: string, page: LoginPage)
     await page.waitForTimeout(config.waitAfterMs ?? 2000);
 
     // Форма входа всё ещё на месте — сайт не принял данные.
-    return result((await page.evaluate(asScript(hasVisiblePassword) as never)) ? "rejected" : "logged-in");
+    // Вход обрабатывается на стороне сайта несколько секунд: ждём, пока форма исчезнет
+    // или адрес сменится. Форма на месте и после ожидания — сайт не принял данные.
+    const loginUrl = page.url();
+    for (let i = 0; i < 10; i += 1) {
+      if (page.url() !== loginUrl || !(await page.evaluate(asScript(hasVisiblePassword) as never))) return result("logged-in");
+      await page.waitForTimeout(1000);
+    }
+    return result("rejected");
   } catch {
     return result("failed");
   }

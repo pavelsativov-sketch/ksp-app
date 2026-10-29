@@ -67,4 +67,12 @@ describe("playbook агента BilimClass", () => {
     expect(numbers).toEqual([1, 2, 3, 4, 5, 6]);
     expect(prompt).toContain("правилам подтверждения из раздела 6");
   });
+
+  it("учит отличать вошедшего учителя от гостя и закрывать подсказки", () => {
+    const prompt = bilimClassInstructions();
+    expect(prompt).toContain("Как понять, что учитель уже вошёл");
+    expect(prompt).toContain("НЕ говори, что вход не выполнен");
+    expect(prompt).toContain("Өткізіп жіберу");
+    expect(prompt).toContain("раздел пуст");
+  });
 });
