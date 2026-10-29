@@ -113,6 +113,98 @@ export async function getCredentials(userId: string, domain: string): Promise<{ 
   return { username, password };
 }
 
+// ── Вход через страницу (агент и вкладка «Браузер») ─────────────────────────
+
+/** Минимум страницы, нужный для входа: работает и с локальным Playwright, и с удалённым раннером. */
+export interface LoginPage {
+  url(): string;
+  evaluate(fn: (arg: never) => unknown, arg?: unknown): Promise<unknown>;
+  keyboard: { type(text: string, opts?: { delay?: number }): Promise<void>; press(key: string): Promise<void> };
+  waitForTimeout(ms: number): Promise<void>;
+}
+
+export type AutoLoginStatus = "logged-in" | "no-credentials" | "no-form" | "rejected" | "throttled" | "failed";
+
+export interface AutoLoginResult {
+  status: AutoLoginStatus;
+  domain: string;
+  name: string;
+}
+
+/** Известный сайт по адресу страницы; null, если автовход для него не настроен. */
+export function knownLoginSite(url: string): { domain: string; name: string } | null {
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, "");
+    const site = KNOWN_LOGIN_SITES[domain];
+    return site ? { domain, name: site.name } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Защита от блокировки аккаунта: не чаще одной попытки в минуту на сайт. */
+const lastAttempt = new Map<string, number>();
+const ATTEMPT_GAP_MS = 60_000;
+
+/** Ставит фокус на поле: по селектору, а для логина — на ближайшее текстовое поле перед паролем. */
+const focusField = (arg: { selector: string; kind: "login" | "password" }) => {
+  const visible = (el: Element) => {
+    const r = (el as HTMLElement).getBoundingClientRect();
+    const st = getComputedStyle(el);
+    return r.width > 8 && r.height > 8 && st.display !== "none" && st.visibility !== "hidden";
+  };
+  const all = Array.from(document.querySelectorAll("input")).filter(visible) as HTMLInputElement[];
+  let el: HTMLInputElement | undefined;
+  if (arg.kind === "password") {
+    el = all.find((i) => i.type === "password");
+  } else {
+    el = (Array.from(document.querySelectorAll(arg.selector)).find(visible) as HTMLInputElement | undefined)
+      ?? all.slice(0, Math.max(all.findIndex((i) => i.type === "password"), 0)).reverse().find((i) => ["text", "email", "tel", "number", ""].includes(i.type));
+  }
+  if (!el) return false;
+  el.focus();
+  el.select?.();
+  return true;
+};
+
+const hasVisiblePassword = () =>
+  Array.from(document.querySelectorAll("input[type='password']")).some((el) => {
+    const r = (el as HTMLElement).getBoundingClientRect();
+    return r.width > 8 && r.height > 8;
+  });
+
+/**
+ * Входит на известном сайте сохранёнными данными. Пароль вводится здесь, на
+ * сервере, прямо в страницу: модель его не видит и в ответ он не попадает.
+ */
+export async function loginWithSavedCredentials(userId: string, page: LoginPage): Promise<AutoLoginResult> {
+  const site = knownLoginSite(page.url());
+  if (!site) return { status: "no-form", domain: "", name: "" };
+  const result = (status: AutoLoginStatus): AutoLoginResult => ({ status, ...site });
+  const config = KNOWN_LOGIN_SITES[site.domain]!;
+  try {
+    if (!(await page.evaluate(hasVisiblePassword as never))) return result("no-form");
+    const creds = await getCredentials(userId, site.domain);
+    if (!creds) return result("no-credentials");
+
+    const key = `${userId}:${site.domain}`;
+    if (Date.now() - (lastAttempt.get(key) ?? 0) < ATTEMPT_GAP_MS) return result("throttled");
+    lastAttempt.set(key, Date.now());
+
+    if (!(await page.evaluate(focusField as never, { selector: config.loginSelector, kind: "login" }))) return result("no-form");
+    await page.keyboard.type(creds.username, { delay: 15 });
+    if (!(await page.evaluate(focusField as never, { selector: config.passwordSelector, kind: "password" }))) return result("no-form");
+    await page.keyboard.type(creds.password, { delay: 15 });
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(config.waitAfterMs ?? 2000);
+
+    // Форма входа всё ещё на месте — сайт не принял данные.
+    return result((await page.evaluate(hasVisiblePassword as never)) ? "rejected" : "logged-in");
+  } catch {
+    return result("failed");
+  }
+}
+
 // ── Основная функция авто-входа ─────────────────────────────────────────────
 
 /**

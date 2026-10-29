@@ -101,7 +101,7 @@ function AgentSessionStream({
             const parsed = JSON.parse(ev.data.result) as {
               success?: boolean;
               url?: string;
-              authBarrier?: { requiresUserAction?: boolean; reason?: string };
+              authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string };
             };
             if (parsed.success && parsed.url) {
               onBrowserActivityRef.current?.({
@@ -362,6 +362,15 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
                 <span>
                   {browserInfo.authBarrier.reason || "Для входа кликните по полю логина/пароля прямо в рабочей области ОС справа."}
                 </span>
+                {browserInfo.authBarrier.kind === "login" && (
+                  <button
+                    type="button"
+                    onClick={() => setTab("browser")}
+                    className="ml-auto shrink-0 rounded-md bg-amber-400/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-400/30"
+                  >
+                    Ввести данные
+                  </button>
+                )}
               </div>
             )}
             <button
@@ -397,7 +406,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
 function extractBrowserMeta(ev: AgentEvent): {
   url?: string;
   title?: string;
-  authBarrier?: { requiresUserAction?: boolean; reason?: string };
+  authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string };
 } | null {
   if (ev.data?.tool !== "browserNavigate" || !ev.data?.result) return null;
   try {
@@ -405,7 +414,7 @@ function extractBrowserMeta(ev: AgentEvent): {
       success?: boolean;
       url?: string;
       title?: string;
-      authBarrier?: { requiresUserAction?: boolean; reason?: string };
+      authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string };
     };
     if (!parsed.success) return null;
     return {

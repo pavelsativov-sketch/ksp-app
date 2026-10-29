@@ -423,6 +423,7 @@ export async function runAgentTask(
                 error?: string;
                 url?: string;
                 authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string; domain?: string };
+                needsCredentials?: { domain?: string; name?: string };
               };
               if (!bilimSkillInjected && browserResult.url && isBilimClassContext('', browserResult.url)) bilimSeenOnPage = true;
               if (browserResult.success === false) {
@@ -440,7 +441,7 @@ export async function runAgentTask(
                 }
               } else if (
                 browserResult.authBarrier?.requiresUserAction &&
-                /(войди|авторизуй|отметь|заполни|выстави|расписан|журнал|оценк|домашн|дз\b|отчет|отчёт|логин|парол|дэшборд|дешборд|провед|ктп|урок)/i.test(prompt)
+                (!!browserResult.needsCredentials || /(войди|авторизуй|отметь|заполни|выстави|расписан|журнал|оценк|домашн|дз\b|отчет|отчёт|логин|парол|дэшборд|дешборд|провед|ктп|урок)/i.test(prompt))
               ) {
                 const { setControlOwner } = await import('@/lib/agents/session');
                 await setControlOwner(userId, 'user');

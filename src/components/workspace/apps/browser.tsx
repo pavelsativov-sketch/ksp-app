@@ -64,6 +64,15 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   const [credSaving, setCredSaving] = useState(false);
   const [credSaved, setCredSaved] = useState(false);
   const [credError, setCredError] = useState('');
+  // Сайт, для которого открыто окно входа: задаётся автоматически, когда на
+  // экране форма входа известного сайта (BilimClass), а данных ещё нет.
+  const [credDomain, setCredDomain] = useState('');
+  const [credReason, setCredReason] = useState('');
+  const knownDomainsRef = useRef<Set<string>>(new Set());
+  const savedDomainsRef = useRef<Set<string>>(new Set());
+  const promptedRef = useRef<Set<string>>(new Set());
+  const autoLoginAtRef = useRef(0);
+  const enqueueRef = useRef<(params: Record<string, string>) => Promise<void>>(async () => {});
   // Ожидание первого кадра. Пока ответа нет, сервер поднимает песочницу —
   // это минуты, и вкладка обязана об этом говорить («Запускаю браузер…» с
   // секундами ожидания), а не показывать немой спиннер.
@@ -184,6 +193,33 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       setAuthBarrier(null);
     }
 
+    // Форма входа известного сайта: нет сохранённых данных (или сайт их не принял) —
+    // показываем окно ввода; данные есть — входим сами, один раз в 90 секунд.
+    const host = (() => { try { return new URL(currentUrl).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+    const rawAutoLogin = res.headers.get('X-Auto-Login');
+    let autoStatus = '';
+    if (rawAutoLogin) {
+      try { autoStatus = (JSON.parse(decodeURIComponent(rawAutoLogin)) as { status?: string }).status ?? ''; } catch { /* ignore */ }
+    }
+    let onLoginForm = false;
+    try { onLoginForm = !!rawAuthBarrier && (JSON.parse(decodeURIComponent(rawAuthBarrier)) as PageAuthBarrier).kind === 'login'; } catch { /* ignore */ }
+    if (host && onLoginForm && knownDomainsRef.current.has(host)) {
+      const rejected = autoStatus === 'rejected';
+      if (!savedDomainsRef.current.has(host) || rejected) {
+        if (rejected) promptedRef.current.delete(host);
+        if (!promptedRef.current.has(host)) {
+          promptedRef.current.add(host);
+          setCredDomain(host);
+          setCredReason(rejected ? 'Сайт не принял сохранённые данные. Введите актуальные логин и пароль.' : '');
+          setCredUsername(''); setCredPassword(''); setCredSaved(false); setCredError('');
+          setCredDialog(true);
+        }
+      } else if (Date.now() - autoLoginAtRef.current > 90_000) {
+        autoLoginAtRef.current = Date.now();
+        queueMicrotask(() => void enqueueRef.current({ action: 'autologin' }));
+      }
+    }
+
     setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
     if (title) setPageTitle(title);
     if (currentUrl) {
@@ -250,6 +286,19 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       });
     return queueRef.current;
   }, [acceptFrame, beginWait]);
+  useEffect(() => { enqueueRef.current = enqueueAction; }, [enqueueAction]);
+
+  // Какие сайты поддерживают автовход и для каких уже есть данные.
+  useEffect(() => {
+    void fetch('/api/agents/browser-credentials', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { sites?: Array<{ domain: string }>; knownSites?: Array<{ domain: string }> } | null) => {
+        if (!data) return;
+        knownDomainsRef.current = new Set((data.knownSites ?? []).map((x) => x.domain));
+        savedDomainsRef.current = new Set((data.sites ?? []).map((x) => x.domain));
+      })
+      .catch(() => {});
+  }, []);
 
   const flushTypedBuffer = useCallback(() => {
     if (typeTimerRef.current) {
@@ -646,6 +695,8 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
             type="button"
             title="Сохранить логин/пароль для авто-входа на этом сайте"
             onClick={() => {
+              setCredDomain('');
+              setCredReason('');
               setCredUsername('');
               setCredPassword('');
               setCredSaved(false);
@@ -681,11 +732,12 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               </button>
             </div>
             <p className="text-[11px] text-white/50 leading-relaxed">
-              Сохрани логин и пароль — браузер будет автоматически входить на этом сайте.
-              Данные хранятся зашифрованными.
+              Введите логин и пароль один раз — браузер сам заполнит форму и войдёт в аккаунт,
+              в том числе когда этим занимается ИИ-агент. Данные хранятся зашифрованными, ИИ их не видит.
             </p>
+            {credReason && <p className="text-[11px] text-amber-300" role="status">{credReason}</p>}
             <div className="text-[11px] text-white/40 font-mono truncate">
-              {domainOf(pageUrl)}
+              {credDomain || domainOf(pageUrl)}
             </div>
             <input
               type="text"
@@ -710,7 +762,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               type="button"
               disabled={credSaving || !credUsername || !credPassword}
               onClick={async () => {
-                const domain = domainOf(pageUrl);
+                const domain = credDomain || domainOf(pageUrl);
                 setCredSaving(true);
                 try {
                   const res = await fetch('/api/agents/browser-credentials', {
@@ -720,7 +772,13 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
                   });
                   if (res.ok) {
                     setCredSaved(true);
-                    setTimeout(() => setCredDialog(false), 1500);
+                    setCredPassword('');
+                    savedDomainsRef.current.add(domain);
+                    knownDomainsRef.current.add(domain);
+                    // Данные сохранены: браузер вводит их сам и входит в аккаунт.
+                    autoLoginAtRef.current = Date.now();
+                    void enqueueAction({ action: 'autologin' });
+                    setTimeout(() => setCredDialog(false), 1200);
                   } else {
                     const data = (await res.json().catch(() => ({}))) as { error?: string };
                     setCredError(data.error ?? 'Не удалось сохранить данные');

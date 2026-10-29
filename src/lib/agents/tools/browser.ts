@@ -14,6 +14,7 @@ import {
 import { classifyClick, classifyTyping } from '../computer/safety';
 import { requestPermission } from '../permissions';
 import { detectPageAuthBarrier } from '../browser-dom';
+import { knownLoginSite, loginWithSavedCredentials } from '../browser-autologin';
 import { executeWithFallback } from '@/lib/ai/providers';
 import { boundedResult } from './bounded-result';
 
@@ -78,6 +79,37 @@ async function extractPageSnapshot(page: {
 }
 
 /**
+ * Снимок страницы с автовходом: если открыта форма входа известного сайта
+ * (BilimClass), а учитель уже сохранил данные, вход выполняется сам, без
+ * участия модели. Если данных нет, в ответ идёт `needsCredentials`: интерфейс
+ * покажет окно ввода логина и пароля.
+ */
+async function snapshotWithAutoLogin(userId: string, page: Parameters<typeof extractPageSnapshot>[0]) {
+  const snap = await extractPageSnapshot(page);
+  if (snap.authBarrier?.kind !== 'login') return snap;
+  const site = knownLoginSite(snap.url);
+  if (!site) return snap;
+
+  const result = await loginWithSavedCredentials(userId, page as never);
+  if (result.status === 'logged-in') {
+    await persistAgentBrowserSession(userId).catch(() => undefined);
+    return { ...(await extractPageSnapshot(page)), autoLogin: `Вход в ${site.name} выполнен сохранёнными данными учителя` };
+  }
+  const reasons: Partial<Record<typeof result.status, string>> = {
+    'no-credentials': `Для входа в ${site.name} нужны логин и пароль: учитель вводит их в открывшемся окне, после этого вход выполнится автоматически. Не пытайся вводить их сам.`,
+    rejected: `${site.name} не принял сохранённые данные. Учителю нужно ввести актуальные логин и пароль в окне входа.`,
+    throttled: `Повторная попытка входа в ${site.name} возможна через минуту; не повторяй вход, дождись учителя.`,
+  };
+  const reason = reasons[result.status];
+  if (!reason) return snap;
+  return {
+    ...snap,
+    needsCredentials: { domain: site.domain, name: site.name, reason: result.status },
+    authBarrier: { ...snap.authBarrier, reason },
+  };
+}
+
+/**
  * Инструменты браузера агента.
  *
  * Все три работают через `getAgentBrowserSession` — ту же сессию, которую
@@ -110,7 +142,7 @@ export const browserTools = {
           await session.page.waitForTimeout(1500);
         }
         await persistAgentBrowserSession(userId);
-        return extractPageSnapshot(session.page);
+        return snapshotWithAutoLogin(ctx.userId!, session.page);
       });
       return boundedResult({ success: true, ...snap });
     } catch (e) {
@@ -147,7 +179,7 @@ export const browserTools = {
       await session.page.mouse.click(px, py);
       await session.page.waitForTimeout(1500);
       await persistAgentBrowserSession(ctx.userId);
-      const snap = await extractPageSnapshot(session.page);
+      const snap = await snapshotWithAutoLogin(ctx.userId, session.page);
       const pageUnchanged = beforeUrl === snap.url;
       return boundedResult({
         success: true,
@@ -274,7 +306,7 @@ export const browserTools = {
         await session.page.goBack({ timeout: 15000 });
         await session.page.waitForTimeout(800);
         await persistAgentBrowserSession(ctx.userId!);
-        return extractPageSnapshot(session.page);
+        return snapshotWithAutoLogin(ctx.userId!, session.page);
       });
       return boundedResult({ success: true, ...snap });
     } catch (e) {
@@ -289,7 +321,7 @@ export const browserTools = {
     try {
       const snap = await withBrowserSession(ctx.userId, async (session) => {
         await session.page.waitForTimeout(ms);
-        return extractPageSnapshot(session.page);
+        return snapshotWithAutoLogin(ctx.userId!, session.page);
       });
       return boundedResult({ success: true, waited: ms / 1000, ...snap });
     } catch (e) {

@@ -12,7 +12,7 @@ import {
 } from "@/lib/agents/browser-session";
 import { describeBrowserError } from "@/lib/agents/browser-failure";
 import { inspectActiveField, detectPageAuthBarrier } from "@/lib/agents/browser-dom";
-import { tryAutoLogin, KNOWN_LOGIN_SITES } from "@/lib/agents/browser-autologin";
+import { loginWithSavedCredentials, type AutoLoginResult } from "@/lib/agents/browser-autologin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,12 +118,25 @@ function persistInBackground(userId: string): void {
   }
 }
 
+/** Итог автовхода для вкладки «Браузер»: по нему она решает, показывать ли окно ввода. */
+function autoLoginHeaders(result?: AutoLoginResult): Record<string, string> {
+  if (!result || result.status === "no-form") return {};
+  return { "X-Auto-Login": encodeURIComponent(JSON.stringify({ status: result.status, domain: result.domain, name: result.name })) };
+}
+
 async function runAction(userId: string, args: BrowserAction) {
-  const action = args.action ?? "screenshot";
+  const requested = args.action ?? "screenshot";
+  // «autologin» — вход сохранёнными данными на открытой странице; кадр после него обычный.
+  const action = requested === "autologin" ? "screenshot" : requested;
+  let autoLogin: AutoLoginResult | undefined;
 
   try {
     // Единственный backend — раннер в персональной Vercel Sandbox
     const session = await getAgentBrowserSession(userId);
+    if (requested === "autologin") {
+      autoLogin = await loginWithSavedCredentials(userId, session.page as never);
+      await persistAgentBrowserSession(userId).catch(() => undefined);
+    }
 
     if (session.remote) {
       // ── Remote path: всё через browserRpc → песочница ───────────────────
@@ -170,24 +183,13 @@ async function runAction(userId: string, args: BrowserAction) {
       // ответ: иначе клик по «Войти» подвисал на сотни миллисекунд.
       if (PERSIST_ACTIONS.has(action)) persistInBackground(userId);
 
-      // Авто-вход: если перешли на страницу входа известного сайта — заполняем форму автоматически
+      // Авто-вход: открыта форма входа известного сайта и данные сохранены — входим сами.
       let autoFrame = frame;
       if (action === "navigate") {
-        const navigatedUrl = frame.currentUrl || "";
-        const hostname = (() => { try { return new URL(navigatedUrl).hostname.replace(/^www\./, ""); } catch { return ""; } })();
-        const navPath = (() => { try { return new URL(navigatedUrl).pathname; } catch { return ""; } })();
-        const site = hostname ? KNOWN_LOGIN_SITES[hostname] : undefined;
-        const isLoginPage = site && (!site.loginPath || navPath.startsWith(site.loginPath));
-        if (isLoginPage) {
-          const sendRpc = async (act: string, rpcArgs: Record<string, unknown>) => {
-            await session.remote!.performUiAction(act, rpcArgs).catch(() => {});
-          };
-          const didLogin = await tryAutoLogin(userId, navigatedUrl, sendRpc);
-          if (didLogin) {
-            // Берём финальный скриншот после входа
-            autoFrame = await session.remote.performUiAction("screenshot", {}).catch(() => frame);
-            await persistAgentBrowserSession(userId);
-          }
+        autoLogin = await loginWithSavedCredentials(userId, session.page as never);
+        if (autoLogin.status === "logged-in") {
+          autoFrame = await session.remote.performUiAction("screenshot", {}).catch(() => frame);
+          await persistAgentBrowserSession(userId);
         }
       }
 
@@ -208,6 +210,7 @@ async function runAction(userId: string, args: BrowserAction) {
           "X-Page-Url": encodeURIComponent(autoFrame.currentUrl),
           "X-Active-Field": encodeURIComponent(JSON.stringify(activeField)),
           "X-Auth-Barrier": encodeURIComponent(JSON.stringify(authBarrier)),
+          ...autoLoginHeaders(autoLogin),
           "Cache-Control": "no-store",
         },
       });
@@ -251,30 +254,9 @@ async function runAction(userId: string, args: BrowserAction) {
 
     if (action !== "screenshot") await persistAgentBrowserSession(userId);
 
-    // Авто-вход для local/Sandbox пути через Playwright page.fill()
     if (action === "navigate") {
-      const currentUrl = page.url();
-      const hostname = (() => { try { return new URL(currentUrl).hostname.replace(/^www\./, ""); } catch { return ""; } })();
-      const site = hostname ? KNOWN_LOGIN_SITES[hostname] : undefined;
-      const navPath = (() => { try { return new URL(currentUrl).pathname; } catch { return ""; } })();
-      const isLoginPage = site && (!site.loginPath || navPath.startsWith(site.loginPath));
-      if (isLoginPage) {
-        const sendRpc = async (act: string, rpcArgs: Record<string, unknown>) => {
-          if (act === "fill") {
-            const sel = String(rpcArgs.selector ?? "");
-            const val = String(rpcArgs.value ?? "");
-            if (sel && val) await page.locator(sel).first().fill(val, { timeout: 5000 }).catch(() => {});
-          } else if (act === "press") {
-            await page.keyboard.press(String(rpcArgs.key ?? "Enter")).catch(() => {});
-          } else if (act === "wait") {
-            await page.waitForTimeout(Math.min(Number(rpcArgs.ms ?? 500), 5000));
-          } else if (act === "evaluate") {
-            await page.evaluate(String(rpcArgs.script ?? "null")).catch(() => {});
-          }
-        };
-        await tryAutoLogin(userId, currentUrl, sendRpc);
-        await persistAgentBrowserSession(userId);
-      }
+      autoLogin = await loginWithSavedCredentials(userId, page as never);
+      if (autoLogin.status === "logged-in") await persistAgentBrowserSession(userId);
     }
 
     const [screenshot, title, activeField, authBarrier] = await Promise.all([
@@ -291,6 +273,7 @@ async function runAction(userId: string, args: BrowserAction) {
         "X-Page-Url": encodeURIComponent(page.url()),
         "X-Active-Field": encodeURIComponent(JSON.stringify(activeField)),
         "X-Auth-Barrier": encodeURIComponent(JSON.stringify(authBarrier)),
+        ...autoLoginHeaders(autoLogin),
         "Cache-Control": "no-store",
       },
     });
