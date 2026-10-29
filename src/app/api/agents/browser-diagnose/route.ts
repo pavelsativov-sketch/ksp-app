@@ -79,7 +79,8 @@ export async function GET(req: Request) {
       await session.page.reload({ timeout: 30_000 }).catch(() => undefined);
       await session.page.waitForTimeout(5000);
     }
-    const report = await session.page.evaluate(probe as never);
+    // Минификатор может оставить `async () =>` без скобок, а раннер принимает только скрипты на «(».
+    const report = await session.page.evaluate(`(${probe.toString()})` as never);
     return NextResponse.json({ ok: true, report });
   } catch (error) {
     const failure = browserFailure(error);
