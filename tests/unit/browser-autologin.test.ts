@@ -33,8 +33,11 @@ function fakePage(opts: { url?: string; passwordStaysAfterLogin?: boolean; noFor
   let checks = 0;
   const page = {
     url: () => opts.url ?? "https://www.bilimclass.kz/login",
-    evaluate: async (fn: { name: string }) => {
-      if (fn.name === "hasVisiblePassword") {
+    evaluate: async (script: unknown) => {
+      // Раннер принимает только строки, начинающиеся со «(»: функция целиком ему не подходит.
+      expect(typeof script).toBe("string");
+      expect((script as string).trimStart().startsWith("(")).toBe(true);
+      if (!(script as string).includes("selector")) {
         checks += 1;
         if (checks <= (opts.formAfterChecks ?? 0)) return false;
         return !opts.noForm && (!submitted || !!opts.passwordStaysAfterLogin);

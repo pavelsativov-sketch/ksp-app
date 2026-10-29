@@ -174,6 +174,12 @@ const hasVisiblePassword = () =>
   });
 
 /**
+ * Раннер принимает скрипты только вида «(…)»: после минификации функция с одним
+ * параметром превращается в `e=>{…}` без скобок и отклоняется. Оборачиваем сами.
+ */
+const asScript = (fn: (...args: never[]) => unknown): string => `(${fn.toString()})`;
+
+/**
  * Входит на известном сайте сохранёнными данными. Пароль вводится здесь, на
  * сервере, прямо в страницу: модель его не видит и в ответ он не попадает.
  */
@@ -185,11 +191,11 @@ export async function loginWithSavedCredentials(userId: string, page: LoginPage)
   try {
     // SPA BilimClass рисует форму только после ответов API (до 10–15 с): на странице
     // входа ждём её появления, а не считаем, что формы нет.
-    let hasForm = Boolean(await page.evaluate(hasVisiblePassword as never));
+    let hasForm = Boolean(await page.evaluate(asScript(hasVisiblePassword) as never));
     const onLoginPath = /\/login/i.test(page.url());
     for (let i = 0; i < 12 && !hasForm && onLoginPath; i += 1) {
       await page.waitForTimeout(1000);
-      hasForm = Boolean(await page.evaluate(hasVisiblePassword as never));
+      hasForm = Boolean(await page.evaluate(asScript(hasVisiblePassword) as never));
     }
     if (!hasForm) return result("no-form");
     const creds = await getCredentials(userId, site.domain);
@@ -199,15 +205,15 @@ export async function loginWithSavedCredentials(userId: string, page: LoginPage)
     if (Date.now() - (lastAttempt.get(key) ?? 0) < ATTEMPT_GAP_MS) return result("throttled");
     lastAttempt.set(key, Date.now());
 
-    if (!(await page.evaluate(focusField as never, { selector: config.loginSelector, kind: "login" }))) return result("no-form");
+    if (!(await page.evaluate(asScript(focusField) as never, { selector: config.loginSelector, kind: "login" }))) return result("no-form");
     await page.keyboard.type(creds.username, { delay: 15 });
-    if (!(await page.evaluate(focusField as never, { selector: config.passwordSelector, kind: "password" }))) return result("no-form");
+    if (!(await page.evaluate(asScript(focusField) as never, { selector: config.passwordSelector, kind: "password" }))) return result("no-form");
     await page.keyboard.type(creds.password, { delay: 15 });
     await page.keyboard.press("Enter");
     await page.waitForTimeout(config.waitAfterMs ?? 2000);
 
     // Форма входа всё ещё на месте — сайт не принял данные.
-    return result((await page.evaluate(hasVisiblePassword as never)) ? "rejected" : "logged-in");
+    return result((await page.evaluate(asScript(hasVisiblePassword) as never)) ? "rejected" : "logged-in");
   } catch {
     return result("failed");
   }
