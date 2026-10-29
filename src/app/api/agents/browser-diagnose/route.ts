@@ -83,6 +83,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, report });
   } catch (error) {
     const failure = browserFailure(error);
-    return NextResponse.json({ error: failure.message }, { status: failure.status });
+    // Своя сессия владельца: подробность ошибки раннера нужна, чтобы понять причину.
+    return NextResponse.json({ error: failure.message, detail: error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400) }, { status: failure.status });
   }
 }
