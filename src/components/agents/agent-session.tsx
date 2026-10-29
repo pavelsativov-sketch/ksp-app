@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, CircleCheck, CircleX, Globe, Lock, ExternalLink, FileText, Download, Presentation } from "lucide-react";
-import { extractDeliverables } from "@/lib/agents/deliverables";
+import { currentActivity, extractDeliverables, extractTaskFiles, finalSummary } from "@/lib/agents/deliverables";
+import { useWorkspaceStore } from "@/lib/store/workspace";
 import { useOsShellStore } from "@/lib/store/os-shell";
 
 export interface AgentEvent {
@@ -154,9 +155,25 @@ function AgentSessionStream({
   const running = status === "running";
   // Созданные агентом КСП и КТП: готовые ссылки, чтобы не искать результат в логе.
   const deliverables = extractDeliverables(events);
+  const taskFiles = extractTaskFiles(events);
+  const activity = running ? currentActivity(events) : "";
+  const summary = status === "completed" ? finalSummary(events) : "";
+  const openInEditor = useWorkspaceStore((s) => s.openInEditor);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {activity && (
+        <p role="status" className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-sky-400/20 bg-sky-400/[0.07] px-3 py-2 text-[11px] leading-snug text-sky-100">
+          <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin" />
+          <span><span className="font-semibold">Сейчас:</span> {activity}</span>
+        </p>
+      )}
+      {summary && (
+        <section aria-label="Итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-200"><CircleCheck className="size-3.5 text-emerald-400" /> Итог</p>
+          <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300">{summary}</p>
+        </section>
+      )}
       {deliverables.length > 0 && (
         <section aria-label="Результат работы агента" className="mx-3 mt-3 shrink-0 space-y-2">
           {deliverables.map((item) => (
@@ -183,6 +200,24 @@ function AgentSessionStream({
               {item.workspaceFile && <p className="mt-1.5 text-[10px] text-slate-400">Копия в файлах рабочей области: {item.workspaceFile}</p>}
             </div>
           ))}
+        </section>
+      )}
+      {taskFiles.length > 0 && (
+        <section aria-label="Файлы задачи" className="mx-3 mt-3 shrink-0">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Файлы задачи</p>
+          <div className="flex flex-wrap gap-1.5">
+            {taskFiles.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => openInEditor(name)}
+                title={`Открыть «${name}» в редакторе`}
+                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-white/12 bg-white/[0.05] px-2 py-1 font-mono text-[11px] text-slate-200 hover:bg-white/10"
+              >
+                <FileText className="size-3 shrink-0 text-sky-300" /> <span className="truncate">{name}</span>
+              </button>
+            ))}
+          </div>
         </section>
       )}
       {plan && plan.length > 0 && (

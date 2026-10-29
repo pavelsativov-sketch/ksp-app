@@ -69,6 +69,52 @@ export function extractDeliverables(events: EventLike[]): Deliverable[] {
   return out;
 }
 
+interface RichEventLike extends EventLike {
+  message?: string;
+}
+
+/** Файлы, которые агент создал в рабочей области: writeFile и копии КСП/КТП. */
+export function extractTaskFiles(events: RichEventLike[]): string[] {
+  const files: string[] = [];
+  const add = (name: unknown) => {
+    if (typeof name === "string" && name.trim() && !files.includes(name.trim())) files.push(name.trim());
+  };
+  for (const event of events) {
+    const data = event.data && typeof event.data === "object" ? (event.data as { tool?: unknown; args?: { filename?: unknown }; result?: unknown }) : null;
+    if (!data) continue;
+    if (event.type === "TOOL_CALL" && data.tool === "writeFile") add(data.args?.filename);
+    if (event.type === "TOOL_RESULT" && (data.tool === "createKsp" || data.tool === "createKtp") && typeof data.result === "string") {
+      try {
+        const parsed = JSON.parse(data.result) as { success?: boolean; file?: unknown };
+        if (parsed.success === true) add(parsed.file);
+      } catch { /* битый результат пропускаем */ }
+    }
+  }
+  return files;
+}
+
+/** Что агент делает сейчас: последнее действие инструмента или мысль. Пусто, если событий нет. */
+export function currentActivity(events: RichEventLike[]): string {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i]!;
+    if ((event.type === "TOOL_CALL" || event.type === "REASONING") && event.message?.trim()) {
+      return event.message.trim().replace(/\s+/g, " ").slice(0, 140);
+    }
+  }
+  return "";
+}
+
+/** Итог работы: сообщение финального события END (кроме ручной остановки). */
+export function finalSummary(events: RichEventLike[]): string {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i]!;
+    if (event.type === "END" && event.message?.trim() && event.message !== "Остановлено пользователем") {
+      return event.message.trim();
+    }
+  }
+  return "";
+}
+
 /** Текстовая копия КСП для рабочей области (читается в «Файлах» и редакторе). */
 export function kspToMarkdown(input: {
   title: string;

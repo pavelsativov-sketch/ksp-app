@@ -61,3 +61,35 @@ describe("результаты работы агента", () => {
     expect(ktp).toContain("| 1 | Дроби \\| сложение | 2 | 2026-09-01 | — |");
   });
 });
+
+import { currentActivity, extractTaskFiles, finalSummary } from "@/lib/agents/deliverables";
+
+describe("единый экран задачи: файлы, текущий шаг, итог", () => {
+  it("собирает файлы из writeFile и копий КСП/КТП без повторов", () => {
+    const files = extractTaskFiles([
+      { type: "TOOL_CALL", data: { tool: "writeFile", args: { filename: "otchet.md" } } },
+      { type: "TOOL_CALL", data: { tool: "writeFile", args: { filename: "otchet.md" } } },
+      { type: "TOOL_CALL", data: { tool: "runCommand", args: { filename: "ignored.txt" } } },
+      toolResult("createKsp", { success: true, url: "/plans/1", file: "ksp-дроби.md" }),
+      toolResult("createKtp", { success: false, file: "ktp-ошибка.md" }),
+    ]);
+    expect(files).toEqual(["otchet.md", "ksp-дроби.md"]);
+  });
+
+  it("текущий шаг — последнее действие инструмента или мысль, в одну строку", () => {
+    expect(currentActivity([])).toBe("");
+    expect(currentActivity([
+      { type: "TOOL_CALL", message: "Создаю файл a.md" },
+      { type: "THINK", message: "Шаг 2: обдумываю" },
+    ])).toBe("Создаю файл a.md");
+    expect(currentActivity([{ type: "REASONING", message: "Нужно\n  открыть   сайт" }])).toBe("Нужно открыть сайт");
+    expect(currentActivity([{ type: "TOOL_CALL", message: "x".repeat(500) }]).length).toBeLessThanOrEqual(140);
+  });
+
+  it("итог — последнее END, но не ручная остановка", () => {
+    expect(finalSummary([{ type: "END", message: "Создан КСП по дробям." }])).toBe("Создан КСП по дробям.");
+    expect(finalSummary([{ type: "END", message: "Остановлено пользователем" }])).toBe("");
+    expect(finalSummary([{ type: "THINK", message: "x" }])).toBe("");
+    expect(finalSummary([{ type: "END", message: "Первый" }, { type: "END", message: "Второй" }])).toBe("Второй");
+  });
+});

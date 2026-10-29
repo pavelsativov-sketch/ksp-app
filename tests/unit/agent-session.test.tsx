@@ -82,11 +82,30 @@ it("показывает карточку результата со ссылка
   expect(screen.getByRole("link", { name: /Открыть/ }).getAttribute("href")).toBe("/plans/p1");
   expect(screen.getByRole("link", { name: /Word/ }).getAttribute("href")).toBe("/api/export/docx/p1");
   expect(screen.getByRole("link", { name: /PowerPoint/ }).getAttribute("href")).toBe("/api/export/pptx/p1");
-  expect(screen.getByText(/ksp-дроби\.md/)).toBeTruthy();
+  // Имя файла видно и в карточке результата, и в списке «Файлы задачи».
+  expect(screen.getAllByText(/ksp-дроби\.md/).length).toBeGreaterThanOrEqual(2);
 });
 
 it("без созданных материалов карточки результата нет", () => {
   render(<AgentSession taskId="none" variant="chat" />);
   act(() => FakeEventSource.instances[0]!.emit({ type: "TOOL_RESULT", message: "x", data: { tool: "listFiles", result: "{}" } }));
   expect(screen.queryByRole("region", { name: "Результат работы агента" })).toBeNull();
+});
+
+it("единый экран: показывает текущий шаг, файлы задачи и итог", () => {
+  render(<AgentSession taskId="screen" variant="chat" />);
+  act(() => {
+    const es = FakeEventSource.instances[0]!;
+    es.emit({ type: "TOOL_CALL", message: "Создаю файл otchet.md", data: { tool: "writeFile", args: { filename: "otchet.md" } } });
+  });
+  expect(screen.getByRole("status").textContent).toContain("Создаю файл otchet.md");
+  expect(screen.getByRole("region", { name: "Файлы задачи" }).textContent).toContain("otchet.md");
+
+  act(() => {
+    const es = FakeEventSource.instances[0]!;
+    es.emit({ type: "END", message: "Отчёт составлен и сохранён." });
+  });
+  // Задача завершена: «Сейчас» исчезает, появляется итог.
+  expect(screen.queryByText(/Сейчас:/)).toBeNull();
+  expect(screen.getByRole("region", { name: "Итог задачи" }).textContent).toContain("Отчёт составлен и сохранён.");
 });
