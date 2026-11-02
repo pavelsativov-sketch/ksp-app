@@ -229,7 +229,7 @@ body {
 }
 .app-underline, .pen-underline {
   text-decoration: underline;
-  text-decoration-color: var(--yellow);
+  text-decoration-color: var(--cyan);
   text-decoration-thickness: 3px;
   text-underline-offset: 0.15em;
 }
