@@ -64,16 +64,20 @@ export const productTools = {
       const { planState, isBoundedPlan } = await import('@/lib/plan-versions');
       const { getDb, COL } = await import('@/lib/mongo');
 
+      // Цели берутся из ГОСО по теме; ИИ получает их как обязательную привязку.
+      const { matchObjectives } = await import('@/lib/goso/match');
+      const autoObjectives = input.objectives?.length ? [] : matchObjectives({ subject: input.subject, grade: input.grade, topic: input.topic });
       const { payload } = await generateKspWithModel({
         grade: input.grade,
         subject: input.subject,
         topic: input.topic,
         language: input.language,
-        learningObjectives: input.objectives,
+        learningObjectives: autoObjectives.length ? autoObjectives.map((o) => `${o.code} — ${o.text}`) : input.objectives,
         signal: ctx.signal,
       });
       const base = emptyKsp();
       base.topic = input.topic;
+      base.learningObjectives = autoObjectives;
       const content = mergeAiIntoKsp(base, payload);
       const subject = await getSubjectByName(input.subject).catch(() => null);
       const title = `${input.subject}: ${input.topic}`.slice(0, 200);

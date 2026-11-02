@@ -11,6 +11,8 @@ import type { KspContent, LessonStage } from "@/lib/types/ksp";
 
 export interface AiKspPayload {
   topic?: unknown;
+  /** Цели ГОСО, подобранные сервером; подставляются, только если у плана своих нет. */
+  learningObjectives?: unknown;
   lessonObjectives?: unknown;
   assessmentCriteria?: unknown;
   languageObjectives?: { terms?: unknown; phrases?: unknown } | undefined;
@@ -28,6 +30,14 @@ export interface AiKspPayload {
     healthAndSafety?: unknown;
     reflection?: unknown;
   };
+}
+
+function pickObjectives(value: unknown): KspContent["learningObjectives"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((o) => {
+    const item = o as { code?: unknown; text?: unknown };
+    return typeof item?.code === "string" && typeof item.text === "string" ? [{ code: item.code, text: item.text }] : [];
+  });
 }
 
 export function mergeAiIntoKsp(
@@ -85,6 +95,7 @@ export function mergeAiIntoKsp(
   return {
     ...current,
     topic: ensureString(ai.topic, current.topic),
+    learningObjectives: current.learningObjectives.length > 0 ? current.learningObjectives : pickObjectives(ai.learningObjectives),
     lessonObjectives: ensureArray(ai.lessonObjectives, current.lessonObjectives),
     assessmentCriteria: ensureArray(ai.assessmentCriteria, current.assessmentCriteria),
     languageObjectives: {

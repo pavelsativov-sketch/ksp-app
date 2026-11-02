@@ -80,6 +80,11 @@ describe("createKsp", () => {
     expect(saved.visibility).toBe("private");
     expect(saved.grade).toBe(5);
     expect(saved.title).toBe("Математика: Дроби");
+    // Цели берутся из ГОСО по теме и попадают и в КСП, и в запрос к ИИ.
+    const content = saved.content as { learningObjectives: Array<{ code: string; text: string }> };
+    expect(content.learningObjectives.length).toBeGreaterThan(0);
+    expect(content.learningObjectives[0]!.code).toMatch(/^5\./);
+    expect(mock.generate.mock.calls[0]![0].learningObjectives[0]).toContain(content.learningObjectives[0]!.code);
 
     expect(mock.writeFile).toHaveBeenCalledTimes(1);
     const [name, text] = mock.writeFile.mock.calls[0]!;

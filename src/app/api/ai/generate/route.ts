@@ -8,6 +8,7 @@ import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 import { retrieveTextbookContext } from "@/lib/rag/retrieve";
 import { ensureArmanPvTextbookIngested } from "@/lib/rag/armanpv";
 import { summarizeRagUse } from "@/lib/rag/metadata";
+import { matchObjectives } from "@/lib/goso/match";
 import { AI_HISTORY_SCHEMA_VERSION, buildHistoryParams, computeParamsHash, logAiHistory } from "@/lib/ai/history";
 
 const bodySchema = z.object({
@@ -91,7 +92,15 @@ export async function POST(request: Request) {
   const ragInfo = summarizeRagUse(selectedTextbook, retrievedContext);
 
   try {
-    const { payload: content, model } = await generateKspWithModel({ ...parsed.data, textbookContext });
+    // Учитель не выбрал цели: подбираем реальные цели ГОСО по теме, ИИ их не придумывает.
+    const chosen = parsed.data.learningObjectives ?? [];
+    const autoObjectives = chosen.length > 0 ? [] : matchObjectives({ subject: parsed.data.subject, grade: parsed.data.grade, topic: parsed.data.topic });
+    const { payload: generated, model } = await generateKspWithModel({
+      ...parsed.data,
+      learningObjectives: autoObjectives.length > 0 ? autoObjectives.map((o) => `${o.code} — ${o.text}`) : parsed.data.learningObjectives,
+      textbookContext,
+    });
+    const content = autoObjectives.length > 0 ? { ...generated, learningObjectives: autoObjectives } : generated;
     // Серверная история: model / schema_version / source_ids / paramsHash (без текста ДЗ).
     try {
       const params = buildHistoryParams({
