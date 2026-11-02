@@ -323,10 +323,10 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
                 setPreview(cached);
                 setOpen(false);
               }}
-              className="mb-3 w-full rounded-md border border-teal-200 bg-teal-50/60 p-2 text-left text-sm hover:bg-teal-50"
+              className="mb-3 w-full rounded-md border border-violet-200 bg-violet-50/60 p-2 text-left text-sm hover:bg-violet-50"
             >
-              <span className="font-medium text-teal-800">{h.openSaved}</span>
-              <span className="block text-xs text-teal-600/80">{h.openSavedHint}</span>
+              <span className="font-medium text-violet-800">{h.openSaved}</span>
+              <span className="block text-xs text-violet-600/80">{h.openSavedHint}</span>
             </button>
           )}
 
@@ -377,7 +377,7 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
             )}
 
             {canCombine && (
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-teal-50/60 px-3 py-2 text-sm">
+              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-violet-50/60 px-3 py-2 text-sm">
                 <span>
                   <span className="font-medium">{kind === "worksheet" ? h.combineWorksheet : h.combineFlashcards}</span>
                   <span className="block text-xs text-slate-500">{h.combineHint}</span>

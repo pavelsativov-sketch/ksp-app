@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDict } from "@/lib/i18n/server";
 import { KitPreview, PlantIllustration } from "@/components/landing/kit-preview";
 import s from "@/components/landing/landing.module.css";
+import { ThreeStage } from "@/components/three/three-stage";
 
 export default async function HomePage() {
   const signedIn = Boolean(await getCurrentUser());
@@ -31,6 +32,7 @@ export default async function HomePage() {
           <div className={s.heroFine}><Check size={15} /><span>{l.freeNoteA}</span><span className={s.fineDivider} /><span>{l.freeNoteB}</span></div>
         </div>
         <div className={s.heroVisual}>
+          <div className={s.heroRobot}><ThreeStage scene="robot" className={s.heroRobotCanvas} /></div>
           <KitPreview />
           {/* Декоративные метки: названия продуктов одинаковы на русском и казахском. */}
           <div className={`${s.floatChip} ${s.chipA}`} aria-hidden="true"><span><Bot size={15} /></span>BilimClass<Check size={14} /></div>

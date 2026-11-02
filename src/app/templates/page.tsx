@@ -46,7 +46,7 @@ export default async function TemplatesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Link href="/dashboard" className="text-sm underline">К моим планам</Link>
+          <Link href="/plans" className="text-sm underline">К моим планам</Link>
         </CardContent>
       </Card>
     </div>

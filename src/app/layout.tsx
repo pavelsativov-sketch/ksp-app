@@ -18,12 +18,14 @@ import { MarketingChrome } from "@/components/landing/marketing-chrome";
 import { ToastProvider } from "@/components/ui/toast";
 import { FirstRunOnboarding } from "@/components/onboarding/first-run";
 import { RegisterSW } from "@/components/pwa/register-sw";
+import { AppShell } from "@/components/app/app-shell";
 import styles from "@/components/landing/site-chrome.module.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "cyrillic"], display: "swap" });
 const lora = Lora({ variable: "--font-lora", subsets: ["latin", "cyrillic"], style: ["normal", "italic"], display: "swap" });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin", "cyrillic"], display: "swap" });
-const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin", "cyrillic"], display: "swap" });
+// cyrillic-ext: без него казахские буквы (ә, ғ, қ, ң, ө, ұ, ү, һ) падают в системный шрифт.
+const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap" });
 const nunito = Nunito({ variable: "--font-nunito", subsets: ["latin", "cyrillic"], display: "swap" });
 // Выразительный широкий шрифт для крупных заголовков (есть кириллица). В плотных
 // интерфейсах не используется: только лендинг, вход и заставки.
@@ -137,6 +139,23 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             chrome={<>{setupNotice}{header}</>}
             content={<main id="main-content" tabIndex={-1} className="w-full flex-1">{children}</main>}
             footer={footer}
+            cabinet={user ? (
+              <AppShell
+                userName={user.fullName ?? ""}
+                userEmail={user.email}
+                account={<>
+                  <div className="flex items-center justify-between gap-2 px-1"><LocaleSwitcher locale={locale} /><ThemeToggle /></div>
+                  <Link className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-muted" href="/profile">{t.nav.profile}</Link>
+                  <Link className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-muted" href="/pricing">{t.nav.pricing}</Link>
+                  <Link className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-muted" href="/kits">{t.nav.kits}</Link>
+                  <Link className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-muted" href="/templates">{t.nav.templates}</Link>
+                  <Link className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-muted" href="/textbooks">{t.nav.materials}</Link>
+                  <form action={logoutAction}><button className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-danger hover:bg-danger-soft" type="submit">{t.nav.logout}</button></form>
+                </>}
+              >
+                <main id="main-content" tabIndex={-1} className="w-full">{children}</main>
+              </AppShell>
+            ) : null}
           />
           {user && <FirstRunOnboarding />}
           <RegisterSW />

@@ -2,38 +2,38 @@
 
 :root {
   /* Mekty application palette, shared by controls and internal pages. */
-  --ink: #0f766e;
-  --ink-hover: #0b5f58;
-  --cyan: #14a39a;
-  --cyan-soft: #def3f0;
-  --cyan-foreground: #0b5f58;
+  --ink: #6d3bea;
+  --ink-hover: #5a2cd0;
+  --cyan: #4a90f5;
+  --cyan-soft: #e3f0ff;
+  --cyan-foreground: #1f5fa8;
   --yellow: #ffb81c;
   --yellow-soft: #fff4d5;
   --yellow-foreground: #795516;
-  --background: #f4f8f8;
-  --foreground: #10302f;
+  --background: #f6f4fd;
+  --foreground: #1e1a3c;
   --surface: #ffffff;
-  --muted: #eaf1f1;
-  --muted-foreground: #4a6a68;
+  --muted: #f0edfb;
+  --muted-foreground: #5f5a80;
   --graphite: var(--muted-foreground);
-  --line: #e1ecec;
-  --border: #d5e3e2;
-  --border-strong: #8fa9a7;
-  --primary-soft: #def3f0;
-  --primary-soft-hover: #cbe8e3;
+  --line: #ece8f9;
+  --border: #e3defa;
+  --border-strong: #a79fd1;
+  --primary-soft: #efe8ff;
+  --primary-soft-hover: #e3d9ff;
   --font-body: var(--font-manrope), Arial, sans-serif;
   --mekty-font-heading: var(--font-manrope), Arial, sans-serif;
   /* Крупные заголовки лендинга и заставок: см. layout.tsx */
   --font-display: var(--font-manrope), Arial, sans-serif;
-  --sky: #14a39a;
+  --sky: #4a90f5;
   --sun: #ffb81c;
-  --night: #06201f;
-  --night-2: #0b3a37;
-  --mekty-radius-control: 0.5rem;
-  --mekty-radius-card: 0.75rem;
-  --mekty-shadow-card: 0 1px 2px rgb(16 48 47 / 6%);
-  --mekty-shadow-popover: 0 12px 32px rgb(16 48 47 / 14%);
-  --mekty-shadow-button: 0 1px 2px rgb(16 48 47 / 12%);
+  --night: #2c1a8a;
+  --night-2: #6b4df0;
+  --mekty-radius-control: 0.75rem;
+  --mekty-radius-card: 1.125rem;
+  --mekty-shadow-card: 0 6px 20px rgb(83 56 180 / 8%);
+  --mekty-shadow-popover: 0 18px 48px rgb(83 56 180 / 18%);
+  --mekty-shadow-button: 0 8px 20px rgb(109 59 234 / 28%);
   --success: #2f5b4f;
   --warning: #9b651f;
   --danger: #a84023;
@@ -98,21 +98,21 @@ html { scroll-behavior: smooth; }
    Флаг ставится на <html> скриптом до отрисовки, иначе при перезагрузке
    страница мигнёт светлой. */
 .dark {
-  --background: #0b1a19;
-  --foreground: #e3f1ef;
-  --surface: #112423;
-  --muted: #17302e;
-  --muted-foreground: #9bbab7;
-  --line: #1e3a38;
-  --border: #28494a;
-  --border-strong: #46706f;
-  --primary-soft: #14383a;
-  --primary-soft-hover: #1b4a4b;
+  --background: #120e2a;
+  --foreground: #ece9fb;
+  --surface: #1b1640;
+  --muted: #231d4f;
+  --muted-foreground: #aca6d2;
+  --line: #2a2359;
+  --border: #332b68;
+  --border-strong: #5a4f9c;
+  --primary-soft: #2a2160;
+  --primary-soft-hover: #352a78;
 
-  --ink: #4fd1c5;
-  --ink-hover: #7ae0d6;
-  --cyan-soft: #123836;
-  --cyan-foreground: #7ae0d6;
+  --ink: #a98bff;
+  --ink-hover: #c0a8ff;
+  --cyan-soft: #18305a;
+  --cyan-foreground: #8cc0ff;
   --yellow-soft: #3a2f11;
   --yellow-foreground: #f0c96b;
   --success: #6fc3ab;
@@ -373,8 +373,8 @@ body {
 .sky-night {
   position: relative;
   isolation: isolate;
-  color: #e3f1ef;
-  background: linear-gradient(165deg, var(--night) 0%, var(--night-2) 100%);
+  color: #fff;
+  background: linear-gradient(125deg, #5a2cd0 0%, #6f5bf2 55%, #8fa6fb 100%);
 }
 .sky-night::before {
   content: "";
@@ -382,8 +382,8 @@ body {
   inset: 0;
   z-index: -1;
   background-image:
-    linear-gradient(to right, rgb(122 224 214 / 6%) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(122 224 214 / 6%) 1px, transparent 1px);
+    linear-gradient(to right, rgb(255 255 255 / 7%) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 7%) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(90% 80% at 50% 30%, #000 20%, transparent 80%);
   -webkit-mask-image: radial-gradient(90% 80% at 50% 30%, #000 20%, transparent 80%);
@@ -395,7 +395,7 @@ body {
 
 /* Акцентное слово на тёмном фоне: светлая бирюза вместо золотого градиента. */
 .text-sun {
-  color: #7ae0d6;
+  color: #fff1b8;
 }
 
 /* Поверхность поверх тёмного фона: плоская, с тонкой границей. */
@@ -410,7 +410,8 @@ body {
 }
 
 /* Экраны входа и регистрации на ночном небе. */
-.auth-stage .editorial-kicker { color: #7ae0d6; }
+.auth-stage .editorial-kicker { color: #fff1b8; }
+.auth-stage [data-slot="card"] .editorial-kicker, .auth-stage .rounded-card .editorial-kicker { color: var(--ink); }
 .auth-stage h1 {
   font-family: var(--font-display);
   font-size: clamp(30px, 4vw, 46px);
@@ -420,7 +421,7 @@ body {
   color: #fff;
 }
 .auth-stage section > p.text-muted-foreground { color: rgb(226 232 255 / 78%); }
-.auth-stage section svg { color: #7ae0d6; }
+.auth-stage section svg { color: #fff1b8; }
 .auth-stage [data-slot="card"],
 .auth-stage .rounded-card {
   box-shadow: 0 30px 80px rgb(0 8 40 / 55%), 0 0 0 1px rgb(255 255 255 / 12%);

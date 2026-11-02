@@ -129,7 +129,7 @@ export default function HomeroomPage() {
             <Button
               onClick={handleGenerate}
               disabled={loading || !topic.trim()}
-              className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 font-semibold text-white shadow-lg hover:opacity-90"
+              className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-violet-600 font-semibold text-white shadow-lg hover:opacity-90"
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {loading ? "Формирую материалы..." : "Сформировать пакет документов"}

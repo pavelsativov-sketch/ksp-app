@@ -1067,7 +1067,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs text-teal-700"
+                className="h-7 px-2 text-xs text-violet-700"
                 onClick={() => void loadRecentPlans()}
               >
                 <History className="w-3.5 h-3.5 mr-1" />

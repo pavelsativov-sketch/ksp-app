@@ -49,7 +49,7 @@ export const DESKTOP_APPS: DesktopApp[] = [
     hint: 'Правка файлов задачи прямо в браузере',
   },
   {
-    id: 'computer-use', title: 'Работа с компьютером', type: 'computer-use', Icon: MonitorPlay, color: '#0f766e',
+    id: 'computer-use', title: 'Работа с компьютером', type: 'computer-use', Icon: MonitorPlay, color: '#6d3bea',
     hint: 'Агент смотрит на экран и выполняет задачи в браузере',
   },
   {
@@ -61,7 +61,7 @@ export const DESKTOP_APPS: DesktopApp[] = [
     hint: 'Новый урок: тема, цели, ход урока',
   },
   {
-    id: 'analytics-main', title: 'Аналитика школы', type: 'iframe', url: '/school/dashboard', Icon: BarChart3, color: '#14a39a',
+    id: 'analytics-main', title: 'Аналитика школы', type: 'iframe', url: '/school/dashboard', Icon: BarChart3, color: '#4a90f5',
     hint: 'Успеваемость и посещаемость класса',
   },
   {
@@ -69,7 +69,7 @@ export const DESKTOP_APPS: DesktopApp[] = [
     hint: 'Войдите в свой аккаунт в браузере; агент работает с системой',
   },
   {
-    id: 'nobd-agent', title: 'НОБД', type: 'browser', url: 'https://nobd.edu.kz/login', Icon: GraduationCap, color: '#0f766e',
+    id: 'nobd-agent', title: 'НОБД', type: 'browser', url: 'https://nobd.edu.kz/login', Icon: GraduationCap, color: '#6d3bea',
     hint: 'Войдите в государственную систему в браузере',
   },
 ];
@@ -89,7 +89,7 @@ export function Desktop() {
         <button
           key={app.id}
           type="button"
-          className="group w-[84px] h-[96px] flex flex-col items-center justify-start pt-2 gap-1.5 rounded-xl hover:bg-white/[0.08] active:bg-white/[0.14] cursor-default select-none transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4fd1c5]/80 focus:bg-white/[0.08]"
+          className="group w-[84px] h-[96px] flex flex-col items-center justify-start pt-2 gap-1.5 rounded-xl hover:bg-white/[0.08] active:bg-white/[0.14] cursor-default select-none transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a98bff]/80 focus:bg-white/[0.08]"
           onClick={() => openWindow(app.id, app.title, app.type, app.url)}
           title={`Открыть «${app.title}» — ${app.hint}`}
         >
@@ -103,7 +103,7 @@ export function Desktop() {
             {app.title}
           </span>
           {windows.some((w) => w.id === app.id) && (
-            <span aria-hidden="true" className="-mt-0.5 h-1 w-1 rounded-full bg-teal-300" />
+            <span aria-hidden="true" className="-mt-0.5 h-1 w-1 rounded-full bg-violet-300" />
           )}
         </button>
       ))}

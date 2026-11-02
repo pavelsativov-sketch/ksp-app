@@ -3,9 +3,9 @@
    ============================================ */
 
 .landing {
-  --blue: #0f766e;
-  --blue-dark: #0b5f58;
-  --cyan: #14a39a;
+  --blue: #6d3bea;
+  --blue-dark: #5a2cd0;
+  --cyan: #4a90f5;
   --yellow: #ffc857;
   --orange: #ff8d5c;
   --pink: #f59bc4;
@@ -43,8 +43,8 @@
   padding: 64px 0 100px;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(15, 118, 110, 0.07) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(20, 163, 154, 0.05) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(109, 59, 234, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(74, 144, 245, 0.05) 0%, transparent 60%);
 }
 
 .hero::before {
@@ -52,8 +52,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(15, 118, 110, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 118, 110, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(109, 59, 234, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(109, 59, 234, 0.035) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%);
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%);
@@ -149,12 +149,12 @@
   padding: 16px 24px;
   color: #fff;
   background: var(--blue);
-  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.22);
+  box-shadow: 0 10px 22px rgba(109, 59, 234, 0.22);
 }
 
 .primary:hover {
   background: var(--blue-dark);
-  box-shadow: 0 16px 32px rgba(15, 118, 110, 0.3);
+  box-shadow: 0 16px 32px rgba(109, 59, 234, 0.3);
   transform: translateY(-3px);
 }
 
@@ -343,7 +343,7 @@
   border: 1px solid rgba(255, 255, 255, 0.85);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.68);
-  box-shadow: 0 30px 80px rgba(15, 118, 110, 0.18);
+  box-shadow: 0 30px 80px rgba(109, 59, 234, 0.18);
   backdrop-filter: blur(20px);
 }
 
@@ -424,7 +424,7 @@
 .previewTabs button[aria-selected='true'] {
   color: var(--blue);
   background: #fff;
-  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.1);
+  box-shadow: 0 2px 8px rgba(109, 59, 234, 0.1);
 }
 
 .docContent {
@@ -747,7 +747,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.03) 0%, transparent 50%);
+  background: linear-gradient(135deg, rgba(109, 59, 234, 0.03) 0%, transparent 50%);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -755,7 +755,7 @@
 .featureCard:hover {
   transform: translateY(-6px);
   box-shadow: var(--card-shadow-hover);
-  border-color: rgba(15, 118, 110, 0.15);
+  border-color: rgba(109, 59, 234, 0.15);
 }
 
 .featureCard:hover::before {
@@ -816,7 +816,7 @@
 .kitCard:hover {
   transform: translateY(-8px);
   box-shadow: var(--card-shadow-hover);
-  border-color: rgba(15, 118, 110, 0.12);
+  border-color: rgba(109, 59, 234, 0.12);
 }
 
 .kitCard::after {
@@ -1154,7 +1154,7 @@
   border-radius: 50%;
   color: #fff;
   background: var(--blue);
-  box-shadow: 0 5px 15px rgba(15, 118, 110, 0.22);
+  box-shadow: 0 5px 15px rgba(109, 59, 234, 0.22);
   font-family: var(--font-nunito);
   font-size: 18px;
   font-weight: 900;
@@ -1205,7 +1205,7 @@
   font-family: var(--font-nunito);
   font-size: 64px;
   font-weight: 900;
-  color: rgba(15, 118, 110, 0.08);
+  color: rgba(109, 59, 234, 0.08);
   line-height: 1;
 }
 
@@ -1638,7 +1638,7 @@
   content: '';
   position: absolute;
   border-radius: 50%;
-  border: 1px solid rgba(15, 118, 110, 0.12);
+  border: 1px solid rgba(109, 59, 234, 0.12);
   pointer-events: none;
 }
 
@@ -1903,8 +1903,8 @@
 
 .dark .hero {
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(15, 118, 110, 0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(20, 163, 154, 0.08) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(109, 59, 234, 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(74, 144, 245, 0.08) 0%, transparent 60%);
 }
 
 .dark .hero::before {
@@ -2022,7 +2022,7 @@
 
 .dark .lessonRow:nth-of-type(3) > span {
   background: #3a2f11;
-  color: #0f766e;
+  color: #6d3bea;
 }
 
 .dark .lessonRow:nth-of-type(4) > span {
@@ -2386,16 +2386,16 @@
    ============================================================ */
 
 .landing {
-  --bg: #f4f8f8;
-  --text: #10302f;
-  --muted: #4a6a68;
-  --blue: #0f766e;
-  --blue-dark: #0b5f58;
+  --bg: #f6f4fd;
+  --text: #1e1a3c;
+  --muted: #5f5a80;
+  --blue: #6d3bea;
+  --blue-dark: #5a2cd0;
   --yellow: #ffb81c;
-  --line: #d5e3e2;
-  --soft-shadow: 0 8px 24px rgba(16, 48, 47, 0.08);
-  --card-shadow: 0 1px 2px rgba(16, 48, 47, 0.06);
-  --card-shadow-hover: 0 10px 28px rgba(16, 48, 47, 0.12);
+  --line: #e3defa;
+  --soft-shadow: 0 8px 24px rgba(83, 56, 180, 0.08);
+  --card-shadow: 0 1px 2px rgba(83, 56, 180, 0.06);
+  --card-shadow-hover: 0 10px 28px rgba(83, 56, 180, 0.12);
 }
 
 .landing h1,
@@ -2415,7 +2415,7 @@
   padding: 76px 0 112px;
   color: var(--text);
   isolation: isolate;
-  background: linear-gradient(180deg, #e8f2f1 0%, #f4f8f8 100%);
+  background: linear-gradient(180deg, #efeafe 0%, #f6f4fd 100%);
   border-bottom: 1px solid var(--line);
 }
 
@@ -2425,8 +2425,8 @@
   inset: 0;
   z-index: -1;
   background-image:
-    linear-gradient(to right, rgba(15, 118, 110, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15, 118, 110, 0.07) 1px, transparent 1px);
+    linear-gradient(to right, rgba(109, 59, 234, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(109, 59, 234, 0.07) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(90% 90% at 50% 20%, #000 20%, transparent 80%);
   -webkit-mask-image: radial-gradient(90% 90% at 50% 20%, #000 20%, transparent 80%);
@@ -2437,14 +2437,14 @@
 }
 
 .hero .eyebrow {
-  color: #0b5f58;
-  background: #def3f0;
-  border: 1px solid #bfe3dd;
+  color: #5a2cd0;
+  background: #efe8ff;
+  border: 1px solid #d9ccff;
 }
 
 .hero .eyebrow::before {
-  background: #0f766e;
-  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.18);
+  background: #6d3bea;
+  box-shadow: 0 0 0 4px rgba(109, 59, 234, 0.18);
 }
 
 .hero h1 {
@@ -2460,11 +2460,11 @@
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
-  color: #0f766e;
+  color: #6d3bea;
 }
 
 .hero .accent svg {
-  color: #0f766e;
+  color: #6d3bea;
   opacity: 0.9;
 }
 
@@ -2474,13 +2474,13 @@
 
 .hero .primary {
   color: #fff;
-  background: #0f766e;
-  box-shadow: 0 1px 2px rgba(16, 48, 47, 0.18);
+  background: #6d3bea;
+  box-shadow: 0 1px 2px rgba(83, 56, 180, 0.18);
 }
 
 .hero .primary:hover {
-  background: #0b5f58;
-  box-shadow: 0 6px 18px rgba(15, 118, 110, 0.28);
+  background: #5a2cd0;
+  box-shadow: 0 6px 18px rgba(109, 59, 234, 0.28);
 }
 
 .hero .textAction {
@@ -2488,11 +2488,11 @@
 }
 
 .hero .textAction:hover {
-  color: #0f766e;
+  color: #6d3bea;
 }
 
 .hero .playCircle {
-  color: #0f766e;
+  color: #6d3bea;
   border-color: var(--line);
   background: #fff;
 }
@@ -2525,25 +2525,25 @@
 
 /* ---------- Полоса преимуществ и секции ---------- */
 .benefitStrip {
-  background: #eef5f4;
+  background: #f1edfd;
   border-color: var(--line);
 }
 
 .kicker {
-  color: #0f766e;
+  color: #6d3bea;
   letter-spacing: 0.08em;
 }
 
 .stepNum {
   font-family: var(--font-display), sans-serif;
-  background: #0f766e;
+  background: #6d3bea;
   color: #fff;
   -webkit-background-clip: border-box;
   background-clip: border-box;
 }
 
 .finalCta {
-  background: #0b3a37;
+  background: #3a1fa8;
 }
 
 .finalCta .ctaBox,
@@ -2553,24 +2553,24 @@
 }
 
 .finalCta .ctaBox .kicker {
-  color: #7ae0d6;
+  color: #c0a8ff;
 }
 
 .finalCta .primary {
-  color: #06201f;
-  background: #4fd1c5;
+  color: #1e1a3c;
+  background: #a98bff;
   box-shadow: none;
 }
 
 .dark .landing {
-  --bg: #0b1a19;
-  --text: #e3f1ef;
-  --muted: #9bbab7;
-  --line: #28494a;
+  --bg: #120e2a;
+  --text: #ece9fb;
+  --muted: #aca6d2;
+  --line: #332b68;
 }
 
 .dark .hero {
-  background: linear-gradient(180deg, #0f2423 0%, #0b1a19 100%);
+  background: linear-gradient(180deg, #1b1640 0%, #120e2a 100%);
 }
 
 .hero .document {
@@ -2587,5 +2587,26 @@
 .hero .document,
 .hero .backPaper,
 .hero .readyBadge {
-  color: #10302f;
+  color: #1e1a3c;
+}
+
+/* Живой робот рядом с примером урока: тот же, что встречает учителя в кабинете. */
+.heroRobot {
+  position: absolute;
+  z-index: 4;
+  left: -118px;
+  bottom: -30px;
+  width: 210px;
+  height: 210px;
+  pointer-events: none;
+}
+
+.heroRobotCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 1180px) {
+  .heroRobot { display: none; }
 }

@@ -471,12 +471,12 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [activeField, imgLayout]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#071a19] text-slate-200">
+    <div className="flex h-full min-h-0 flex-col bg-[#0f0b26] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
-        <MonitorPlay className="size-4 shrink-0 text-teal-400" />
+        <MonitorPlay className="size-4 shrink-0 text-violet-400" />
         <span className="min-w-0 truncate text-xs font-semibold">Агент браузера</span>
         {running && (
-          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] text-teal-300">
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] text-violet-300">
             <Loader2 className="size-3 animate-spin" /> {control === "user" ? "ждёт вашего ввода" : "работает"}
           </span>
         )}
@@ -529,7 +529,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           rows={2}
           disabled={running}
           placeholder="Например: найди на сайте материалы по теме «Дроби» и открой раздел с упражнениями"
-          className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-teal-500/60 disabled:opacity-60"
+          className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-violet-500/60 disabled:opacity-60"
         />
 
         <label className="mt-2 block text-[11px] font-medium text-slate-400" htmlFor="computer-url">
@@ -541,7 +541,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           onChange={(e) => setStartUrl(e.target.value)}
           disabled={running}
           placeholder="https://www.bilimclass.kz"
-          className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-teal-500/60 disabled:opacity-60"
+          className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-violet-500/60 disabled:opacity-60"
         />
 
         {!running && goal.trim().length === 0 && (
@@ -551,7 +551,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                 key={example.label}
                 type="button"
                 onClick={() => { setGoal(example.goal); setStartUrl(example.url); }}
-                className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-400 hover:border-teal-400/40 hover:text-slate-200"
+                className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-400 hover:border-violet-400/40 hover:text-slate-200"
               >
                 {example.label}
               </button>
@@ -564,7 +564,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           type="button"
           onClick={() => void start()}
           disabled={running || goal.trim().length < 3}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
           Запустить агента
@@ -635,7 +635,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
               className="w-full cursor-text rounded-lg border border-white/10"
             />
             {screenBusy && (
-              <div className="absolute right-2 top-2 h-4 w-4 animate-spin rounded-full border-2 border-teal-400 border-t-transparent" />
+              <div className="absolute right-2 top-2 h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
             )}
             {/* Интерактивная рамка подсветки активного поля на экране */}
             {fieldOverlayStyle && (
@@ -644,12 +644,12 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                 className={`pointer-events-none absolute z-20 rounded border-2 transition-all flex items-center px-2 overflow-hidden ${
                   activeField?.isPassword
                     ? "border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] bg-black/25 backdrop-blur-[1px]"
-                    : "border-teal-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] bg-black/25 backdrop-blur-[1px]"
+                    : "border-violet-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] bg-black/25 backdrop-blur-[1px]"
                 }`}
               >
                 <div className="flex items-center text-xs font-mono text-white/95 select-none truncate">
                   <span>{activeField?.isPassword ? "•".repeat((liveText || activeField?.value || "").length) : (liveText || activeField?.value || "")}</span>
-                  <span className="inline-block w-0.5 h-3.5 bg-teal-400 animate-pulse ml-0.5 shrink-0" />
+                  <span className="inline-block w-0.5 h-3.5 bg-violet-400 animate-pulse ml-0.5 shrink-0" />
                 </div>
               </div>
             )}

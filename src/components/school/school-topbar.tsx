@@ -101,11 +101,11 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
   }
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-white/10 bg-[#071a19] px-3">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0f0b26] px-3">
       <Link href="/school" className="flex shrink-0 items-center gap-2">
-        <span className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 text-sm font-black text-white">M</span>
+        <span className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 text-sm font-black text-white">M</span>
         <span className="hidden items-baseline gap-1 text-sm font-semibold text-slate-100 sm:flex">
-          Mekty <span className="text-teal-400">AI</span>
+          Mekty <span className="text-violet-400">AI</span>
           <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">Beta</span>
         </span>
       </Link>
@@ -159,7 +159,7 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
         <Link
           href="/school/settings"
           title={displayName}
-          className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-bold text-white"
+          className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-violet-600 text-sm font-bold text-white"
         >
           {initial}
         </Link>

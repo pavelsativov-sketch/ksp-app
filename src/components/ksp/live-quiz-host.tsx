@@ -484,7 +484,7 @@ function EndView({ code, leaderboard }: { code: string; leaderboard: LiveLeaderb
       <div className="rounded-2xl bg-[#c0512f] p-8 text-center text-[#faf7f2]">
         <Trophy className="w-12 h-12 mx-auto mb-2" />
         <h2 className="text-3xl font-bold mb-1">Квиз завершён!</h2>
-        <p className="text-teal-100">Поздравляем участников</p>
+        <p className="text-violet-100">Поздравляем участников</p>
       </div>
       <Leaderboard entries={leaderboard} />
       <div className="flex justify-end">

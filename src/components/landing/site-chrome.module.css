@@ -18,7 +18,7 @@
 
 .header.scrolled {
   box-shadow: 0 4px 24px rgba(48, 76, 145, 0.08);
-  border-bottom-color: rgba(15, 118, 110, 0.12);
+  border-bottom-color: rgba(109, 59, 234, 0.12);
 }
 
 .headerInner,
@@ -54,9 +54,9 @@
   height: 44px;
   flex-shrink: 0;
   border-radius: 14px;
-  background: linear-gradient(135deg, #0f766e, #14a39a);
+  background: linear-gradient(135deg, #6d3bea, #4a90f5);
   color: #fff;
-  box-shadow: 0 9px 22px rgba(15, 118, 110, 0.28);
+  box-shadow: 0 9px 22px rgba(109, 59, 234, 0.28);
   transform: rotate(-5deg);
   transition: transform 0.3s ease;
 }
@@ -80,7 +80,7 @@
 }
 
 .brandSuffix {
-  color: #0f766e;
+  color: #6d3bea;
 }
 
 .tagline {
@@ -117,7 +117,7 @@
 }
 
 .navLink:hover {
-  color: #0f766e;
+  color: #6d3bea;
   background: #edf1ff;
 }
 
@@ -126,13 +126,13 @@
   padding-inline: 20px;
   border-radius: 14px;
   color: #fff;
-  background: #0f766e;
-  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.22);
+  background: #6d3bea;
+  box-shadow: 0 10px 22px rgba(109, 59, 234, 0.22);
 }
 
 .signup:hover {
-  background: #0b5f58;
-  box-shadow: 0 15px 28px rgba(15, 118, 110, 0.3);
+  background: #5a2cd0;
+  box-shadow: 0 15px 28px rgba(109, 59, 234, 0.3);
   transform: translateY(-2px);
 }
 
@@ -144,7 +144,7 @@
 }
 
 .logout:hover {
-  color: #0f766e;
+  color: #6d3bea;
   background: #edf1ff;
   border-color: #c9d6f5;
 }
@@ -154,7 +154,7 @@
 .signup:focus-visible,
 .logout:focus-visible,
 .menuToggle:focus-visible {
-  outline: 2px solid #0f766e;
+  outline: 2px solid #6d3bea;
   outline-offset: 4px;
 }
 
@@ -173,7 +173,7 @@
   border: 0;
   border-radius: 12px;
   background: #edf1ff;
-  color: #0f766e;
+  color: #6d3bea;
   transition: background-color 0.2s ease;
 }
 
@@ -301,7 +301,7 @@
 
 .dark .header.scrolled {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-  border-bottom-color: rgba(15, 118, 110, 0.2);
+  border-bottom-color: rgba(109, 59, 234, 0.2);
 }
 
 .dark .footer {
@@ -314,7 +314,7 @@
 }
 
 .dark .navLink:hover {
-  color: #4fd1c5;
+  color: #a98bff;
   background: #1c2540;
 }
 
@@ -325,14 +325,14 @@
 }
 
 .dark .logout:hover {
-  color: #4fd1c5;
+  color: #a98bff;
   background: #1c2540;
   border-color: #465674;
 }
 
 .dark .menuToggle {
   background: #1c2540;
-  color: #4fd1c5;
+  color: #a98bff;
 }
 
 .dark .menuToggle:hover,
@@ -369,23 +369,23 @@
    ============================================================ */
 .header,
 .footer {
-  background: #fbf8f1;
+  background: #f6f4fd;
   color: #121a3a;
 }
 
 .header {
-  border-bottom: 1px solid rgba(15, 118, 110, 0.28);
-  background: rgba(251, 248, 241, 0.8);
+  border-bottom: 1px solid rgba(109, 59, 234, 0.28);
+  background: rgba(246, 244, 253, 0.82);
 }
 
 .header.scrolled {
-  box-shadow: 0 6px 28px rgba(60, 50, 20, 0.1);
-  border-bottom-color: rgba(15, 118, 110, 0.3);
+  box-shadow: 0 6px 28px rgba(83, 56, 180, 0.1);
+  border-bottom-color: rgba(109, 59, 234, 0.3);
 }
 
 .brandIcon {
-  background: linear-gradient(135deg, #0f766e 0%, #14a39a 100%);
-  box-shadow: 0 9px 24px rgba(15, 118, 110, 0.32), 0 0 0 2px rgba(255, 184, 28, 0.55);
+  background: transparent;
+  box-shadow: none;
 }
 
 .brandName {
@@ -396,19 +396,19 @@
 }
 
 .navLink:hover {
-  color: #0f766e;
+  color: #6d3bea;
   background: #fff3d2;
 }
 
 .signup {
   color: #ffffff;
-  background: #0f766e;
-  box-shadow: 0 10px 26px rgba(16, 48, 47, 0.18);
+  background: #6d3bea;
+  box-shadow: 0 10px 26px rgba(83, 56, 180, 0.18);
 }
 
 .signup:hover {
-  background: #0b5f58;
-  box-shadow: 0 15px 34px rgba(15, 118, 110, 0.3);
+  background: #5a2cd0;
+  box-shadow: 0 15px 34px rgba(109, 59, 234, 0.3);
 }
 
 .dark .header,
@@ -418,7 +418,7 @@
 
 .dark .header {
   background: rgba(10, 15, 32, 0.82);
-  border-bottom-color: rgba(15, 118, 110, 0.22);
+  border-bottom-color: rgba(109, 59, 234, 0.22);
 }
 
 /* ---------- Главное меню сайта: не ломается на ноутбуках ---------- */
@@ -442,7 +442,7 @@
 .mobileNav {
   gap: 2px;
   padding: 10px;
-  border-color: rgba(15, 118, 110, 0.25);
+  border-color: rgba(109, 59, 234, 0.25);
   border-radius: 22px;
   background: linear-gradient(165deg, rgba(10, 22, 80, 0.97), rgba(6, 12, 38, 0.98));
   box-shadow: 0 30px 80px rgba(0, 8, 40, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -459,7 +459,7 @@
 
 .mobileNav .navLink:hover {
   color: #ffffff;
-  background: #0f766e;
+  background: #6d3bea;
 }
 
 .mobileNav .logout {
@@ -470,11 +470,11 @@
 
 .menuToggle {
   color: #ffffff;
-  background: #0f766e;
-  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.25);
+  background: #6d3bea;
+  box-shadow: 0 8px 20px rgba(109, 59, 234, 0.25);
 }
 
 .menuToggle:hover,
 .mobileMenu[open] .menuToggle {
-  background: #4fd1c5;
+  background: #a98bff;
 }

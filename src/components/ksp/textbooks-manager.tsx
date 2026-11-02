@@ -557,7 +557,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                             href={item.pdfUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline"
+                            className="inline-flex items-center gap-1 font-medium text-violet-700 hover:underline"
                           >
                             <ExternalLink className="w-3 h-3" />
                             PDF
@@ -730,7 +730,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                             href={t.source_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-teal-700 hover:underline"
+                            className="inline-flex items-center gap-1 text-xs text-violet-700 hover:underline"
                           >
                             <ExternalLink className="w-3 h-3" />
                             PDF

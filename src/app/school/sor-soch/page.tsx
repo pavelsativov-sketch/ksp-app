@@ -64,7 +64,7 @@ export default function SorSochPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 md:px-6">
       <header>
-        <p className="editorial-kicker text-teal-400">Педагогическая отчётность</p>
+        <p className="editorial-kicker text-violet-400">Педагогическая отчётность</p>
         <h1 className="editorial-display mt-1 text-3xl font-bold">Анализ результатов СОР и СОЧ</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Без повторного ввода учеников: просто укажите баллы класса через запятую. ИИ мгновенно рассчитает качество, успеваемость, распределение по уровням мышления и подготовит методический отчёт с рекомендациями для завуча.
@@ -86,7 +86,7 @@ export default function SorSochPage() {
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-teal-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-violet-500"
                 />
               </div>
               <div>
@@ -96,7 +96,7 @@ export default function SorSochPage() {
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
                   placeholder="8"
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-teal-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-violet-500"
                 />
               </div>
             </div>
@@ -107,7 +107,7 @@ export default function SorSochPage() {
                 <select
                   value={quarter}
                   onChange={(e) => setQuarter(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-teal-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-violet-500"
                 >
                   <option value="1">1 четв.</option>
                   <option value="2">2 четв.</option>
@@ -120,7 +120,7 @@ export default function SorSochPage() {
                 <select
                   value={workType}
                   onChange={(e) => setWorkType(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-teal-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-violet-500"
                 >
                   <option value="СОР №1">СОР №1</option>
                   <option value="СОР №2">СОР №2</option>
@@ -134,7 +134,7 @@ export default function SorSochPage() {
                   type="number"
                   value={maxScore}
                   onChange={(e) => setMaxScore(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-teal-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-violet-500"
                 />
               </div>
             </div>
@@ -146,7 +146,7 @@ export default function SorSochPage() {
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="Например: Квадратные корни и действительные числа"
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-teal-500"
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-violet-500"
               />
             </div>
 
@@ -160,7 +160,7 @@ export default function SorSochPage() {
                 onChange={(e) => setScores(e.target.value)}
                 rows={4}
                 placeholder="18, 15, 20, 14, 12, 19, 16..."
-                className="mt-1 w-full rounded-lg border bg-background p-3 font-mono text-xs outline-none focus:border-teal-500"
+                className="mt-1 w-full rounded-lg border bg-background p-3 font-mono text-xs outline-none focus:border-violet-500"
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Просто скопируйте столбец баллов из Excel или введите через запятую/пробел.
@@ -169,10 +169,10 @@ export default function SorSochPage() {
 
             {/* Мгновенные экспресс-показатели */}
             {count > 0 && (
-              <div className="grid grid-cols-3 gap-2 rounded-xl border border-teal-500/20 bg-teal-500/5 p-3 text-center">
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-center">
                 <div>
                   <p className="text-[10px] uppercase text-muted-foreground">Качество</p>
-                  <p className="text-base font-bold text-teal-400">{qualityPercent}%</p>
+                  <p className="text-base font-bold text-violet-400">{qualityPercent}%</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase text-muted-foreground">Успеваемость</p>
@@ -188,7 +188,7 @@ export default function SorSochPage() {
             <Button
               onClick={handleGenerate}
               disabled={loading || count === 0}
-              className="w-full gap-2 bg-gradient-to-r from-teal-500 to-teal-600 font-semibold text-white shadow-lg hover:opacity-90"
+              className="w-full gap-2 bg-gradient-to-r from-violet-500 to-violet-600 font-semibold text-white shadow-lg hover:opacity-90"
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {loading ? "Формирую анализ..." : "Сформировать отчёт для завуча"}
@@ -232,7 +232,7 @@ export default function SorSochPage() {
             {loading && (
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
                 <div className="space-y-3">
-                  <Loader2 className="mx-auto size-8 animate-spin text-teal-400" />
+                  <Loader2 className="mx-auto size-8 animate-spin text-violet-400" />
                   <p className="text-sm font-medium text-slate-200">ИИ анализирует результаты и дескрипторы...</p>
                   <p className="text-xs text-muted-foreground/70">Рассчитываются проценты, пробелы и рекомендации для завуча</p>
                 </div>

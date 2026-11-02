@@ -56,7 +56,7 @@ export default async function KitsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Link href="/dashboard" className="text-sm underline">К моим планам</Link>
+          <Link href="/plans" className="text-sm underline">К моим планам</Link>
           <Link href="/templates" className="text-sm underline">Шаблоны КСП</Link>
         </CardContent>
       </Card>

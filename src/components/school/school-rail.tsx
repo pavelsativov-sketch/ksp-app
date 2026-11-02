@@ -64,7 +64,7 @@ export const MORE_SECTIONS: { key: string; label: string; icon: LucideIcon; href
 function tileClass(active: boolean): string {
   return `relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-2.5 text-[10.5px] font-semibold tracking-wide transition-all duration-200 ${
     active
-      ? "bg-gradient-to-b from-white/[0.16] to-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-[#4fd1c5]/45"
+      ? "bg-gradient-to-b from-white/[0.16] to-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-[#a98bff]/45"
       : "text-slate-400 hover:-translate-y-0.5 hover:bg-white/[0.07] hover:text-slate-100"
   }`;
 }
@@ -73,7 +73,7 @@ function ActiveBar() {
   return (
     <span
       aria-hidden="true"
-      className="absolute -left-[11px] top-1/2 h-9 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-[#7ae0d6] to-[#4fd1c5] shadow-[0_0_14px_rgba(79,209,197,0.6)]"
+      className="absolute -left-[11px] top-1/2 h-9 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-[#c0a8ff] to-[#a98bff] shadow-[0_0_14px_rgba(169,139,255,0.6)]"
     />
   );
 }
@@ -135,7 +135,7 @@ export function MoreSections() {
           className="glass absolute bottom-0 left-full z-50 ml-3 w-72 overflow-hidden rounded-2xl p-2 shadow-2xl"
           style={{ background: "linear-gradient(160deg, rgba(10,22,80,0.96), rgba(6,12,38,0.97))" }}
         >
-          <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#7ae0d6]">Все разделы школы</p>
+          <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#c0a8ff]">Все разделы школы</p>
           {MORE_SECTIONS.map(({ key, label, icon: Icon, href, color }) => {
             const current = pathname.startsWith(href);
             return (
@@ -156,7 +156,7 @@ export function MoreSections() {
                   <Icon className="size-4" style={{ color }} />
                 </span>
                 <span className="min-w-0 flex-1 truncate">{nav[key as keyof typeof nav] ?? label}</span>
-                {current && <span className="size-1.5 rounded-full bg-[#4fd1c5] shadow-[0_0_8px_rgba(79,209,197,0.8)]" />}
+                {current && <span className="size-1.5 rounded-full bg-[#a98bff] shadow-[0_0_8px_rgba(169,139,255,0.8)]" />}
               </Link>
             );
           })}
@@ -239,7 +239,7 @@ export function SchoolRail() {
       </nav>
       {/* Служебные пункты прижаты к низу и отделены чертой: их используют реже. */}
       <div className="mt-auto flex flex-col items-center gap-1.5 pt-3">
-        <span aria-hidden="true" className="mb-1 h-px w-9 bg-gradient-to-r from-transparent via-[#4fd1c5]/50 to-transparent" />
+        <span aria-hidden="true" className="mb-1 h-px w-9 bg-gradient-to-r from-transparent via-[#a98bff]/50 to-transparent" />
         <MoreSections />
         {renderItem(settings)}
       </div>

@@ -98,7 +98,7 @@ export default async function AssignmentResultsPage({ params }: { params: Promis
         </div>
         </>
       )}
-      <Link href="/dashboard#assignments" className="text-sm underline">{r.back}</Link>
+      <Link href="/plans#assignments" className="text-sm underline">{r.back}</Link>
     </div>
   );
 }

@@ -182,7 +182,7 @@ function AgentSessionStream({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {activity && (
-        <p role="status" className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-teal-400/20 bg-teal-400/[0.07] px-3 py-2 text-[11px] leading-snug text-teal-100">
+        <p role="status" className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-violet-400/20 bg-violet-400/[0.07] px-3 py-2 text-[11px] leading-snug text-violet-100">
           <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin" />
           <span><span className="font-semibold">Сейчас:</span> {activity}</span>
         </p>
@@ -239,7 +239,7 @@ function AgentSessionStream({
                 title={`Открыть «${name}» в редакторе`}
                 className="inline-flex max-w-full items-center gap-1 rounded-lg border border-white/12 bg-white/[0.05] px-2 py-1 font-mono text-[11px] text-slate-200 hover:bg-white/10"
               >
-                <FileText className="size-3 shrink-0 text-teal-300" /> <span className="truncate">{name}</span>
+                <FileText className="size-3 shrink-0 text-violet-300" /> <span className="truncate">{name}</span>
               </button>
             ))}
           </div>
@@ -270,7 +270,7 @@ function AgentSessionStream({
               return (
                 <li key={idx} className={`flex items-start gap-2 ${stepDone ? "text-slate-400" : stepCurrent ? "text-slate-100" : "text-slate-500"}`}>
                   {stepDone ? <CircleCheck className="mt-0.5 size-3 shrink-0 text-emerald-400" />
-                    : stepCurrent ? <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin text-teal-300" />
+                    : stepCurrent ? <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin text-violet-300" />
                     : <span className="mt-0.5 size-3 shrink-0 rounded-full border border-white/25" />}
                   <span className="flex-1">{step}</span>
                 </li>
@@ -346,7 +346,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
       );
     }
     if (tool === "browserNavigate") {
-      return <p className="text-teal-300">🌐 {ev.message}</p>;
+      return <p className="text-violet-300">🌐 {ev.message}</p>;
     }
     if (tool === "writeFile" || tool === "readFile" || tool === "listFiles") {
       return <p className="text-amber-300">📄 {ev.message}</p>;
@@ -365,16 +365,16 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
           </pre>
         )}
         {browserInfo && (
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0b1f1e] font-sans">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#151034] font-sans">
             <div className="flex items-center justify-between gap-2 border-b border-white/10 px-2.5 py-1.5 text-[11px]">
               <span className="flex min-w-0 items-center gap-1.5 truncate text-slate-300">
-                <Globe className="size-3 shrink-0 text-teal-400" />
+                <Globe className="size-3 shrink-0 text-violet-400" />
                 <span className="truncate">{browserInfo.title || browserInfo.url}</span>
               </span>
               <button
                 type="button"
                 onClick={() => setTab("browser")}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-teal-500/15 px-2 py-0.5 text-[10px] font-semibold text-teal-300 hover:bg-teal-500/25"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300 hover:bg-violet-500/25"
               >
                 В рабочей области ОС <ExternalLink className="size-2.5" />
               </button>
@@ -466,7 +466,7 @@ function extractResult(ev: AgentEvent): string | null {
 }
 
 export function StatusDot({ status }: { status: Status }) {
-  const color = status === "running" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-teal-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
+  const color = status === "running" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-violet-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
   return <span className={`inline-block size-2 rounded-full ${color}`} aria-hidden />;
 }
 

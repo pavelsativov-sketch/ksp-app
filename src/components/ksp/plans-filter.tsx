@@ -9,14 +9,14 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 
 export interface PlanListItem { id: string; title: string; grade: number; subject_id: string | null; subject_name?: string | null; quarter?: number | null; class_id?: string | null; class_name?: string | null; updated_at: string; visibility?: "private" | "unlisted" | "public"; topic?: string | null; is_draft?: boolean; likes?: number; }
-export interface PlansFilterProps { plans: PlanListItem[]; subjects: Array<{ id: string; name_ru: string }>; showVisibility?: boolean; showEditLink?: boolean; showLikes?: boolean; classes?: Array<{ id: string; name: string }>; emptyMessage: string; }
+export interface PlansFilterProps { plans: PlanListItem[]; subjects: Array<{ id: string; name_ru: string }>; showVisibility?: boolean; showEditLink?: boolean; showLikes?: boolean; classes?: Array<{ id: string; name: string }>; emptyMessage: string; initialQuery?: string; }
 const ALL = "__all__";
 const NO_CLASS = "__none__";
 /** Клиентская пагинация: сколько карточек показывать сразу. */
 const PAGE_SIZE = 24;
 
-export function PlansFilter({ plans, subjects, showVisibility = false, showEditLink = false, showLikes = false, classes = [], emptyMessage }: PlansFilterProps) {
-  const [q, setQ] = useState("");
+export function PlansFilter({ plans, subjects, showVisibility = false, showEditLink = false, showLikes = false, classes = [], emptyMessage, initialQuery = "" }: PlansFilterProps) {
+  const [q, setQ] = useState(initialQuery);
   const [subjectId, setSubjectId] = useState(ALL);
   const [grade, setGrade] = useState(ALL);
   const [quarter, setQuarter] = useState(ALL);

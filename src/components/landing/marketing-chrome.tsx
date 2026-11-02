@@ -13,19 +13,24 @@ import { usePathname } from "next/navigation";
  * Гейт клиентский, потому что путь знает только клиент, зато SSR и первый
  * клиентский рендер совпадают: `usePathname` возвращает путь сразу.
  */
+const CABINET_PATHS = ["/dashboard", "/plans", "/favorites", "/library", "/kits", "/templates", "/textbooks", "/profile", "/gradebook", "/longterm", "/import", "/notifications", "/feedback", "/assignments", "/ai", "/redeem", "/school"];
+
+
 export function MarketingChrome({
   chrome,
   content,
   footer,
+  cabinet,
 }: {
   chrome: React.ReactNode;
   content: React.ReactNode;
   footer: React.ReactNode;
+  /** Оболочка кабинета вошедшего учителя с тем же содержимым; для гостя её нет. */
+  cabinet?: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const appShell = pathname === "/school" || pathname.startsWith("/school/");
-
-  if (appShell) return <>{content}</>;
+  if (cabinet && CABINET_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) return <>{cabinet}</>;
+  if (pathname === "/school" || pathname.startsWith("/school/")) return <>{content}</>;
 
   return (
     <>

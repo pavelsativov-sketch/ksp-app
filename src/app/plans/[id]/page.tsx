@@ -32,7 +32,9 @@ import { resolveWatermark } from "@/lib/billing/watermark";
 import { getComments, getReviews, getUserNames } from "@/lib/comments";
 import { log } from "@/lib/logger";
 import type { LessonPlanRow } from "@/lib/types/ksp";
-import { Archive, Download, Edit, History as HistoryIcon, Presentation, Printer, Radio, ScrollText } from "lucide-react";
+import { Archive, Download, Edit, FileSpreadsheet, Gamepad2, Grid3x3, History as HistoryIcon, Layers, MessageSquareText, Presentation, Printer, Radio, ScrollText } from "lucide-react";
+import { ThreeStage } from "@/components/three/three-stage";
+import l from "@/components/app/lesson.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -212,125 +214,90 @@ export default async function PlanViewPage({
     }
   }
   return (
-    <div className="mx-auto max-w-[1200px] space-y-10 px-4 py-12 md:px-6 md:py-16">
-      <header className="flex flex-wrap items-start justify-between gap-5 border-b border-[#ddd5cb] pb-7 no-print">
-        <div>
-          <p className="editorial-kicker">План урока</p><h1 className="editorial-display mt-3 text-5xl">{plan.title}</h1>
-          <p className="mt-3 flex items-center gap-3 text-sm text-[#5f5751]">
-            <span>{plan.grade} класс · {plan.visibility}</span>
-            <LikeButton planId={plan.id} initialLikes={likes} initiallyLiked={liked} canLike={Boolean(user) && !isOwner} />
-            {user && !isOwner && plan.visibility === "public" && <ReportPlanButton planId={plan.id} />}
-          </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {isOwner && (
-            <>
-              <Button asChild variant="outline">
-                <Link href={`/plans/${plan.id}/edit`}>
-                  <Edit /> Редактировать
-                </Link>
-              </Button>
-              <DeletePlanButton planId={plan.id} />
-              <Button asChild variant="outline">
-                <Link href={`/plans/${plan.id}/history`}>
-                  <HistoryIcon /> История
-                </Link>
-              </Button>
-            </>
-          )}
-          {isOwner && hasTasks(plan) && (
-            <Button asChild>
-              <Link href={`/quiz/host/${plan.id}`}>
-                <Radio /> Live-квиз
-              </Link>
-            </Button>
-          )}
-          {isOwner && (
-            <AssignHomeworkButton
-              planId={plan.id}
-              planTitle={plan.title}
-              subject={subjectName}
-              grade={plan.grade}
-              planTasks={allTasks.map((t, i) => ({
-                ref: `${plan.id}:${i}`,
-                question: t.question,
-                type: t.type,
-                points: t.points,
-                from: plan.title,
-              }))}
-            />
-          )}
-          {user && <ClonePlanButton planId={plan.id} />}
-          <WorksheetButton
-            planId={plan.id}
-            topic={plan.content?.topic || plan.title}
-            subject={subjectName}
-            grade={plan.grade}
-            language={plan.language}
-            kspContext={handoutKspContext}
-          />
-          <MemosButton
-            planId={plan.id}
-            topic={plan.content?.topic || plan.title}
-            subject={subjectName}
-            grade={plan.grade}
-            language={plan.language}
-            kspContext={handoutKspContext}
-          />
-          <CrosswordButton
-            planId={plan.id}
-            topic={plan.content?.topic || plan.title}
-            subject={subjectName}
-            grade={plan.grade}
-            language={plan.language}
-            kspContext={handoutKspContext}
-          />
-          <Button asChild variant="outline">
-            <a href={`/api/export/docx/${plan.id}`}>
-              <Download /> Word
-            </a>
-          </Button>
-          {user ? (
-            <TeacherSpeechButton planId={plan.id} />
-          ) : (
+    <div className="mx-auto max-w-[1200px] space-y-5 px-4 py-4 md:px-6">
+      <header className={`${l.banner} no-print`}>
+        <div className={l.bannerCopy}>
+          <p className={l.bannerMeta}>{[subjectName, `${plan.grade} класс`].filter(Boolean).join(" · ")}</p>
+          <h1 className={l.bannerTitle}>{plan.content?.topic || plan.title}</h1>
+          <div className={l.bannerActions}>
+            {isOwner && (
+              <AssignHomeworkButton
+                planId={plan.id}
+                planTitle={plan.title}
+                subject={subjectName}
+                grade={plan.grade}
+                planTasks={allTasks.map((t, i) => ({
+                  ref: `${plan.id}:${i}`,
+                  question: t.question,
+                  type: t.type,
+                  points: t.points,
+                  from: plan.title,
+                }))}
+              />
+            )}
             <Button asChild variant="outline">
-              <a href={`/api/export/teacher-script/${plan.id}`}>
-                <ScrollText /> Слова педагога
-              </a>
+              <a href={`/api/export/docx/${plan.id}`}><Download /> Word</a>
             </Button>
-          )}
-          {isOwner && <InteractiveButton planId={plan.id} />}
-          <Button asChild variant="outline">
-            <a href={`/api/export/pptx/${plan.id}`}>
-              <Presentation /> Презентация
-            </a>
-          </Button>
-          <Button asChild>
-            <a href={`/api/export/zip/${plan.id}`}>
-              <Archive /> Пакет (.zip)
-            </a>
-          </Button>
-          {isOwner && <SaveTemplateButton plan={plan} />}
-          <PrintButton>
-            <Printer /> PDF
-          </PrintButton>
-        </div>
-      </header>
-      {isOwner && <QualityGate content={plan.content} planId={plan.id} language={plan.language} />}
-      {isOwner && (approvalSchool?._id ? (
-        <SchoolApprovalPanel schoolId={approvalSchool._id.toString()} planId={plan.id} currentUpdatedAt={plan.updated_at} locale={approvalLocale} mode="owner" availableClasses={approvalClassNames} initialClassName={plan.content.header.grade} />
-      ) : (
-        <Card><CardHeader><CardTitle>{approvalCopy.queueTitle}</CardTitle><CardDescription>{approvalCopy.noSchool} <Link className="underline" href="/school">{approvalCopy.open}</Link></CardDescription></CardHeader></Card>
-      ))}
-      {isOwner && !plan.moderationHidden && (
-        <details className="no-print rounded-xl border border-border bg-surface p-4">
-          <summary className="cursor-pointer text-sm font-bold">QR-код на план</summary>
-          <div className="mt-3 max-w-xs">
-            <QrCard url={`${siteUrl}/plans/${plan.id}`} title={plan.title} />
+            {isOwner && (
+              <Button asChild variant="outline">
+                <Link href={`/plans/${plan.id}/edit`}><Edit /> Редактировать</Link>
+              </Button>
+            )}
+            <PrintButton><Printer /> PDF</PrintButton>
+            <LikeButton planId={plan.id} initialLikes={likes} initiallyLiked={liked} canLike={Boolean(user) && !isOwner} />
           </div>
-        </details>
-      )}
-      {isOwner && <KtpBuilder planId={plan.id} topic={plan.content.topic || plan.title} isPro={canUseKtp} grade={plan.grade} subjectId={plan.subject_id} language={plan.language} />}
+        </div>
+        <div className={l.bannerRobot}><ThreeStage scene="robot" className={l.fill} /></div>
+      </header>
+
+      <section id="materials" aria-labelledby="materials-title" className={`${l.section} no-print`}>
+        <h2 id="materials-title" className={l.sectionTitle}>Материалы урока</h2>
+        <div className={l.tiles}>
+          <div className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>5–10 выборов для учеников, выдаются по коду.</p>
+            {isOwner ? <InteractiveButton planId={plan.id} /> : <p className={l.note}>Доступен автору плана.</p>}
+            {isOwner && hasTasks(plan) && <Button asChild variant="outline"><Link href={`/quiz/host/${plan.id}`}><Radio /> Live-квиз</Link></Button>}
+          </div>
+          <div className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Задания для учеников на 10 баллов.</p>
+            <WorksheetButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
+          </div>
+          <div className={l.tile} data-tone="peach"><MessageSquareText aria-hidden="true" className={l.tileIcon} /><b>Слова педагога</b><p>Живая речь учителя по этапам, в Word.</p>
+            {user ? <TeacherSpeechButton planId={plan.id} /> : <Button asChild variant="outline"><a href={`/api/export/teacher-script/${plan.id}`}><ScrollText /> Слова педагога</a></Button>}
+          </div>
+          <div className={l.tile} data-tone="green"><Grid3x3 aria-hidden="true" className={l.tileIcon} /><b>Кроссворд</b><p>Из терминов этой темы.</p>
+            <CrosswordButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
+          </div>
+          <div className={l.tile} data-tone="pink"><Layers aria-hidden="true" className={l.tileIcon} /><b>Карточки</b><p>Памятки по теме для повторения.</p>
+            <MemosButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
+          </div>
+          <div className={l.tile} data-tone="gray"><Presentation aria-hidden="true" className={l.tileIcon} /><b>Презентация и пакет</b><p>PowerPoint к уроку или весь комплект архивом.</p>
+            <div className={l.tileRow}>
+              <Button asChild variant="outline"><a href={`/api/export/pptx/${plan.id}`}><Presentation /> PowerPoint</a></Button>
+              <Button asChild variant="outline"><a href={`/api/export/zip/${plan.id}`}><Archive /> ZIP</a></Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <details className={`${l.more} no-print`}>
+        <summary>Ещё по уроку: проверка качества, КТП, согласование, история</summary>
+        <div className={l.moreBody}>
+          <div className={l.tileRow}>
+            {isOwner && <Button asChild variant="outline"><Link href={`/plans/${plan.id}/history`}><HistoryIcon /> История</Link></Button>}
+            {user && <ClonePlanButton planId={plan.id} />}
+            {isOwner && <SaveTemplateButton plan={plan} />}
+            {user && !isOwner && plan.visibility === "public" && <ReportPlanButton planId={plan.id} />}
+          </div>
+          {isOwner && <QualityGate content={plan.content} planId={plan.id} language={plan.language} />}
+          {isOwner && <KtpBuilder planId={plan.id} topic={plan.content.topic || plan.title} isPro={canUseKtp} grade={plan.grade} subjectId={plan.subject_id} language={plan.language} />}
+          {isOwner && (approvalSchool?._id ? (
+            <SchoolApprovalPanel schoolId={approvalSchool._id.toString()} planId={plan.id} currentUpdatedAt={plan.updated_at} locale={approvalLocale} mode="owner" availableClasses={approvalClassNames} initialClassName={plan.content.header.grade} />
+          ) : (
+            <Card><CardHeader><CardTitle>{approvalCopy.queueTitle}</CardTitle><CardDescription>{approvalCopy.noSchool} <Link className="underline" href="/school">{approvalCopy.open}</Link></CardDescription></CardHeader></Card>
+          ))}
+          {isOwner && !plan.moderationHidden && <div className="max-w-xs"><QrCard url={`${siteUrl}/plans/${plan.id}`} title={plan.title} /></div>}
+          {isOwner && <div className={l.danger}><DeletePlanButton planId={plan.id} /></div>}
+        </div>
+      </details>
       {plan.moderationHidden && (
         <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 no-print">
           План скрыт модерацией и не виден другим пользователям. {isOwner && "Проверьте содержание и смените видимость после исправлений — скрытие снимет администратор."}

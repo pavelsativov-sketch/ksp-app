@@ -99,4 +99,4 @@ export function ThemeToggle() {
  * тему «dark» остался бы висеть на <html> (тест ловит это). color-scheme
  * выставлять не нужно — его задаёт CSS класса .dark (globals.css).
  */
-export const themeScript = `(function(){try{var s=localStorage.getItem(${JSON.stringify(STORAGE_KEY)});var t=(s==="dark"||s==="light")?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");var c=document.documentElement.classList;c.toggle("dark",t==="dark");}catch(e){}})();`;
+export const themeScript = `(function(){try{var s=localStorage.getItem(${JSON.stringify(STORAGE_KEY)});var t=s==="dark"?"dark":"light";var c=document.documentElement.classList;c.toggle("dark",t==="dark");}catch(e){}})();`;

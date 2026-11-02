@@ -8,11 +8,11 @@ export function PlantIllustration({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 260 220" fill="none" role="img" aria-label="Иллюстрация растения: корни, стебель и листья">
     <circle cx="130" cy="105" r="89" fill="#E9EEFF" />
     <path d="M45 169C91 161 170 161 215 169" stroke="#C9D6F5" strokeWidth="2" strokeLinecap="round" />
-    <path d="M129 173V71M129 120L93 98M129 142L165 116" stroke="#0f766e" strokeWidth="4" strokeLinecap="round" />
-    <path d="M128 111C96 112 74 91 76 67C104 69 124 85 128 111Z" fill="#14a39a" />
+    <path d="M129 173V71M129 120L93 98M129 142L165 116" stroke="#6d3bea" strokeWidth="4" strokeLinecap="round" />
+    <path d="M128 111C96 112 74 91 76 67C104 69 124 85 128 111Z" fill="#4a90f5" />
     <path d="M132 137C161 140 187 119 187 96C158 96 137 113 132 137Z" fill="#7AD7E6" />
-    <path d="M130 88C111 66 117 43 133 28C150 48 150 70 130 88Z" fill="#0f766e" />
-    <path d="M129 169L123 193M128 176L145 195M125 183L105 196M137 185L154 187" stroke="#0b5f58" strokeWidth="3" strokeLinecap="round" />
+    <path d="M130 88C111 66 117 43 133 28C150 48 150 70 130 88Z" fill="#6d3bea" />
+    <path d="M129 169L123 193M128 176L145 195M125 183L105 196M137 185L154 187" stroke="#5a2cd0" strokeWidth="3" strokeLinecap="round" />
     <path d="M86 78L119 103M175 107L141 130" stroke="#F8FBFF" strokeWidth="1.5" strokeLinecap="round" />
     <circle cx="197" cy="49" r="18" fill="#ffc857" /><path d="M199 18V13M225 48H231M177 27L173 23" stroke="#E3A93B" strokeWidth="2" strokeLinecap="round" />
     <path d="M62 128C57 135 54 139 54 143a8 8 0 0 0 16 0C70 139 67 135 62 128Z" fill="#f59bc4" />

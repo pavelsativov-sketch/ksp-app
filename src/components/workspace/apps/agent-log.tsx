@@ -18,7 +18,7 @@ export function AgentLogApp() {
 
   if (!task) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#071a19] p-6 text-center text-white/40">
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#0f0b26] p-6 text-center text-white/40">
         <Bot className="size-14 text-white/15" aria-hidden="true" />
         <p className="text-sm">Журнал появится, когда вы запустите задачу.</p>
         <p className="max-w-sm text-xs text-white/30">
@@ -29,7 +29,7 @@ export function AgentLogApp() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#0b1f1e]">
+    <div className="flex h-full flex-col bg-[#151034]">
       <AgentSession taskId={task.id} />
     </div>
   );

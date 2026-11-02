@@ -208,7 +208,7 @@ export function SchoolWorkspace({
   return (
     <div className="flex h-full min-h-0">
       {/* ── Левая колонка: чат ── */}
-      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#071a19] lg:flex lg:w-[clamp(320px,34vw,420px)]`}>
+      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#0f0b26] lg:flex lg:w-[clamp(320px,34vw,420px)]`}>
         <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5">
           <h1 className="text-sm font-bold text-slate-100">Педагогический ассистент</h1>
           <div className="flex items-center gap-1.5">
@@ -221,7 +221,7 @@ export function SchoolWorkspace({
                 <SquarePen className="size-3.5" /> Новая задача
               </button>
             )}
-            <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-teal-400/30 bg-teal-400/10 px-2 py-1 text-[11px] font-semibold text-teal-200 lg:hidden">
+            <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-400/10 px-2 py-1 text-[11px] font-semibold text-violet-200 lg:hidden">
               <LayoutGrid className="size-3.5" /> Открыть ОС
             </button>
           </div>
@@ -230,15 +230,15 @@ export function SchoolWorkspace({
         {/* Кто управляет — важно только пока задача идёт; без задачи панель не нужна. */}
         {running && controlLoaded && (
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 pb-2.5">
-            <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${control === "user" ? "text-teal-300" : "text-emerald-300"}`}>
-              <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-teal-400" : "animate-pulse bg-emerald-400"}`} />
+            <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${control === "user" ? "text-violet-300" : "text-emerald-300"}`}>
+              <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-violet-400" : "animate-pulse bg-emerald-400"}`} />
               {control === "user" ? "ВЫ УПРАВЛЯЕТЕ" : "ИИ РАБОТАЕТ"}
             </span>
             {control === "ai" ? (
               <button
                 type="button"
                 onClick={() => void setControl("user")}
-                className="rounded-lg border border-teal-500/40 bg-teal-500/10 px-3 py-1 text-[11px] font-semibold text-teal-300 hover:bg-teal-500/20"
+                className="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-[11px] font-semibold text-violet-300 hover:bg-violet-500/20"
               >
                 Забрать управление себе
               </button>
@@ -268,7 +268,7 @@ export function SchoolWorkspace({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3">
           {task ? (
             <>
-              <p className="ml-auto max-w-[88%] rounded-2xl rounded-br-sm bg-teal-600 px-3.5 py-2.5 text-sm leading-snug text-white shadow-lg shadow-teal-950/40">
+              <p className="ml-auto max-w-[88%] rounded-2xl rounded-br-sm bg-violet-600 px-3.5 py-2.5 text-sm leading-snug text-white shadow-lg shadow-violet-950/40">
                 {task.prompt ?? task.title}
               </p>
               <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
@@ -351,14 +351,14 @@ export function SchoolWorkspace({
         aria-label="Рабочая область ОС"
         className={
           fullscreen
-            ? "fixed inset-0 z-[80] flex min-w-0 flex-1 flex-col bg-[#071a19]"
+            ? "fixed inset-0 z-[80] flex min-w-0 flex-1 flex-col bg-[#0f0b26]"
             : `${mobileWorkspaceOpen ? "flex" : "hidden"} min-w-0 flex-1 flex-col lg:flex`
         }
       >
         {/* Переключатель панелей. Раньше это были просто кнопки без ролей:
             для скринридера они не читались как вкладки, и найти их можно было
             только по подписи. */}
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#071a19] px-2">
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#0f0b26] px-2">
         <div role="tablist" aria-label="Приложения рабочей области" className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
           {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button
@@ -387,7 +387,7 @@ export function SchoolWorkspace({
               <Plus className="size-4" />
             </button>
             {menuOpen && (
-              <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#0b1f1e] py-1 shadow-2xl">
+              <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#151034] py-1 shadow-2xl">
                 <button
                   type="button"
                   onClick={() => {
@@ -448,9 +448,9 @@ export function SchoolWorkspace({
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {tab === "os" && (
-                <span className={"hidden items-center gap-1.5 px-2 text-[10px] font-medium 2xl:inline-flex " + (running && control === 'ai' ? 'text-emerald-300' : 'text-teal-300')}
+                <span className={"hidden items-center gap-1.5 px-2 text-[10px] font-medium 2xl:inline-flex " + (running && control === 'ai' ? 'text-emerald-300' : 'text-violet-300')}
                 title={running && control === 'ai' ? 'AI управляет браузером' : running ? 'Вы управляете вручную' : 'Рабочий стол открыт'}>
-                <span className={"size-1.5 rounded-full " + (running && control === 'ai' ? 'bg-emerald-400 animate-pulse' : 'bg-teal-400')} />
+                <span className={"size-1.5 rounded-full " + (running && control === 'ai' ? 'bg-emerald-400 animate-pulse' : 'bg-violet-400')} />
                 {running && control === 'ai' ? 'ОС включена · AI работает' : running ? 'ОС включена · вы управляете' : 'ОС включена · ваш браузер'}
               </span>
             )}
@@ -509,7 +509,7 @@ export function SchoolWorkspace({
           {tab === "editor" && <CodeEditorApp requestedFile={editorFile} />}
           {tab === "log" && (
             task ? (
-              <div className="flex h-full flex-col bg-[#0b1f1e]">
+              <div className="flex h-full flex-col bg-[#151034]">
                 <AgentSession taskId={task.id} onStatus={setStatus} />
               </div>
             ) : (
@@ -521,7 +521,7 @@ export function SchoolWorkspace({
         </div>
 
         {/* Статус-бар: реальная машина и таймер работы задачи */}
-        <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-white/10 bg-[#071a19] px-3 text-[11px] text-slate-400">
+        <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-white/10 bg-[#0f0b26] px-3 text-[11px] text-slate-400">
           {/* Описание среды уже есть в общей строке состояния внизу страницы: здесь только уведомления. */}
           <span className="truncate">{notice ?? ""}</span>
           <span className="ml-auto inline-flex items-center gap-1.5">

@@ -154,7 +154,7 @@ export async function deletePlanAction(id: string) {
   } catch (error) {
     return { error: planMutationError(error, "Не удалось удалить план") };
   }
-  redirect("/dashboard");
+  redirect("/plans");
 }
 
 export interface TrashedPlanRow {

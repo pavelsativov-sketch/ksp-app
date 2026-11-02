@@ -1,9 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { sysInfo } from "@/lib/school/sys-info";
-import { SchoolRail } from "@/components/school/school-rail";
 import { SchoolStatusBar } from "@/components/school/school-status-bar";
-import { SchoolTopbar } from "@/components/school/school-topbar";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +16,10 @@ export default async function SchoolLayout({ children }: { children: React.React
   }
   const info = await sysInfo();
 
+  // Шапка и меню общие с кабинетом (AppShell); внизу остаётся только статус рабочей области.
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-[#080a10]">
-      <SchoolTopbar userName={user.fullName ?? ""} userEmail={user.email} />
-      <div className="flex min-h-0 flex-1">
-        <SchoolRail />
-        {/* Контентная часть остаётся в теме приложения: внутри /school живут
-            и тёмная рабочая область, и светлые страницы аналитики. */}
-        <div className="min-w-0 flex-1 overflow-y-auto bg-background text-foreground">{children}</div>
-      </div>
+    <div className="flex h-[calc(100dvh-76px)] min-h-0 flex-col overflow-hidden rounded-tl-2xl">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-background text-foreground">{children}</div>
       <SchoolStatusBar sysInfo={info} />
     </div>
   );

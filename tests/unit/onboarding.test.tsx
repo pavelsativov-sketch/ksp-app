@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { getPlanExamples } from "@/lib/plan-examples";
 import { kspContentSchema } from "@/lib/validation/ksp";
 import NewPlanPage from "@/app/plans/new/page";
-import DashboardPage from "@/app/dashboard/page";
+import PlansPage from "@/app/plans/page";
 
 const mocks = vi.hoisted(() => ({ user: vi.fn(), subjects: vi.fn(), getDb: vi.fn(), form: vi.fn(), filter: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: mocks.user }));
@@ -51,13 +51,13 @@ it("shows dashboard onboarding only for an empty archive, preserving PlansFilter
   const cursor = { sort: vi.fn(), limit: vi.fn(), toArray };
   cursor.sort.mockReturnValue(cursor); cursor.limit.mockReturnValue(cursor);
   mocks.getDb.mockResolvedValue({ collection: () => ({ find: () => cursor }) });
-  render(await DashboardPage());
+  render(await PlansPage({ searchParams: Promise.resolve({}) }));
   expect(screen.getByRole("link", { name: /Пример: Математика/ })).toBeTruthy();
   expect(mocks.filter).not.toHaveBeenCalled();
   cleanup();
   toArray.mockResolvedValue([{ _id: "plan", title: "Draft", grade: 5, is_draft: true, visibility: "private", updated_at: new Date(), content: {} }]);
   mocks.filter.mockReturnValue(null);
-  render(await DashboardPage());
+  render(await PlansPage({ searchParams: Promise.resolve({}) }));
   expect(mocks.filter.mock.calls[0][0]).toMatchObject({ showVisibility: true, showEditLink: true, plans: [{ is_draft: true }] });
   expect(screen.queryByRole("link", { name: /Пример: Математика/ })).toBeNull();
 });

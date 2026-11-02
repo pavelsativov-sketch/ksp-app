@@ -29,7 +29,7 @@ export function SchoolStatusBar({ sysInfo }: { sysInfo: string }) {
             : "bg-slate-600";
 
   return (
-    <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-white/10 bg-[#071a19] px-3 font-mono text-[11px] text-slate-400">
+    <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-white/10 bg-[#0f0b26] px-3 font-mono text-[11px] text-slate-400">
       <span className="truncate" title={sysInfo}>{sysInfo}</span>
       <span className="ml-auto inline-flex shrink-0 items-center gap-1.5" aria-live="polite">
         <span className={`inline-block size-1.5 rounded-full ${dotClass}`} aria-hidden />

@@ -10,11 +10,11 @@ export default function GlobalError({ unstable_retry, reset }: {
   return <html lang="ru"><body style={{ margin: 0, background: "#f8fbff", color: "#172447", fontFamily: "Arial, sans-serif" }}>
     <title>Временная ошибка — Mekty</title>
     <main role="alert" style={{ maxWidth: 600, margin: "12vh auto", padding: 24, textAlign: "center" }}>
-      <p style={{ color: "#0f766e", fontWeight: 700 }}>Mekty</p>
+      <p style={{ color: "#6d3bea", fontWeight: 700 }}>Mekty</p>
       <h1>Сервис временно недоступен</h1>
       <p style={{ lineHeight: 1.7 }}>Не удалось загрузить приложение. Попробуйте ещё раз через несколько секунд.</p>
-      <button onClick={() => (unstable_retry ?? reset)()} style={{ padding: "14px 24px", border: 0, borderRadius: 14, background: "#0f766e", color: "white", fontSize: 16, cursor: "pointer" }}>Попробовать снова</button>
-      <p><Link href="/" style={{ color: "#0f766e" }}>На главную</Link></p>
+      <button onClick={() => (unstable_retry ?? reset)()} style={{ padding: "14px 24px", border: 0, borderRadius: 14, background: "#6d3bea", color: "white", fontSize: 16, cursor: "pointer" }}>Попробовать снова</button>
+      <p><Link href="/" style={{ color: "#6d3bea" }}>На главную</Link></p>
     </main>
   </body></html>;
 }

@@ -113,8 +113,8 @@ export function AgentDock() {
         aria-label="Рабочая область агента"
         className={
           expanded
-            ? "fixed inset-4 z-[70] flex flex-col overflow-hidden rounded-2xl border border-border bg-[#0b1f1e] shadow-2xl md:inset-x-[8%] md:inset-y-[6%]"
-            : "fixed bottom-4 right-4 z-[70] flex h-[320px] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-[#0b1f1e] shadow-2xl"
+            ? "fixed inset-4 z-[70] flex flex-col overflow-hidden rounded-2xl border border-border bg-[#151034] shadow-2xl md:inset-x-[8%] md:inset-y-[6%]"
+            : "fixed bottom-4 right-4 z-[70] flex h-[320px] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-[#151034] shadow-2xl"
         }
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">

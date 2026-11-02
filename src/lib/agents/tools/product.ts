@@ -108,7 +108,8 @@ export const productTools = {
       const planId = inserted.insertedId.toString();
       await quota.reservation.finalize(true);
 
-      const file = await saveCopyToWorkspace(
+      // С сайта копия не нужна: она подняла бы песочницу и задержала ответ учителю.
+      const file = args.saveCopy === false ? undefined : await saveCopyToWorkspace(
         ctx.userId,
         `ksp-${slugForFile(input.topic)}.md`,
         kspToMarkdown({ title, grade: input.grade, language: input.language, content }),

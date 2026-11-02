@@ -136,7 +136,7 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
           </button>
         </div>
         {error && <p className="px-1 text-xs text-red-400">{error}</p>}
-        {notice && <p className="px-1 text-xs text-teal-300">{notice}</p>}
+        {notice && <p className="px-1 text-xs text-violet-300">{notice}</p>}
       </div>
     );
   }
@@ -192,7 +192,7 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
           </Button>
         </div>
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-        {notice && <p className="mt-2 text-xs text-teal-300">{notice}</p>}
+        {notice && <p className="mt-2 text-xs text-violet-300">{notice}</p>}
       </div>
 
       <details className="group">
