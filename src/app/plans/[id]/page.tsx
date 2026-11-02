@@ -9,6 +9,7 @@ import { PlanView } from "@/components/ksp/plan-view";
 import { PrintButton } from "@/components/ksp/print-button";
 import { ClonePlanButton } from "@/components/ksp/clone-plan-button";
 import { CrosswordButton, MemosButton, WorksheetButton } from "@/components/ksp/handouts-button";
+import { InteractiveButton, TeacherSpeechButton } from "@/components/ksp/materials-buttons";
 import { KtpBuilder } from "@/components/ksp/ktp-builder";
 import { LikeButton } from "@/components/ksp/like-button";
 import { ReportPlanButton } from "@/components/ksp/report-plan-button";
@@ -289,11 +290,16 @@ export default async function PlanViewPage({
               <Download /> Word
             </a>
           </Button>
-          <Button asChild variant="outline">
-            <a href={`/api/export/teacher-script/${plan.id}`}>
-              <ScrollText /> Слова педагога
-            </a>
-          </Button>
+          {user ? (
+            <TeacherSpeechButton planId={plan.id} />
+          ) : (
+            <Button asChild variant="outline">
+              <a href={`/api/export/teacher-script/${plan.id}`}>
+                <ScrollText /> Слова педагога
+              </a>
+            </Button>
+          )}
+          {isOwner && <InteractiveButton planId={plan.id} />}
           <Button asChild variant="outline">
             <a href={`/api/export/pptx/${plan.id}`}>
               <Presentation /> Презентация
