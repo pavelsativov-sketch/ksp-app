@@ -13,7 +13,7 @@ const CONNECTORS = [
     description: "Дэшборд учителя, КТП, расписание, журнал и отметка о проведении уроков. Вход через рабочий браузер — пароль не покидает ваш аккаунт.",
     url: "https://www.bilimclass.kz/2026/frontoffice/dashboard",
     icon: BookOpen,
-    color: "from-sky-500 to-blue-600",
+    color: "from-teal-500 to-teal-600",
   },
   {
     name: "Kundelik.kz",
@@ -27,7 +27,7 @@ const CONNECTORS = [
     description: "Национальная образовательная база данных. Статистика контингента, педагогических работников и организаций.",
     url: "https://nobd.edu.kz/login",
     icon: Globe,
-    color: "from-violet-500 to-indigo-600",
+    color: "from-teal-500 to-teal-600",
   },
 ];
 

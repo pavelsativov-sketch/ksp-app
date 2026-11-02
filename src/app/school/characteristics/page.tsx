@@ -51,7 +51,7 @@ export default function CharacteristicsPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 md:px-6">
       <header>
-        <p className="editorial-kicker text-indigo-400">Документация классного руководителя</p>
+        <p className="editorial-kicker text-teal-400">Документация классного руководителя</p>
         <h1 className="editorial-display mt-1 text-3xl font-bold">Генератор характеристик</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Создание официальных психолого-педагогических характеристик за 1 минуту: для ПМПК, органов опеки, аттестации, слабоуспевающих, одарённых детей или характеристики классного коллектива.
@@ -72,7 +72,7 @@ export default function CharacteristicsPage() {
                   type="text"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-teal-500"
                 />
               </div>
               <div>
@@ -81,7 +81,7 @@ export default function CharacteristicsPage() {
                   type="text"
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-teal-500"
                 />
               </div>
             </div>
@@ -91,7 +91,7 @@ export default function CharacteristicsPage() {
               <select
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-teal-500"
               >
                 <option value="Для психолого-медико-педагогической комиссии (ПМПК)">Для комиссии ПМПК</option>
                 <option value="Для комиссии по делам несовершеннолетних / ВШУ">Для комиссии по делам несовершеннолетних (ВШУ)</option>
@@ -109,7 +109,7 @@ export default function CharacteristicsPage() {
                 value={academic}
                 onChange={(e) => setAcademic(e.target.value)}
                 rows={2}
-                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-indigo-500"
+                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-teal-500"
               />
             </div>
 
@@ -119,7 +119,7 @@ export default function CharacteristicsPage() {
                 value={behavior}
                 onChange={(e) => setBehavior(e.target.value)}
                 rows={2}
-                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-indigo-500"
+                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-teal-500"
               />
             </div>
 
@@ -129,14 +129,14 @@ export default function CharacteristicsPage() {
                 value={social}
                 onChange={(e) => setSocial(e.target.value)}
                 rows={2}
-                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-indigo-500"
+                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-teal-500"
               />
             </div>
 
             <Button
               onClick={handleGenerate}
               disabled={loading || !studentName.trim()}
-              className="w-full gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 font-semibold text-white shadow-lg hover:opacity-90"
+              className="w-full gap-2 bg-gradient-to-r from-teal-500 to-teal-600 font-semibold text-white shadow-lg hover:opacity-90"
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {loading ? "Составляю характеристику..." : "Составить характеристику"}
@@ -179,7 +179,7 @@ export default function CharacteristicsPage() {
             {loading && (
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
                 <div className="space-y-3">
-                  <Loader2 className="mx-auto size-8 animate-spin text-indigo-400" />
+                  <Loader2 className="mx-auto size-8 animate-spin text-teal-400" />
                   <p className="text-sm font-medium text-slate-200">ИИ формирует характеристику...</p>
                   <p className="text-xs text-muted-foreground/70">Подбираются педагогические формулировки и психологические выводы</p>
                 </div>

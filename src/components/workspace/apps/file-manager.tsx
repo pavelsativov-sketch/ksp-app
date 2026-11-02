@@ -225,7 +225,7 @@ export function FileManagerApp() {
             onChange={(e) => setFilter(e.target.value)}
             aria-label="Найти файл"
             placeholder={`Найти среди ${files.length} файлов…`}
-            className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 outline-none placeholder:text-white/30 focus:border-sky-400/50"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 outline-none placeholder:text-white/30 focus:border-teal-400/50"
           />
         </div>
       )}
@@ -283,12 +283,12 @@ export function FileManagerApp() {
       {selected && (
         <div className="flex max-h-[55%] shrink-0 flex-col border-t border-white/10 bg-black/40">
           <div className="flex shrink-0 items-center gap-2 px-3 py-1.5">
-            <FileText className="size-3.5 text-sky-300" />
+            <FileText className="size-3.5 text-teal-300" />
             <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{selected.name}</span>
             <button
               type="button"
               onClick={() => openInEditor(selected.name)}
-              className="rounded px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-white/10"
+              className="rounded px-1.5 py-0.5 text-[10px] text-teal-300 hover:bg-white/10"
             >
               В редактор
             </button>
@@ -354,10 +354,10 @@ function ago(iso: string): string {
 function FileIcon({ name }: { name: string }) {
   const ext = name.split('.').pop()?.toLowerCase();
   if (['png', 'jpg', 'jpeg', 'gif'].includes(ext ?? '')) return <ImageIcon className="size-4 text-cyan-400" />;
-  if (['mp3', 'wav'].includes(ext ?? '')) return <Music className="size-4 text-purple-400" />;
+  if (['mp3', 'wav'].includes(ext ?? '')) return <Music className="size-4 text-teal-400" />;
   if (['mp4', 'webm'].includes(ext ?? '')) return <Film className="size-4 text-pink-400" />;
   if (['zip', 'rar', '7z'].includes(ext ?? '')) return <Archive className="size-4 text-yellow-500" />;
   if (['js', 'ts', 'py', 'json', 'sh', 'bat', 'cmd'].includes(ext ?? '')) return <Code className="size-4 text-emerald-400" />;
-  if (['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext ?? '')) return <FileText className="size-4 text-sky-300" />;
+  if (['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext ?? '')) return <FileText className="size-4 text-teal-300" />;
   return <File className="size-4 text-gray-400" />;
 }

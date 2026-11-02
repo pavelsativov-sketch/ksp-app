@@ -178,7 +178,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   if (phase === "lobby") {
     return (
       <CenterScreen>
-        <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-3" />
+        <Loader2 className="w-10 h-10 animate-spin text-teal-600 mb-3" />
         <p className="text-lg font-medium">Привет, {name}!</p>
         <p className="text-sm text-slate-500">Ждём начала квиза…</p>
       </CenterScreen>
@@ -216,7 +216,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
         {myEntry ? (
           <>
             <p className="text-lg">
-              Ваше место: <span className="font-bold text-indigo-700">#{myRank}</span>
+              Ваше место: <span className="font-bold text-teal-700">#{myRank}</span>
             </p>
             <p className="text-sm text-slate-500">Очки: {myEntry.score}</p>
           </>
@@ -231,7 +231,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
                 key={e.studentId}
                 className={
                   "px-3 py-2 text-sm flex justify-between border-b last:border-b-0 " +
-                  (e.studentId === studentId ? "bg-indigo-50 font-semibold" : "")
+                  (e.studentId === studentId ? "bg-teal-50 font-semibold" : "")
                 }
               >
                 <span>
@@ -260,7 +260,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
             <span
               className={
                 "font-mono font-bold text-xl " +
-                (seconds <= 5 ? "text-red-600" : "text-indigo-700")
+                (seconds <= 5 ? "text-red-600" : "text-teal-700")
               }
             >
               ⏱ {seconds}
@@ -315,7 +315,7 @@ function AnswerForm({
               className="justify-start text-left h-auto py-4 whitespace-normal"
               onClick={() => onSubmit({ type: "MCQ", selectedIndex: i })}
             >
-              <span className="font-bold text-indigo-600 mr-2">
+              <span className="font-bold text-teal-600 mr-2">
                 {String.fromCharCode(0x0410 + i)}.
               </span>
               {opt}

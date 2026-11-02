@@ -57,11 +57,11 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
       {/* Start/exit control stays explicit; an unlabeled icon was easy to miss. */}
       <div className="flex w-52 items-center gap-1">
         <Link href="/school" aria-label="Главное меню школы" className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-semibold text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white" title="Вернуться в главное меню школы">
-          <LayoutGrid className="size-4 text-blue-300" aria-hidden="true" />
+          <LayoutGrid className="size-4 text-teal-300" aria-hidden="true" />
           <span>Главное меню</span>
         </Link>
         <button type="button" onClick={minimizeAll} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white" title="Свернуть окна и показать рабочий стол" aria-label="Показать рабочий стол">
-          <MonitorPlay className="size-4 text-sky-300" aria-hidden="true" />
+          <MonitorPlay className="size-4 text-teal-300" aria-hidden="true" />
           <span>Рабочий стол</span>
         </button>
       </div>
@@ -81,7 +81,7 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
             >
               <app.Icon className={`w-5 h-5 transition-colors ${isOpen ? 'text-white' : 'text-white/50'}`} strokeWidth={1.8} />
               {isOpen && (
-                <div className={`absolute -bottom-0.5 rounded-full transition-all ${isActive ? 'w-4 h-[3px] bg-blue-400' : 'w-1.5 h-[3px] bg-white/40'}`} />
+                <div className={`absolute -bottom-0.5 rounded-full transition-all ${isActive ? 'w-4 h-[3px] bg-teal-400' : 'w-1.5 h-[3px] bg-white/40'}`} />
               )}
             </button>
           );
@@ -116,7 +116,7 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
             title={w.title}
           >
             {w.title}
-            <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 rounded-full transition-all ${activeWindowId === w.id ? 'w-4 h-[3px] bg-blue-400' : 'w-1.5 h-[3px] bg-white/40'}`} />
+            <div className={`absolute -bottom-0.5 left-1/2 -translate-x-1/2 rounded-full transition-all ${activeWindowId === w.id ? 'w-4 h-[3px] bg-teal-400' : 'w-1.5 h-[3px] bg-white/40'}`} />
           </button>
         ))}
       </div>
@@ -125,7 +125,7 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
       <div className="flex items-center gap-2 w-52 justify-end">
         <button
           onClick={onToggleCopilot ?? (() => handleDockClick(DOCK_APPS[0]))}
-          className={`h-7 px-2 rounded flex items-center gap-1 transition-colors border ${copilotOpen ? 'bg-purple-500/20 border-purple-500/30 text-purple-300' : 'hover:bg-white/[0.08] border-transparent text-white/50'}`}
+          className={`h-7 px-2 rounded flex items-center gap-1 transition-colors border ${copilotOpen ? 'bg-teal-500/20 border-teal-500/30 text-teal-300' : 'hover:bg-white/[0.08] border-transparent text-white/50'}`}
           title="Журнал агента"
           aria-label="Открыть журнал агента"
         >

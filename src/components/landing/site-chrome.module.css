@@ -314,7 +314,7 @@
 }
 
 .dark .navLink:hover {
-  color: #7b93ff;
+  color: #4fd1c5;
   background: #1c2540;
 }
 
@@ -325,14 +325,14 @@
 }
 
 .dark .logout:hover {
-  color: #7b93ff;
+  color: #4fd1c5;
   background: #1c2540;
   border-color: #465674;
 }
 
 .dark .menuToggle {
   background: #1c2540;
-  color: #7b93ff;
+  color: #4fd1c5;
 }
 
 .dark .menuToggle:hover,
@@ -374,7 +374,7 @@
 }
 
 .header {
-  border-bottom: 1px solid rgba(255, 184, 28, 0.28);
+  border-bottom: 1px solid rgba(15, 118, 110, 0.28);
   background: rgba(251, 248, 241, 0.8);
 }
 
@@ -418,7 +418,7 @@
 
 .dark .header {
   background: rgba(10, 15, 32, 0.82);
-  border-bottom-color: rgba(255, 184, 28, 0.22);
+  border-bottom-color: rgba(15, 118, 110, 0.22);
 }
 
 /* ---------- Главное меню сайта: не ломается на ноутбуках ---------- */
@@ -476,5 +476,5 @@
 
 .menuToggle:hover,
 .mobileMenu[open] .menuToggle {
-  background: linear-gradient(135deg, #ffe08a, #ffc23a);
+  background: #4fd1c5;
 }

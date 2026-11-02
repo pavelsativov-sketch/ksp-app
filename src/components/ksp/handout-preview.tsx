@@ -559,7 +559,7 @@ function WorksheetView({
       {sheet.intro && <p className="mt-1 text-sm text-center text-slate-600 mb-4 italic">{sheet.intro}</p>}
       
       {sheet.learningObjectives && sheet.learningObjectives.length > 0 && (
-        <div className="mb-6 p-3 bg-blue-50/50 border border-blue-100 rounded text-sm text-blue-900">
+        <div className="mb-6 p-3 bg-teal-50/50 border border-teal-100 rounded text-sm text-teal-900">
           <strong className="block mb-1">{kazakh ? "Оқу мақсаттары:" : "Цели обучения:"}</strong>
           <ul className="list-disc pl-5">
             {sheet.learningObjectives.map((obj, i) => (
@@ -573,7 +573,7 @@ function WorksheetView({
         {sheet.tasks.map((task, i) => {
           return (
           <div key={i} className="overflow-hidden rounded-xl border border-[#B9C6E4] bg-white shadow-sm print:shadow-none print:mb-6" style={{ marginBottom: `${(settings.spacing - 1) * 20}px` }}>
-            <div className="flex items-center justify-between gap-2 border-b border-[#B9C6E4] bg-gradient-to-r from-sky-100 to-indigo-100 px-4 py-2 font-bold text-sm text-[#2B2D83]">
+            <div className="flex items-center justify-between gap-2 border-b border-[#B9C6E4] bg-gradient-to-r from-teal-100 to-teal-100 px-4 py-2 font-bold text-sm text-[#2B2D83]">
               <span>
                 {copy.task} {i + 1}. {worksheetTypeLabel(task.type, contentLanguage)} <span className="font-normal text-slate-600">({task.points} б.)</span>
               </span>
@@ -1001,7 +1001,7 @@ export function HandoutPreview({
               type="button"
               onClick={() => downloadDoc(true)}
               disabled={printing}
-              className="inline-flex items-center gap-1.5 rounded-md bg-white text-[#2B2D83] px-3 py-1.5 text-sm font-medium hover:bg-sky-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md bg-white text-[#2B2D83] px-3 py-1.5 text-sm font-medium hover:bg-teal-100 disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
               {printing ? h.building : h.teacherBtn}

@@ -153,13 +153,13 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   return (
     <div className="flex h-full flex-col bg-[#141225] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-1.5">
-        <FileCode className="size-3.5 shrink-0 text-sky-300" />
+        <FileCode className="size-3.5 shrink-0 text-teal-300" />
         {names.length > 0 ? (
           <select
             aria-label="Файл в редакторе"
             value={open?.name ?? ""}
             onChange={(e) => { if (e.target.value) void openFile(e.target.value); }}
-            className="min-w-0 max-w-[55%] flex-1 truncate rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-slate-200 outline-none focus:border-sky-400/50"
+            className="min-w-0 max-w-[55%] flex-1 truncate rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-slate-200 outline-none focus:border-teal-400/50"
           >
             {!open && <option value="">Выберите файл…</option>}
             {names.map((name) => <option key={name} value={name}>{name}</option>)}

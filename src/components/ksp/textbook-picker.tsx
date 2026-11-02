@@ -239,7 +239,7 @@ export function TextbookPicker({
     return (
       <div className="text-xs text-slate-500">
         Нет загруженных учебников.{" "}
-        <Link href="/textbooks" className="text-sky-600 hover:underline">
+        <Link href="/textbooks" className="text-teal-600 hover:underline">
           Каталог Арман-ПВ и загрузка PDF
         </Link>{" "}
         — AI будет цитировать учебник при генерации плана.
@@ -312,7 +312,7 @@ export function TextbookPicker({
             PDF
           </a>
         )}
-        <Link href="/textbooks" className="text-xs text-sky-600 hover:underline whitespace-nowrap">
+        <Link href="/textbooks" className="text-xs text-teal-600 hover:underline whitespace-nowrap">
           Каталог Арман-ПВ
         </Link>
       </div>
@@ -338,7 +338,7 @@ export function TextbookPicker({
       )}
 
       {importingArmanId && (
-        <div className="flex items-center gap-1.5 text-xs text-sky-700" role="status">
+        <div className="flex items-center gap-1.5 text-xs text-teal-700" role="status">
           <Loader2 className="w-3 h-3 animate-spin" />
           Скачиваем и индексируем учебник с armanpv.com…
         </div>

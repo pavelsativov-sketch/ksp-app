@@ -127,7 +127,7 @@ export function TerminalApp() {
   return (
     <section className="flex h-full min-h-64 flex-col bg-[#0c0c14] font-mono text-[13px] text-white" aria-label="Терминал">
       <header className="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-2 text-[11px] text-white/55">
-        <TerminalSquare className="size-4 text-sky-300" aria-hidden="true" />
+        <TerminalSquare className="size-4 text-teal-300" aria-hidden="true" />
         <span className="truncate">{statusText || (info ? `${SHELL.label} ${info.status ?? "готов"} · ${info.cwd ?? ""}` : "")}</span>
         {entries.length > 0 && (
           <button

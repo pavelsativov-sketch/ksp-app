@@ -221,7 +221,7 @@ export function SchoolWorkspace({
                 <SquarePen className="size-3.5" /> Новая задача
               </button>
             )}
-            <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] font-semibold text-sky-200 lg:hidden">
+            <button type="button" onClick={() => { setTab("os"); setMobileWorkspaceOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-teal-400/30 bg-teal-400/10 px-2 py-1 text-[11px] font-semibold text-teal-200 lg:hidden">
               <LayoutGrid className="size-3.5" /> Открыть ОС
             </button>
           </div>
@@ -230,15 +230,15 @@ export function SchoolWorkspace({
         {/* Кто управляет — важно только пока задача идёт; без задачи панель не нужна. */}
         {running && controlLoaded && (
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 pb-2.5">
-            <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${control === "user" ? "text-sky-300" : "text-emerald-300"}`}>
-              <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-sky-400" : "animate-pulse bg-emerald-400"}`} />
+            <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${control === "user" ? "text-teal-300" : "text-emerald-300"}`}>
+              <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-teal-400" : "animate-pulse bg-emerald-400"}`} />
               {control === "user" ? "ВЫ УПРАВЛЯЕТЕ" : "ИИ РАБОТАЕТ"}
             </span>
             {control === "ai" ? (
               <button
                 type="button"
                 onClick={() => void setControl("user")}
-                className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20"
+                className="rounded-lg border border-teal-500/40 bg-teal-500/10 px-3 py-1 text-[11px] font-semibold text-teal-300 hover:bg-teal-500/20"
               >
                 Забрать управление себе
               </button>
@@ -268,7 +268,7 @@ export function SchoolWorkspace({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3">
           {task ? (
             <>
-              <p className="ml-auto max-w-[88%] rounded-2xl rounded-br-sm bg-sky-600 px-3.5 py-2.5 text-sm leading-snug text-white shadow-lg shadow-sky-950/40">
+              <p className="ml-auto max-w-[88%] rounded-2xl rounded-br-sm bg-teal-600 px-3.5 py-2.5 text-sm leading-snug text-white shadow-lg shadow-teal-950/40">
                 {task.prompt ?? task.title}
               </p>
               <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
@@ -448,9 +448,9 @@ export function SchoolWorkspace({
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {tab === "os" && (
-                <span className={"hidden items-center gap-1.5 px-2 text-[10px] font-medium 2xl:inline-flex " + (running && control === 'ai' ? 'text-emerald-300' : 'text-sky-300')}
+                <span className={"hidden items-center gap-1.5 px-2 text-[10px] font-medium 2xl:inline-flex " + (running && control === 'ai' ? 'text-emerald-300' : 'text-teal-300')}
                 title={running && control === 'ai' ? 'AI управляет браузером' : running ? 'Вы управляете вручную' : 'Рабочий стол открыт'}>
-                <span className={"size-1.5 rounded-full " + (running && control === 'ai' ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400')} />
+                <span className={"size-1.5 rounded-full " + (running && control === 'ai' ? 'bg-emerald-400 animate-pulse' : 'bg-teal-400')} />
                 {running && control === 'ai' ? 'ОС включена · AI работает' : running ? 'ОС включена · вы управляете' : 'ОС включена · ваш браузер'}
               </span>
             )}

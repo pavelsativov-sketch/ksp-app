@@ -79,7 +79,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <XCircle className="size-5 shrink-0 text-red-600 dark:text-red-400" />
             )}
             {t.type === "info" && (
-              <Info className="size-5 shrink-0 text-blue-600 dark:text-blue-400" />
+              <Info className="size-5 shrink-0 text-teal-600 dark:text-teal-400" />
             )}
             <span className="text-sm font-medium">{t.message}</span>
             <button
