@@ -18,7 +18,7 @@
 
 .header.scrolled {
   box-shadow: 0 4px 24px rgba(48, 76, 145, 0.08);
-  border-bottom-color: rgba(66, 99, 235, 0.12);
+  border-bottom-color: rgba(15, 118, 110, 0.12);
 }
 
 .headerInner,
@@ -54,9 +54,9 @@
   height: 44px;
   flex-shrink: 0;
   border-radius: 14px;
-  background: linear-gradient(135deg, #4263eb, #25c4db);
+  background: linear-gradient(135deg, #0f766e, #14a39a);
   color: #fff;
-  box-shadow: 0 9px 22px rgba(66, 99, 235, 0.28);
+  box-shadow: 0 9px 22px rgba(15, 118, 110, 0.28);
   transform: rotate(-5deg);
   transition: transform 0.3s ease;
 }
@@ -80,7 +80,7 @@
 }
 
 .brandSuffix {
-  color: #4263eb;
+  color: #0f766e;
 }
 
 .tagline {
@@ -117,7 +117,7 @@
 }
 
 .navLink:hover {
-  color: #4263eb;
+  color: #0f766e;
   background: #edf1ff;
 }
 
@@ -126,13 +126,13 @@
   padding-inline: 20px;
   border-radius: 14px;
   color: #fff;
-  background: #4263eb;
-  box-shadow: 0 10px 22px rgba(66, 99, 235, 0.22);
+  background: #0f766e;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.22);
 }
 
 .signup:hover {
-  background: #2847c7;
-  box-shadow: 0 15px 28px rgba(66, 99, 235, 0.3);
+  background: #0b5f58;
+  box-shadow: 0 15px 28px rgba(15, 118, 110, 0.3);
   transform: translateY(-2px);
 }
 
@@ -144,7 +144,7 @@
 }
 
 .logout:hover {
-  color: #4263eb;
+  color: #0f766e;
   background: #edf1ff;
   border-color: #c9d6f5;
 }
@@ -154,7 +154,7 @@
 .signup:focus-visible,
 .logout:focus-visible,
 .menuToggle:focus-visible {
-  outline: 2px solid #4263eb;
+  outline: 2px solid #0f766e;
   outline-offset: 4px;
 }
 
@@ -173,7 +173,7 @@
   border: 0;
   border-radius: 12px;
   background: #edf1ff;
-  color: #4263eb;
+  color: #0f766e;
   transition: background-color 0.2s ease;
 }
 
@@ -301,7 +301,7 @@
 
 .dark .header.scrolled {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-  border-bottom-color: rgba(66, 99, 235, 0.2);
+  border-bottom-color: rgba(15, 118, 110, 0.2);
 }
 
 .dark .footer {
@@ -380,12 +380,12 @@
 
 .header.scrolled {
   box-shadow: 0 6px 28px rgba(60, 50, 20, 0.1);
-  border-bottom-color: rgba(255, 184, 28, 0.5);
+  border-bottom-color: rgba(15, 118, 110, 0.3);
 }
 
 .brandIcon {
-  background: linear-gradient(135deg, #2f4cf5 0%, #00b4d8 100%);
-  box-shadow: 0 9px 24px rgba(47, 76, 245, 0.32), 0 0 0 2px rgba(255, 184, 28, 0.55);
+  background: linear-gradient(135deg, #0f766e 0%, #14a39a 100%);
+  box-shadow: 0 9px 24px rgba(15, 118, 110, 0.32), 0 0 0 2px rgba(255, 184, 28, 0.55);
 }
 
 .brandName {
@@ -396,19 +396,19 @@
 }
 
 .navLink:hover {
-  color: #2f4cf5;
+  color: #0f766e;
   background: #fff3d2;
 }
 
 .signup {
-  color: #1b1300;
-  background: linear-gradient(135deg, #ffd45e 0%, #ffb81c 55%, #ff9a2e 100%);
-  box-shadow: 0 10px 26px rgba(255, 184, 28, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: #ffffff;
+  background: #0f766e;
+  box-shadow: 0 10px 26px rgba(16, 48, 47, 0.18);
 }
 
 .signup:hover {
-  background: linear-gradient(135deg, #ffe08a 0%, #ffc23a 55%, #ffa646 100%);
-  box-shadow: 0 15px 34px rgba(255, 184, 28, 0.5);
+  background: #0b5f58;
+  box-shadow: 0 15px 34px rgba(15, 118, 110, 0.3);
 }
 
 .dark .header,
@@ -442,7 +442,7 @@
 .mobileNav {
   gap: 2px;
   padding: 10px;
-  border-color: rgba(255, 184, 28, 0.35);
+  border-color: rgba(15, 118, 110, 0.25);
   border-radius: 22px;
   background: linear-gradient(165deg, rgba(10, 22, 80, 0.97), rgba(6, 12, 38, 0.98));
   box-shadow: 0 30px 80px rgba(0, 8, 40, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -458,8 +458,8 @@
 }
 
 .mobileNav .navLink:hover {
-  color: #1b1300;
-  background: linear-gradient(135deg, #ffd45e, #ffb81c);
+  color: #ffffff;
+  background: #0f766e;
 }
 
 .mobileNav .logout {
@@ -469,9 +469,9 @@
 }
 
 .menuToggle {
-  color: #1b1300;
-  background: linear-gradient(135deg, #ffd45e, #ffb81c);
-  box-shadow: 0 8px 20px rgba(255, 184, 28, 0.35);
+  color: #ffffff;
+  background: #0f766e;
+  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.25);
 }
 
 .menuToggle:hover,

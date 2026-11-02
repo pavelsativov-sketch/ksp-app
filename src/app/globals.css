@@ -2,38 +2,38 @@
 
 :root {
   /* Mekty application palette, shared by controls and internal pages. */
-  --ink: #2f4cf5;
-  --ink-hover: #1f37c9;
-  --cyan: #25c4db;
-  --cyan-soft: #e3f9fc;
-  --cyan-foreground: #08798c;
+  --ink: #0f766e;
+  --ink-hover: #0b5f58;
+  --cyan: #14a39a;
+  --cyan-soft: #def3f0;
+  --cyan-foreground: #0b5f58;
   --yellow: #ffb81c;
   --yellow-soft: #fff4d5;
   --yellow-foreground: #795516;
-  --background: #fbf8f1;
-  --foreground: #121a3a;
+  --background: #f4f8f8;
+  --foreground: #10302f;
   --surface: #ffffff;
-  --muted: #f4efe4;
-  --muted-foreground: #646c86;
+  --muted: #eaf1f1;
+  --muted-foreground: #4a6a68;
   --graphite: var(--muted-foreground);
-  --line: #eee7d8;
-  --border: #e6dfd0;
-  --border-strong: #a9a794;
-  --primary-soft: #eaeeff;
-  --primary-soft-hover: #dae1ff;
+  --line: #e1ecec;
+  --border: #d5e3e2;
+  --border-strong: #8fa9a7;
+  --primary-soft: #def3f0;
+  --primary-soft-hover: #cbe8e3;
   --font-body: var(--font-manrope), Arial, sans-serif;
-  --mekty-font-heading: var(--font-nunito), Arial, sans-serif;
+  --mekty-font-heading: var(--font-manrope), Arial, sans-serif;
   /* Крупные заголовки лендинга и заставок: см. layout.tsx */
-  --font-display: var(--font-unbounded), var(--font-nunito), Arial, sans-serif;
-  --sky: #00b4d8;
+  --font-display: var(--font-manrope), Arial, sans-serif;
+  --sky: #14a39a;
   --sun: #ffb81c;
-  --night: #060c26;
-  --night-2: #0a1650;
-  --mekty-radius-control: 0.875rem;
-  --mekty-radius-card: 1.5rem;
-  --mekty-shadow-card: 0 12px 35px rgb(48 76 145 / 8%);
-  --mekty-shadow-popover: 0 24px 70px rgb(48 76 145 / 13%);
-  --mekty-shadow-button: 0 8px 22px rgb(47 76 245 / 22%);
+  --night: #06201f;
+  --night-2: #0b3a37;
+  --mekty-radius-control: 0.5rem;
+  --mekty-radius-card: 0.75rem;
+  --mekty-shadow-card: 0 1px 2px rgb(16 48 47 / 6%);
+  --mekty-shadow-popover: 0 12px 32px rgb(16 48 47 / 14%);
+  --mekty-shadow-button: 0 1px 2px rgb(16 48 47 / 12%);
   --success: #2f5b4f;
   --warning: #9b651f;
   --danger: #a84023;
@@ -98,21 +98,21 @@ html { scroll-behavior: smooth; }
    Флаг ставится на <html> скриптом до отрисовки, иначе при перезагрузке
    страница мигнёт светлой. */
 .dark {
-  --background: #0d1220;
-  --foreground: #e6ecf7;
-  --surface: #151c2e;
-  --muted: #1c2437;
-  --muted-foreground: #9aa8c2;
-  --line: #232d45;
-  --border: #2b3652;
-  --border-strong: #465674;
-  --primary-soft: #1c2540;
-  --primary-soft-hover: #253154;
+  --background: #0b1a19;
+  --foreground: #e3f1ef;
+  --surface: #112423;
+  --muted: #17302e;
+  --muted-foreground: #9bbab7;
+  --line: #1e3a38;
+  --border: #28494a;
+  --border-strong: #46706f;
+  --primary-soft: #14383a;
+  --primary-soft-hover: #1b4a4b;
 
-  --ink: #7b93ff;
-  --ink-hover: #9aabff;
-  --cyan-soft: #10303a;
-  --cyan-foreground: #5fd8e8;
+  --ink: #4fd1c5;
+  --ink-hover: #7ae0d6;
+  --cyan-soft: #123836;
+  --cyan-foreground: #7ae0d6;
   --yellow-soft: #3a2f11;
   --yellow-foreground: #f0c96b;
   --success: #6fc3ab;
@@ -121,7 +121,7 @@ html { scroll-behavior: smooth; }
   --danger-soft: #351f1c;
   --pen: #f87171;
 
-  --mekty-shadow-card: 0 12px 35px rgb(0 0 0 / 35%);
+  --mekty-shadow-card: 0 1px 2px rgb(0 0 0 / 40%);
   --mekty-shadow-popover: 0 24px 70px rgb(0 0 0 / 50%);
   --mekty-shadow-button: 0 8px 20px rgb(0 0 0 / 35%);
 
@@ -375,10 +375,10 @@ body {
   isolation: isolate;
   color: #f4f6ff;
   background:
-    radial-gradient(60% 50% at 18% 12%, rgb(0 180 216 / 28%) 0%, transparent 60%),
-    radial-gradient(55% 45% at 88% 22%, rgb(139 92 246 / 30%) 0%, transparent 62%),
-    radial-gradient(50% 40% at 70% 108%, rgb(255 184 28 / 22%) 0%, transparent 60%),
-    linear-gradient(165deg, var(--night) 0%, var(--night-2) 62%, #0d2f78 100%);
+    radial-gradient(60% 50% at 18% 12%, rgb(20 163 154 / 30%) 0%, transparent 60%),
+    radial-gradient(55% 45% at 88% 22%, rgb(15 118 110 / 30%) 0%, transparent 62%),
+    radial-gradient(50% 40% at 70% 108%, rgb(255 184 28 / 12%) 0%, transparent 60%),
+    linear-gradient(165deg, var(--night) 0%, var(--night-2) 62%, #0e4a46 100%);
 }
 .sky-night::before {
   content: "";
