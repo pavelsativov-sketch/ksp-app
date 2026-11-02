@@ -151,7 +151,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#141225] text-slate-200">
+    <div className="flex h-full flex-col bg-[#0b1f1e] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-1.5">
         <FileCode className="size-3.5 shrink-0 text-teal-300" />
         {names.length > 0 ? (

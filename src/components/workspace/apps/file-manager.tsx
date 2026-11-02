@@ -179,7 +179,7 @@ export function FileManagerApp() {
   const visibleFiles = (files ?? []).filter((f) => f.name.toLowerCase().includes(filter.trim().toLowerCase()));
 
   return (
-    <div className="flex h-full flex-col bg-[#141225] text-slate-200">
+    <div className="flex h-full flex-col bg-[#0b1f1e] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
         <Terminal className="size-3.5 text-emerald-400" />
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/50">

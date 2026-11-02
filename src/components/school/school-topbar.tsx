@@ -101,7 +101,7 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
   }
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0b0d13] px-3">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-white/10 bg-[#071a19] px-3">
       <Link href="/school" className="flex shrink-0 items-center gap-2">
         <span className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 text-sm font-black text-white">M</span>
         <span className="hidden items-baseline gap-1 text-sm font-semibold text-slate-100 sm:flex">

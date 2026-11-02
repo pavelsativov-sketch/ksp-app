@@ -7,6 +7,7 @@ import { buildCheckpoint, compactMessages, parseCheckpoint, repairTranscript, ty
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
 import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
 import { appBaseUrl, decideContinuation, MAX_CONTINUATIONS, triggerContinuation } from './continuation';
+import { buildPartialReport } from './partial-report';
 
 const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekty (сервис для учителей Казахстана).
 Файлы пользователя сохраняются в отдельной рабочей области аккаунта. Не пытайся обращаться
@@ -502,13 +503,18 @@ ${bilimClassInstructions()}` });
       const error = incompleteReason === 'steps'
         ? `Достигнут лимит шагов (${MAX_LOOPS}), а задача не завершена. Уточните поручение или разбейте его на части.`
         : 'Время сессии агента вышло до завершения задачи. Запустите её ещё раз — прогресс сохранён.';
+      // Результат есть всегда: частичный отчёт вместо одной строки ошибки.
+      const report = buildPartialReport(transcript ?? [], error);
+      await log({ type: 'PARTIAL', message: report });
       await log({ type: 'ERROR', message: error });
-      await finish('failed', { error });
+      await finish('failed', { error, result: report });
       return;
     }
 
     if (hardBrowserFailure) {
-      await finish('failed', { error: hardBrowserFailure });
+      const report = buildPartialReport(transcript ?? [], hardBrowserFailure);
+      await log({ type: 'PARTIAL', message: report });
+      await finish('failed', { error: hardBrowserFailure, result: report });
       return;
     }
 
@@ -529,7 +535,14 @@ ${bilimClassInstructions()}` });
     }
     const message = error instanceof Error ? error.message : 'Ошибка агента';
     await log({ type: 'ERROR', message: `Агент упал: ${message}` });
-    await finish('failed', { error: message });
+    // Даже при падении отдаём, что успели сделать: транскрипт берём из контрольной точки.
+    let report: string | undefined;
+    try {
+      const row = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { checkpoint: 1 } });
+      report = buildPartialReport(parseCheckpoint(row?.checkpoint)?.messages ?? [], `агент остановился из-за ошибки (${message})`);
+      await log({ type: 'PARTIAL', message: report });
+    } catch { /* отчёт необязателен */ }
+    await finish('failed', { error: message, ...(report ? { result: report } : {}) });
   } finally {
     clearInterval(watchdog);
   }

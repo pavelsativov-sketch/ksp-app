@@ -605,10 +605,10 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
   }, [activeField, imgLayout]);
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e2e] select-none">
+    <div className="flex flex-col h-full bg-[#0f2a29] select-none">
       {/* Tab Bar */}
-      <div className="h-9 bg-[#252536] flex items-end px-2 shrink-0 border-b border-black/30">
-        <div className="h-8 min-w-[160px] max-w-[260px] bg-[#1e1e2e] rounded-t-md px-3 flex items-center gap-2 border-t border-x border-white/[0.06]">
+      <div className="h-9 bg-[#143533] flex items-end px-2 shrink-0 border-b border-black/30">
+        <div className="h-8 min-w-[160px] max-w-[260px] bg-[#0f2a29] rounded-t-md px-3 flex items-center gap-2 border-t border-x border-white/[0.06]">
           {loading ? (
             <div className="w-3.5 h-3.5 rounded-full border-2 border-teal-400 border-t-transparent animate-spin shrink-0" />
           ) : (
@@ -621,7 +621,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       </div>
 
       {/* Navigation Bar */}
-      <div className="h-11 bg-[#1e1e2e] border-b border-black/30 flex items-center gap-1.5 px-2 shrink-0">
+      <div className="h-11 bg-[#0f2a29] border-b border-black/30 flex items-center gap-1.5 px-2 shrink-0">
         <button type="button" onClick={() => void doAction({ action: 'back' })} className="w-8 h-8 rounded-md hover:bg-white/[0.06] flex items-center justify-center group" title="Назад" aria-label="Назад">
           <ArrowLeft className="w-4 h-4 text-white/50 group-hover:text-white/80" />
         </button>
@@ -640,7 +640,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
         {/* URL Bar */}
         <form
-          className="flex-1 flex items-center h-8 bg-[#313147] rounded-full px-3 gap-2 border border-transparent focus-within:border-teal-500/50 transition-all"
+          className="flex-1 flex items-center h-8 bg-[#1e4442] rounded-full px-3 gap-2 border border-transparent focus-within:border-teal-500/50 transition-all"
           onSubmit={e => {
             e.preventDefault();
             // После перехода поле должно снова следить за страницей, поэтому
@@ -673,7 +673,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       </div>
 
       {/* Панель быстрых закладок для учителя */}
-      <div className="h-8 bg-[#181826] border-b border-black/30 flex items-center gap-1.5 px-2.5 shrink-0 text-[11px] overflow-x-auto [scrollbar-width:none]">
+      <div className="h-8 bg-[#0f2a29] border-b border-black/30 flex items-center gap-1.5 px-2.5 shrink-0 text-[11px] overflow-x-auto [scrollbar-width:none]">
         <span className="text-white/40 mr-1 shrink-0 hidden sm:inline">Быстрый переход:</span>
         <button
           type="button"
@@ -721,7 +721,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           onClick={(e) => { if (e.target === e.currentTarget) setCredDialog(false); }}
           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setCredDialog(false); } }}
         >
-          <div className="bg-[#1e1e32] border border-white/10 rounded-xl shadow-2xl p-5 w-80 flex flex-col gap-4">
+          <div className="bg-[#0f2a29] border border-white/10 rounded-xl shadow-2xl p-5 w-80 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-medium">
                 <KeyRound className="w-4 h-4 text-amber-400" />
@@ -746,7 +746,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               autoFocus
               value={credUsername}
               onChange={e => setCredUsername(e.target.value)}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-teal-500/50"
+              className="bg-[#0b1f1e] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-teal-500/50"
               autoComplete="username"
             />
             <input
@@ -755,7 +755,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
               aria-label="Пароль"
               value={credPassword}
               onChange={e => setCredPassword(e.target.value)}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-teal-500/50"
+              className="bg-[#0b1f1e] border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/25 outline-none focus:border-teal-500/50"
               autoComplete="current-password"
             />
             <button
@@ -804,7 +804,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         tabIndex={0}
         role="region"
         aria-label="Рабочая область браузера"
-        className="flex-1 overflow-hidden relative bg-[#090b12] outline-none"
+        className="flex-1 overflow-hidden relative bg-[#071a19] outline-none"
         style={{ cursor: 'crosshair' }}
         onClick={() => {
           kbInputRef.current?.focus({ preventScroll: true });
@@ -843,7 +843,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         />
 
         {!imgSrc && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#090b12] flex-col gap-3 px-8 text-center">
+          <div className="absolute inset-0 flex items-center justify-center bg-[#071a19] flex-col gap-3 px-8 text-center">
             <div className="w-10 h-10 border-[3px] border-teal-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-white/80 font-semibold text-sm">Запускаю браузер…</p>
             <p className="text-white/55 text-sm">
@@ -892,7 +892,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
         {/* Баннер авторизации (Логин / Пароль / CAPTCHA / 2FA) */}
         {authBarrier?.requiresUserAction && imgSrc && (
-          <div className="absolute left-3 right-3 top-2.5 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-[#141726]/95 px-3.5 py-2 text-xs text-amber-100 shadow-xl backdrop-blur-md">
+          <div className="absolute left-3 right-3 top-2.5 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-[#0b1f1e]/95 px-3.5 py-2 text-xs text-amber-100 shadow-xl backdrop-blur-md">
             <div className="flex min-w-0 items-center gap-2">
               <Lock className="size-3.5 shrink-0 text-amber-300" />
               <span className="truncate">
@@ -934,7 +934,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
         )}
 
         {isWarmingUp && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#090b12] gap-4 px-8 text-center z-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#071a19] gap-4 px-8 text-center z-10">
             <div className="relative w-14 h-14">
               <div className="absolute inset-0 rounded-full border-[3px] border-teal-500/20" />
               <div className="absolute inset-0 rounded-full border-[3px] border-teal-400 border-t-transparent animate-spin" />
@@ -950,8 +950,8 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           </div>
         )}
         {!isWarmingUp && error && (
-          <div className={`absolute z-10 flex justify-center px-3 ${imgSrc ? 'left-3 right-3 top-3' : 'inset-0 items-center bg-[#090b12]'}`}>
-            <div className={`flex max-w-full items-center gap-3 rounded-lg border border-amber-300/20 bg-[#151722]/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
+          <div className={`absolute z-10 flex justify-center px-3 ${imgSrc ? 'left-3 right-3 top-3' : 'inset-0 items-center bg-[#071a19]'}`}>
+            <div className={`flex max-w-full items-center gap-3 rounded-lg border border-amber-300/20 bg-[#0b1f1e]/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
               <p className="min-w-0 flex-1 text-sm text-white/75">
                 {retryCountdown !== null
                   ? (isThrottled
@@ -1005,7 +1005,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       </div>
 
       {/* Status bar */}
-      <div className="h-6 bg-[#252536] border-t border-black/20 flex items-center px-3 shrink-0 gap-2">
+      <div className="h-6 bg-[#143533] border-t border-black/20 flex items-center px-3 shrink-0 gap-2">
         <span className="text-[10px] text-white/35 truncate">{pageUrl}</span>
         <span className="ml-auto shrink-0 pl-2 text-[10px] text-white/40">
           {canvasFocused

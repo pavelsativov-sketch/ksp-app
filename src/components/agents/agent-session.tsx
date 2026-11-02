@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, CircleCheck, CircleX, Globe, Lock, ExternalLink, FileText, Download, Presentation } from "lucide-react";
-import { currentActivity, extractDeliverables, extractTaskFiles, finalSummary } from "@/lib/agents/deliverables";
+import { currentActivity, extractDeliverables, extractTaskFiles, finalSummary, partialSummary } from "@/lib/agents/deliverables";
 import { useWorkspaceStore } from "@/lib/store/workspace";
 import { useOsShellStore } from "@/lib/store/os-shell";
 
@@ -128,13 +128,28 @@ function AgentSessionStream({
         // некорректный кадр — пропускаем
       }
     };
+    const isTerminal = (s: Status) => s === "completed" || s === "failed" || s === "stopped";
     es.onerror = () => {
       if (final) { es.close(); return; }
-      setStatus((prev) => (prev === "running" ? "running" : "queued"));
+      setStatus((prev) => (isTerminal(prev) ? prev : prev === "running" ? "running" : "queued"));
     };
-    es.onopen = () => setStatus("running");
+    es.onopen = () => setStatus((prev) => (isTerminal(prev) ? prev : "running"));
 
     return () => es.close();
+  }, [taskId]);
+
+  // Поток событий идёт через медленную базу и может долго молчать. Если задача уже
+  // окончена, панель узнаёт это из списка задач сразу, а не висит на «Агент запускается…».
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/agents/task", { cache: "no-store" })
+      .then((res) => (res.ok ? (res.json() as Promise<{ tasks?: Array<{ id?: string; status?: string }> }>) : null))
+      .then((data) => {
+        const task = data?.tasks?.find((t) => t.id === taskId);
+        if (active && (task?.status === "completed" || task?.status === "failed" || task?.status === "stopped")) setStatus(task.status);
+      })
+      .catch(() => {});
+    return () => { active = false; };
   }, [taskId]);
 
   useEffect(() => {
@@ -160,6 +175,8 @@ function AgentSessionStream({
   const taskFiles = extractTaskFiles(events);
   const activity = running ? currentActivity(events) : "";
   const summary = status === "completed" ? finalSummary(events) : "";
+  // Незавершённая задача всё равно показывает, что сделано и где остановились.
+  const partial = status === "failed" ? partialSummary(events) : "";
   const openInEditor = useWorkspaceStore((s) => s.openInEditor);
 
   return (
@@ -174,6 +191,12 @@ function AgentSessionStream({
         <section aria-label="Итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-200"><CircleCheck className="size-3.5 text-emerald-400" /> Итог</p>
           <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300">{summary}</p>
+        </section>
+      )}
+      {partial && (
+        <section aria-label="Частичный итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-200"><CircleX className="size-3.5 text-amber-300" /> Частичный итог</p>
+          <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300">{partial}</p>
         </section>
       )}
       {deliverables.length > 0 && (
@@ -342,7 +365,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
           </pre>
         )}
         {browserInfo && (
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111420] font-sans">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0b1f1e] font-sans">
             <div className="flex items-center justify-between gap-2 border-b border-white/10 px-2.5 py-1.5 text-[11px]">
               <span className="flex min-w-0 items-center gap-1.5 truncate text-slate-300">
                 <Globe className="size-3 shrink-0 text-teal-400" />

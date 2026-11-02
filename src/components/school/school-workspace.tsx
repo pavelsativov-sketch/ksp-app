@@ -208,7 +208,7 @@ export function SchoolWorkspace({
   return (
     <div className="flex h-full min-h-0">
       {/* ── Левая колонка: чат ── */}
-      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#0b0d13] lg:flex lg:w-[clamp(320px,34vw,420px)]`}>
+      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col border-r border-white/10 bg-[#071a19] lg:flex lg:w-[clamp(320px,34vw,420px)]`}>
         <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5">
           <h1 className="text-sm font-bold text-slate-100">Педагогический ассистент</h1>
           <div className="flex items-center gap-1.5">
@@ -351,14 +351,14 @@ export function SchoolWorkspace({
         aria-label="Рабочая область ОС"
         className={
           fullscreen
-            ? "fixed inset-0 z-[80] flex min-w-0 flex-1 flex-col bg-[#0a0a1c]"
+            ? "fixed inset-0 z-[80] flex min-w-0 flex-1 flex-col bg-[#071a19]"
             : `${mobileWorkspaceOpen ? "flex" : "hidden"} min-w-0 flex-1 flex-col lg:flex`
         }
       >
         {/* Переключатель панелей. Раньше это были просто кнопки без ролей:
             для скринридера они не читались как вкладки, и найти их можно было
             только по подписи. */}
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#0b0d13] px-2">
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#071a19] px-2">
         <div role="tablist" aria-label="Приложения рабочей области" className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
           {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button
@@ -387,7 +387,7 @@ export function SchoolWorkspace({
               <Plus className="size-4" />
             </button>
             {menuOpen && (
-              <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#12141c] py-1 shadow-2xl">
+              <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#0b1f1e] py-1 shadow-2xl">
                 <button
                   type="button"
                   onClick={() => {
@@ -509,7 +509,7 @@ export function SchoolWorkspace({
           {tab === "editor" && <CodeEditorApp requestedFile={editorFile} />}
           {tab === "log" && (
             task ? (
-              <div className="flex h-full flex-col bg-[#0d1117]">
+              <div className="flex h-full flex-col bg-[#0b1f1e]">
                 <AgentSession taskId={task.id} onStatus={setStatus} />
               </div>
             ) : (
@@ -521,7 +521,7 @@ export function SchoolWorkspace({
         </div>
 
         {/* Статус-бар: реальная машина и таймер работы задачи */}
-        <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-white/10 bg-[#0b0d13] px-3 text-[11px] text-slate-400">
+        <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-white/10 bg-[#071a19] px-3 text-[11px] text-slate-400">
           {/* Описание среды уже есть в общей строке состояния внизу страницы: здесь только уведомления. */}
           <span className="truncate">{notice ?? ""}</span>
           <span className="ml-auto inline-flex items-center gap-1.5">

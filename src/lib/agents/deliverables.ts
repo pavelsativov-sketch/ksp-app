@@ -116,6 +116,15 @@ export function finalSummary(events: RichEventLike[]): string {
   return "";
 }
 
+/** Частичный отчёт незавершённой задачи (событие PARTIAL): что сделано и где остановились. */
+export function partialSummary(events: RichEventLike[]): string {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i]!;
+    if (event.type === "PARTIAL" && event.message?.trim()) return event.message.trim();
+  }
+  return "";
+}
+
 /** Текстовая копия КСП для рабочей области (читается в «Файлах» и редакторе). */
 export function kspToMarkdown(input: {
   title: string;

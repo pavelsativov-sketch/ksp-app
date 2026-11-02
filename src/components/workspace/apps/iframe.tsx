@@ -33,7 +33,7 @@ export function IframeApp({ url, title = 'Страница Mekty' }: { url: stri
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {!loaded && (
-        <p className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 bg-[#1e1e2e] text-sm text-white/50">
+        <p className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 bg-[#0f2a29] text-sm text-white/50">
           <Loader2 className="size-4 animate-spin" /> Открываю страницу…
         </p>
       )}

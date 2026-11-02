@@ -104,7 +104,7 @@ function WindowTray() {
   const closeAll = useWorkspaceStore((s) => s.closeAll);
 
   return (
-    <div role="toolbar" aria-label="Открытые окна" className="flex h-9 shrink-0 items-center gap-1 border-t border-white/10 bg-[#0b0d13] px-2">
+    <div role="toolbar" aria-label="Открытые окна" className="flex h-9 shrink-0 items-center gap-1 border-t border-white/10 bg-[#071a19] px-2">
       <button
         type="button"
         onClick={minimizeAll}
@@ -181,7 +181,7 @@ function EmptyHint({ hasWindows = false }: { hasWindows?: boolean }) {
  */
 export function Workspace() {
   return (
-    <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[#0f0c29] text-white">
+    <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[#071a19] text-white">
       <WorkspaceSurface showTray={false} />
       <Taskbar />
     </div>

@@ -139,7 +139,7 @@ export function Window({ id, title, children, onClose }: WindowProps) {
     >
       {/* Title Bar */}
       <div
-        className={`h-9 flex items-center justify-between px-3 select-none shrink-0 transition-colors ${isActive ? 'bg-[#34344b]' : 'bg-[#25253a]'}`}
+        className={`h-9 flex items-center justify-between px-3 select-none shrink-0 transition-colors ${isActive ? 'bg-[#1e4442]' : 'bg-[#143533]'}`}
         style={{ cursor: isMax ? 'default' : 'move' }}
         onPointerDown={onTitlePointerDown}
         onPointerMove={onTitlePointerMove}
@@ -176,7 +176,7 @@ export function Window({ id, title, children, onClose }: WindowProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden bg-[#1e1e2e] flex flex-col min-h-0">
+      <div className="flex-1 overflow-hidden bg-[#0f2a29] flex flex-col min-h-0">
         {children}
       </div>
 

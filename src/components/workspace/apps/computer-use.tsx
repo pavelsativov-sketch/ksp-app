@@ -471,7 +471,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [activeField, imgLayout]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0d0f1a] text-slate-200">
+    <div className="flex h-full min-h-0 flex-col bg-[#071a19] text-slate-200">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
         <MonitorPlay className="size-4 shrink-0 text-teal-400" />
         <span className="min-w-0 truncate text-xs font-semibold">Агент браузера</span>
