@@ -22,7 +22,6 @@ export interface HomePlan {
 }
 
 export interface HomeProps {
-  firstName: string;
   subjects: Array<{ name: string; min: number; max: number }>;
   recent: HomePlan[];
   favorites: HomePlan[];
@@ -246,7 +245,7 @@ function AgentPanel({ c, bilimConnected, agentOnline }: { c: AppCopy; bilimConne
   );
 }
 
-export function Home({ firstName, subjects, recent, favorites, bilimConnected, agentOnline }: HomeProps) {
+export function Home({ subjects, recent, favorites, bilimConnected, agentOnline }: HomeProps) {
   const { locale } = useUiLocale();
   const c = appCopy(locale);
   const [lessonOpen, setLessonOpen] = useState(false);
@@ -281,7 +280,7 @@ export function Home({ firstName, subjects, recent, favorites, bilimConnected, a
       <div className={s.center}>
         <section className={s.hero} aria-labelledby="home-title">
           <div className={s.heroCopy}>
-            <h1 id="home-title">{firstName ? c.welcomeNamed(firstName) : c.welcome}</h1>
+            <h1 id="home-title">{c.welcome}</h1>
             <p>{c.welcomeLead}</p>
           </div>
           <div className={s.heroScene}><ThreeStage scene="desk" className={s.fill} /></div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -107,24 +107,32 @@ export function AppShell({
       <div className={s.body}>
         <aside className={`${s.side} ${open ? s.sideOpen : ""} no-print`}>
           <nav aria-label={c.menu} className={s.nav}>
-            {main.map(renderItem)}
-            {inSchool && (
-              <div className={s.sub}>
-                {MORE_SECTIONS.map((section) => (
-                  <Link key={section.href} href={section.href} aria-current={path.startsWith(section.href) ? "page" : undefined} className={path.startsWith(section.href) ? `${s.subItem} ${s.subItemActive}` : s.subItem} onClick={() => setOpen(false)}>
-                    {section.label}
-                  </Link>
-                ))}
-              </div>
-            )}
+            {main.map((item) => (
+              <Fragment key={item.href}>
+                {renderItem(item)}
+                {/* Разделы школы раскрываются под своим пунктом и только внутри него. */}
+                {item.href === "/school/dashboard" && item.active(path) && (
+                  <div className={s.sub}>
+                    {MORE_SECTIONS.map((section) => (
+                      <Link key={section.href} href={section.href} aria-current={path.startsWith(section.href) ? "page" : undefined} className={path.startsWith(section.href) ? `${s.subItem} ${s.subItemActive}` : s.subItem} onClick={() => setOpen(false)}>
+                        {section.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </Fragment>
+            ))}
             <hr className={s.rule} />
             {foot.map(renderItem)}
           </nav>
-          <Link href="/school" className={s.mascot} onClick={() => setOpen(false)}>
-            <ThreeStage scene="robot" className={s.mascotModel} />
-            <span className={s.mascotTitle}>{c.mascotTitle}</span>
-            <span className={s.mascotText}>{c.mascotText}</span>
-          </Link>
+          {/* На экране агента робот уже есть, а в школе меню длиннее: второй не нужен. */}
+          {!inSchool && (
+            <Link href="/school" className={s.mascot} onClick={() => setOpen(false)}>
+              <ThreeStage scene="robot" className={s.mascotModel} />
+              <span className={s.mascotTitle}>{c.mascotTitle}</span>
+              <span className={s.mascotText}>{c.mascotText}</span>
+            </Link>
+          )}
         </aside>
         {open && <button type="button" aria-label={c.close} className={s.scrim} onClick={() => setOpen(false)} />}
         <div className={s.content}>{children}</div>

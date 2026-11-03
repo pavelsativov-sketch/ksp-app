@@ -14,7 +14,7 @@ import {
 import { classifyClick, classifyTyping } from '../computer/safety';
 import { requestPermission } from '../permissions';
 import { detectPageAuthBarrier } from '../browser-dom';
-import { knownLoginSite, loginWithSavedCredentials } from '../browser-autologin';
+import { knownLoginSite, loginWithSavedCredentials, looksLoggedOut } from '../browser-autologin';
 import { executeWithFallback } from '@/lib/ai/providers';
 import { boundedResult } from './bounded-result';
 
@@ -82,7 +82,12 @@ async function extractPageSnapshot(page: {
 }
 
 /** SPA BilimClass показывает индикатор загрузки, пока не ответит API: ждём до ~12 с, а не читаем пустой экран. */
-async function waitForBilimReady(page: Parameters<typeof extractPageSnapshot>[0] & { waitForTimeout(ms: number): Promise<void> }) {
+type BrowserPage = Parameters<typeof extractPageSnapshot>[0] & {
+  waitForTimeout(ms: number): Promise<void>;
+  goto(url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>;
+};
+
+async function waitForBilimReady(page: BrowserPage) {
   for (let i = 0; i < 12; i += 1) {
     const loading = await page
       .evaluate(() => !!document.querySelector('.v-loading-screen.is-loading') || (document.body?.innerText ?? '').trim().length === 0)
@@ -124,6 +129,27 @@ async function snapshotWithAutoLogin(userId: string, page: Parameters<typeof ext
 }
 
 /**
+ * Снимок после перехода: если сайт показал гостевую страницу вместо кабинета,
+ * система сама идёт на страницу входа, входит и возвращается на нужный адрес.
+ * Иначе агент видел кнопку «Кіру» и просил учителя войти, хотя данные сохранены.
+ */
+async function snapshotAfterNavigation(userId: string, page: BrowserPage) {
+  const first = await snapshotWithAutoLogin(userId, page);
+  if (!knownLoginSite(first.url) || first.authBarrier?.requiresUserAction || !looksLoggedOut(first.content)) return first;
+
+  const target = first.url;
+  await page.goto(`${new URL(target).origin}/login`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+  await waitForBilimReady(page);
+  const atLogin = await snapshotWithAutoLogin(userId, page);
+  if (!('autoLogin' in atLogin)) return atLogin; // нет данных или сайт их не принял: это покажет окно входа
+
+  await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 25000 });
+  await waitForBilimReady(page);
+  await persistAgentBrowserSession(userId);
+  return { ...(await extractPageSnapshot(page)), autoLogin: atLogin.autoLogin };
+}
+
+/**
  * Инструменты браузера агента.
  *
  * Все три работают через `getAgentBrowserSession` — ту же сессию, которую
@@ -153,10 +179,10 @@ export const browserTools = {
           await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
         }
         if (/bilimclass\.kz/i.test(checked.url.hostname)) {
-          await waitForBilimReady(session.page);
+          await waitForBilimReady(session.page as never);
         }
         await persistAgentBrowserSession(userId);
-        return snapshotWithAutoLogin(ctx.userId!, session.page);
+        return snapshotAfterNavigation(userId, session.page as never);
       });
       return boundedResult({ success: true, ...snap });
     } catch (e) {

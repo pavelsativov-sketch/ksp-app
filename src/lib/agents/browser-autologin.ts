@@ -142,6 +142,14 @@ export function knownLoginSite(url: string): { domain: string; name: string } | 
   }
 }
 
+/**
+ * Сайт без входа открывает защищённый адрес как публичную страницу с кнопкой входа,
+ * а не форму пароля. Отдельная строка «Кіру» или «Войти» в тексте значит: мы гость.
+ */
+export function looksLoggedOut(content: string): boolean {
+  return content.split("\n").some((line) => /^(кіру|войти)$/i.test(line.trim()));
+}
+
 /** Защита от блокировки аккаунта: не чаще одной попытки в минуту на сайт. */
 const lastAttempt = new Map<string, number>();
 const ATTEMPT_GAP_MS = 60_000;

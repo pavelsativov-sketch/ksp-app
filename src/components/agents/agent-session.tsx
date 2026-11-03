@@ -175,6 +175,7 @@ function AgentSessionStream({
   const taskFiles = extractTaskFiles(events);
   const activity = running ? currentActivity(events) : "";
   const summary = status === "completed" ? finalSummary(events) : "";
+  const summaryFailed = /^(не удалось|не смог|невозможно)/i.test(summary);
   // Незавершённая задача всё равно показывает, что сделано и где остановились.
   const partial = status === "failed" ? partialSummary(events) : "";
   const openInEditor = useWorkspaceStore((s) => s.openInEditor);
@@ -189,7 +190,7 @@ function AgentSessionStream({
       )}
       {summary && (
         <section aria-label="Итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-border bg-muted p-3">
-          <p className="flex items-center gap-1.5 text-sm font-bold text-foreground"><CircleCheck className="size-3.5 text-emerald-700" /> Итог</p>
+          <p className="flex items-center gap-1.5 text-sm font-bold text-foreground">{summaryFailed ? <CircleX className="size-3.5 text-amber-700" /> : <CircleCheck className="size-3.5 text-emerald-700" />} {summaryFailed ? "Итог: не выполнено" : "Итог"}</p>
           <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-foreground">{summary}</p>
         </section>
       )}

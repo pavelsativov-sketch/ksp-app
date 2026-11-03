@@ -61,6 +61,7 @@ const probe = async () => {
       : null,
     // Что делает сайт после попытки входа: последние запросы к его API и состояние оверлея загрузки.
     overlay: document.querySelector(".v-loading-screen")?.className ?? null,
+    atCenter: document.elementsFromPoint(innerWidth / 2, innerHeight / 2).slice(0, 4).map((el) => `${el.tagName}.${String((el as HTMLElement).className).slice(0, 50)}`),
     inputs: Array.from(document.querySelectorAll("input")).slice(0, 8).map((i) => ({ type: i.type, name: i.name.slice(0, 20), valueLength: i.value.length })),
     apiCalls: resources
       .filter((r) => /api\./.test(new URL(r.name).hostname))

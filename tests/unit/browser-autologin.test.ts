@@ -138,3 +138,17 @@ describe("loginWithSavedCredentials", () => {
     expect(typed).toEqual([]);
   });
 });
+
+describe("looksLoggedOut", () => {
+  it("узнаёт гостевую страницу по отдельной кнопке входа", async () => {
+    const { looksLoggedOut } = await import("@/lib/agents/browser-autologin");
+    expect(looksLoggedOut("Қазақша\nКіру\nБіз туралы")).toBe(true);
+    expect(looksLoggedOut("Главная\nВойти")).toBe(true);
+  });
+
+  it("не путает с кабинетом и словами внутри текста", async () => {
+    const { looksLoggedOut } = await import("@/lib/agents/browser-autologin");
+    expect(looksLoggedOut("Мұғалімге\nМониторинг\nСабақ кестесі")).toBe(false);
+    expect(looksLoggedOut("Как войти в журнал")).toBe(false);
+  });
+});

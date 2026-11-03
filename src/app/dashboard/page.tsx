@@ -52,10 +52,8 @@ export default async function DashboardPage() {
     }
   }
 
-  const names = (user.fullName ?? "").trim().split(/\s+/).filter(Boolean);
   return (
     <Home
-      firstName={names[1] ?? names[0] ?? ""}
       subjects={subjects}
       recent={recent}
       favorites={favorites}
