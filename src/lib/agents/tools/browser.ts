@@ -82,17 +82,27 @@ async function extractPageSnapshot(page: {
 }
 
 /** SPA BilimClass показывает индикатор загрузки, пока не ответит API: ждём до ~12 с, а не читаем пустой экран. */
+const READY_CHECKS = 15;
+
 type BrowserPage = Parameters<typeof extractPageSnapshot>[0] & {
   waitForTimeout(ms: number): Promise<void>;
   goto(url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>;
 };
 
 async function waitForBilimReady(page: BrowserPage) {
-  for (let i = 0; i < 12; i += 1) {
-    const loading = await page
-      .evaluate(() => !!document.querySelector('.v-loading-screen.is-loading') || (document.body?.innerText ?? '').trim().length === 0)
-      .catch(() => false);
-    if (!loading) return;
+  let previous = -1;
+  for (let i = 0; i < READY_CHECKS; i += 1) {
+    const state = (await page
+      .evaluate(() => ({
+        loading: !!document.querySelector('.v-loading-screen.is-loading'),
+        size: (document.body?.innerText ?? '').trim().length,
+      }))
+      .catch(() => null)) as { loading?: boolean; size?: number } | null;
+    if (!state) return;
+    // Готово, когда индикатора нет, текст есть и перестал расти: журнал догружается после меню.
+    const size = state.size ?? 0;
+    if (!state.loading && size > 0 && size === previous) return;
+    previous = size;
     await page.waitForTimeout(1000);
   }
 }
@@ -135,7 +145,10 @@ async function snapshotWithAutoLogin(userId: string, page: Parameters<typeof ext
  */
 async function snapshotAfterNavigation(userId: string, page: BrowserPage) {
   const first = await snapshotWithAutoLogin(userId, page);
-  if (!knownLoginSite(first.url) || first.authBarrier?.requiresUserAction || !looksLoggedOut(first.content)) return first;
+  if (!knownLoginSite(first.url)) return first;
+  if (first.authBarrier?.requiresUserAction) return first;
+  // Модель принимала кабинет с пустым разделом за гостевую страницу: состояние входа определяем сами.
+  if (!looksLoggedOut(first.content)) return { ...first, signedIn: true };
 
   const target = first.url;
   await page.goto(`${new URL(target).origin}/login`, { waitUntil: 'domcontentloaded', timeout: 25000 });
@@ -146,7 +159,7 @@ async function snapshotAfterNavigation(userId: string, page: BrowserPage) {
   await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 25000 });
   await waitForBilimReady(page);
   await persistAgentBrowserSession(userId);
-  return { ...(await extractPageSnapshot(page)), autoLogin: atLogin.autoLogin };
+  return { ...(await extractPageSnapshot(page)), autoLogin: atLogin.autoLogin, signedIn: true };
 }
 
 /**

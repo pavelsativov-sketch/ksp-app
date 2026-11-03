@@ -118,4 +118,14 @@ describe("автовход в инструментах браузера", () => 
     expect(result.needsCredentials).toMatchObject({ domain: "bilimclass.kz" });
     expect(result.url).toContain("/login");
   });
+
+  it("на странице кабинета сообщает модели, что вход уже выполнен", async () => {
+    const journal = "https://www.bilimclass.kz/2026/control/journal/groups";
+    mock.barrier.mockResolvedValue(noBarrier);
+    mock.url = journal;
+    mock.text = "Мұғалімге\nМониторинг";
+    const result = (await browserTools.browserNavigate({ url: journal }, { userId: "u1" })) as { signedIn?: boolean };
+    expect(result.signedIn).toBe(true);
+    expect(mock.login).not.toHaveBeenCalled();
+  });
 });

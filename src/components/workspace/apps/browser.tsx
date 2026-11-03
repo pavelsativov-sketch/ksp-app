@@ -45,7 +45,12 @@ function domainOf(pageUrl: string): string {
   }
 }
 
-export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
+/**
+ * watchOnly: страницей управляет агент, вкладка только показывает кадры. Иначе она
+ * открывала тот же адрес второй раз и перезагружала страницу прямо под агентом:
+ * net::ERR_ABORTED у агента, пустой экран и вечный индикатор загрузки у учителя.
+ */
+export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: string; watchOnly?: boolean }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState('');
   const [pageTitle, setPageTitle] = useState('');
@@ -519,6 +524,8 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
 
   // Load on mount or sync when initialUrl changes
   const startedRef = useRef(false);
+  const watchOnlyRef = useRef(watchOnly);
+  useEffect(() => { watchOnlyRef.current = watchOnly; }, [watchOnly]);
   useEffect(() => {
     const trimmed = initialUrl?.trim() || '';
     if (!startedRef.current) {
@@ -529,7 +536,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
           await navigate(trimmed);
         } else {
           const restoredUrl = await fetchFrame();
-          if (restoredUrl === 'about:blank' || !restoredUrl) {
+          if (!watchOnlyRef.current && (restoredUrl === 'about:blank' || !restoredUrl)) {
             await navigate('https://www.google.com');
           }
         }
@@ -537,7 +544,7 @@ export function BrowserApp({ initialUrl }: { initialUrl?: string }) {
       return;
     }
 
-    if (trimmed && trimmed !== lastInitialUrlRef.current) {
+    if (trimmed && trimmed !== lastInitialUrlRef.current && !watchOnlyRef.current) {
       lastInitialUrlRef.current = trimmed;
       void navigate(trimmed);
     }

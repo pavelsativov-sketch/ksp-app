@@ -265,8 +265,8 @@ export function SchoolWorkspace({
                   taskId={task.id}
                   variant="chat"
                   onStatus={setStatus}
-                  onBrowserActivity={({ url, requiresUserAction, reason }) => {
-                    if (url) setBrowserUrl(url);
+                  onBrowserActivity={({ requiresUserAction, reason }) => {
+                    // Адрес не передаём: страницу уже открыл агент, вкладка только смотрит.
                     setTab("browser");
                     if (requiresUserAction) {
                       setControlState("user");
@@ -441,7 +441,7 @@ export function SchoolWorkspace({
               </div>
             </div>
           )}
-          {tab === "browser" && <BrowserApp initialUrl={browserUrl} />}
+          {tab === "browser" && <BrowserApp initialUrl={browserUrl} watchOnly={running} />}
           {tab === "files" && <FileManagerApp />}
           {tab === "terminal" && <TerminalApp />}
           {tab === "editor" && <CodeEditorApp requestedFile={editorFile} />}
