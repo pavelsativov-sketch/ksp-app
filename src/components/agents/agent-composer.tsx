@@ -98,7 +98,7 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
   if (compact) {
     return (
       <div className="space-y-1.5">
-        <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 focus-within:border-emerald-500/50">
+        <div className="flex items-end gap-2 rounded-2xl border border-border bg-muted p-2 focus-within:border-primary">
           <label htmlFor="agent-prompt" className="sr-only">Опишите задачу для ИИ-ассистента Mekty</label>
           <textarea
             id="agent-prompt"
@@ -110,7 +110,7 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
             rows={prompt.length > 90 || prompt.includes("\n") ? 3 : 1}
             maxLength={4000}
             placeholder={running ? "Добавить поручение в очередь…" : "Новая задача для ассистента…"}
-            className="min-h-8 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-xs leading-relaxed text-slate-100 outline-none placeholder:text-slate-500"
+            className="min-h-8 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
           />
           {running && onStop && (
             <button
@@ -119,7 +119,7 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
               disabled={stopping}
               aria-label="Остановить задачу"
               title="Остановить задачу"
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-danger text-danger hover:bg-danger-soft disabled:opacity-50"
             >
               {stopping ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-3.5 fill-current" />}
             </button>
@@ -130,22 +130,22 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
             disabled={pending || prompt.trim().length < 3}
             aria-label="Запустить агента"
             title="Запустить агента (Ctrl+Enter)"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary disabled:opacity-40"
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : <SendHorizontal className="size-4" />}
           </button>
         </div>
-        {error && <p className="px-1 text-xs text-red-400">{error}</p>}
-        {notice && <p className="px-1 text-xs text-violet-300">{notice}</p>}
+        {error && <p className="px-1 text-xs text-danger">{error}</p>}
+        {notice && <p className="px-1 text-xs text-primary">{notice}</p>}
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 shadow-sm">
-        <label htmlFor="agent-prompt" className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-          <Sparkles className="size-4 text-emerald-400" /> Опишите задачу для ИИ-ассистента Mekty
+      <div className="rounded-2xl border border-border bg-muted p-3.5 shadow-sm">
+        <label htmlFor="agent-prompt" className="flex items-center gap-2 text-xs font-semibold text-foreground">
+          <Sparkles className="size-4 text-primary" /> Опишите задачу для ИИ-ассистента Mekty
         </label>
         <textarea
           id="agent-prompt"
@@ -157,22 +157,22 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
           rows={3}
           maxLength={4000}
           placeholder="Опишите задачу (например: открой дэшборд BilimClass и поставь, что урок проведён, или составь анализ СОР №1)..."
-          className="mt-2.5 w-full resize-y rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-slate-100 outline-none placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
+          className="mt-2.5 w-full resize-y rounded-xl border border-border bg-muted p-3 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary-soft"
         />
 
         {/* ── Подсказка: задача с браузером (BilimClass / Kundelik / НОБД) ── */}
         {wantsBrowser && (
-          <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-2.5">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-800" />
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-amber-300">Режим работы с BilimClass / НОБД</p>
-              <p className="mt-0.5 text-[11px] text-amber-200/80">
+              <p className="text-xs font-semibold text-amber-800">Режим работы с BilimClass / НОБД</p>
+              <p className="mt-0.5 text-[12px] text-amber-800">
                 Нажмите <strong>«Запустить агента»</strong> (ИИ сам откроет вкладку «Браузер» справа, перейдёт на дэшборд BilimClass, найдёт 3 кнопки над предметом и проведёт урок) или откройте отдельное приложение <strong>«Работа с компьютером»</strong>.
               </p>
               <button
                 type="button"
                 onClick={openComputerUse}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/30"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50"
               >
                 <MonitorPlay className="size-3.5" /> Открыть «Работа с компьютером»
               </button>
@@ -181,22 +181,22 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
         )}
 
         <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-slate-400">Ctrl+Enter — отправить запрос</p>
+          <p className="text-[11px] text-muted-foreground">Ctrl+Enter — отправить запрос</p>
           <Button
             onClick={() => void run()}
             disabled={pending || prompt.trim().length < 3}
-            className="h-8 gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="h-8 gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-white hover:bg-primary disabled:opacity-50"
           >
             {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
             {pending ? "Запуск…" : "Запустить агента"}
           </Button>
         </div>
-        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-        {notice && <p className="mt-2 text-xs text-violet-300">{notice}</p>}
+        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+        {notice && <p className="mt-2 text-xs text-primary">{notice}</p>}
       </div>
 
       <details className="group">
-        <summary className="cursor-pointer list-none px-1 text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-200 [&::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none px-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
           <span className="group-open:hidden">Показать примеры задач ▾</span>
           <span className="hidden group-open:inline">Скрыть примеры ▴</span>
         </summary>
@@ -206,7 +206,7 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
             key={ex}
             type="button"
             onClick={() => setPrompt(ex)}
-            className="rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-1 text-[11px] text-slate-400 transition-colors hover:border-emerald-500/40 hover:bg-white/[0.05] hover:text-slate-200 text-left"
+            className="rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-emerald-300 hover:bg-muted hover:text-foreground text-left"
           >
             {ex.length > 50 ? ex.slice(0, 50) + "…" : ex}
           </button>

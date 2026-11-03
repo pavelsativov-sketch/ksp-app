@@ -39,13 +39,13 @@ it("renders a request pane and an OS workspace pane together", () => {
   // после перевода дока на русский имена («Браузер», «Терминал») совпали с
   // названиями вкладок — поиск по имени находил сразу два элемента.
   const osTabs = within(osPane).getByRole("tablist");
-  for (const label of ["Рабочий стол", "Браузер", "Файлы", "Терминал"]) {
+  for (const label of ["Рабочее место", "Браузер", "Файлы"]) {
     expect(within(osTabs).getByRole("tab", { name: label })).toBeTruthy();
   }
+  // Редактор и терминал не на виду: они спрятаны в «Ещё», чтобы не пугать учителя.
+  expect(within(osTabs).queryByRole("tab", { name: "Терминал" })).toBeNull();
 
-  // Статус-бар с системной строкой и индикатором работы.
-  expect(within(osPane).getByText(/Ожидание|Работает/)).toBeTruthy();
-
-  // До запуска задачи показан пустой ход выполнения, а не «висящий» спиннер.
-  expect(screen.getByText(/Здесь появится план и пошаговый ход работы/i)).toBeTruthy();
+  // До запуска задачи справа понятный экран, а браузер не поднимается зря.
+  expect(within(osPane).getByRole("heading", { name: "Рабочее место агента" })).toBeTruthy();
+  expect(within(osPane).getByRole("button", { name: /Открыть BilimClass/ })).toBeTruthy();
 });

@@ -151,15 +151,15 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#151034] text-slate-200">
-      <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-1.5">
-        <FileCode className="size-3.5 shrink-0 text-violet-300" />
+    <div className="flex h-full flex-col bg-surface text-foreground">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
+        <FileCode className="size-3.5 shrink-0 text-primary" />
         {names.length > 0 ? (
           <select
             aria-label="Файл в редакторе"
             value={open?.name ?? ""}
             onChange={(e) => { if (e.target.value) void openFile(e.target.value); }}
-            className="min-w-0 max-w-[55%] flex-1 truncate rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-slate-200 outline-none focus:border-violet-400/50"
+            className="min-w-0 max-w-[55%] flex-1 truncate rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground outline-none focus:border-primary-soft-hover"
           >
             {!open && <option value="">Выберите файл…</option>}
             {names.map((name) => <option key={name} value={name}>{name}</option>)}
@@ -168,13 +168,13 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
           <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{open ? open.name : "нет открытого файла"}</span>
         )}
         <span className="flex-1" />
-        {open?.dirty && <span className="shrink-0 text-[10px] text-amber-400">не сохранено</span>}
+        {open?.dirty && <span className="shrink-0 text-[10px] text-amber-800">не сохранено</span>}
         <button
           type="button"
           onClick={createFile}
           title="Новый файл"
           aria-label="Новый файл"
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/15 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-white/10"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
         >
           <FilePlus className="size-3" /> <span className="hidden sm:inline">Новый</span>
         </button>
@@ -183,7 +183,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
           onClick={() => void save()}
           disabled={!open || saving}
           title="Сохранить (Ctrl+S)"
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/40 px-2 py-0.5 text-[11px] text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-40"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-300 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-primary/10 disabled:opacity-40"
         >
           {saving ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Сохранить
         </button>
@@ -191,10 +191,10 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
 
       {notice && <p className="shrink-0 px-3 py-1 text-[11px] text-muted-foreground" role="status">{notice}</p>}
 
-      {loading && <p className="flex flex-1 items-center justify-center gap-2 text-sm text-white/40"><Loader2 className="size-4 animate-spin" /> Открываю…</p>}
+      {loading && <p className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Открываю…</p>}
 
       {!open && !loading && (
-        <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-white/40">
+        <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
           {files.length > 0
             ? "Выберите файл в списке сверху, откройте его из вкладки «Файлы» (кнопка «В редактор») или создайте новый."
             : "Файлов пока нет. Создайте новый — или дождитесь, пока агент создаст файлы."}
@@ -211,7 +211,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
             onMount={onMount}
             onChange={(v) => setOpen((o) => (o ? { ...o, content: v ?? "", dirty: true } : o))}
             options={{ fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, wordWrap: "on" }}
-            loading={<p className="flex h-full items-center justify-center text-sm text-white/40"><Loader2 className="size-4 animate-spin" /> Загрузка редактора…</p>}
+            loading={<p className="flex h-full items-center justify-center text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Загрузка редактора…</p>}
           />
         </div>
       )}

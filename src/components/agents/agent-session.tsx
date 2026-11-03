@@ -182,54 +182,54 @@ function AgentSessionStream({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {activity && (
-        <p role="status" className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-violet-400/20 bg-violet-400/[0.07] px-3 py-2 text-[11px] leading-snug text-violet-100">
+        <p role="status" className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-primary-soft-hover bg-primary-soft px-3 py-2 text-[13px] leading-snug text-primary">
           <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin" />
           <span><span className="font-semibold">Сейчас:</span> {activity}</span>
         </p>
       )}
       {summary && (
-        <section aria-label="Итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-200"><CircleCheck className="size-3.5 text-emerald-400" /> Итог</p>
-          <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300">{summary}</p>
+        <section aria-label="Итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-border bg-muted p-3">
+          <p className="flex items-center gap-1.5 text-sm font-bold text-foreground"><CircleCheck className="size-3.5 text-emerald-700" /> Итог</p>
+          <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-foreground">{summary}</p>
         </section>
       )}
       {partial && (
-        <section aria-label="Частичный итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-3">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-200"><CircleX className="size-3.5 text-amber-300" /> Частичный итог</p>
-          <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300">{partial}</p>
+        <section aria-label="Частичный итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-amber-300 bg-amber-50 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800"><CircleX className="size-3.5 text-amber-800" /> Частичный итог</p>
+          <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-foreground">{partial}</p>
         </section>
       )}
       {deliverables.length > 0 && (
         <section aria-label="Результат работы агента" className="mx-3 mt-3 shrink-0 space-y-2">
           {deliverables.map((item) => (
-            <div key={`${item.kind}:${item.url}`} className="rounded-xl border border-emerald-400/30 bg-emerald-400/[0.07] p-3">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-200">
+            <div key={`${item.kind}:${item.url}`} className="rounded-xl border border-emerald-300 bg-emerald-50 p-3">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                 <FileText className="size-3.5" /> {item.kind === "ksp" ? "Готов КСП" : "Готов КТП"}
               </p>
-              <p className="mt-1 text-[12px] leading-snug text-slate-100">{item.title}</p>
+              <p className="mt-1 text-[12px] leading-snug text-foreground">{item.title}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-slate-950 hover:bg-emerald-400">
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-primary-hover">
                   <ExternalLink className="size-3" /> Открыть
                 </a>
                 {item.docxUrl && (
-                  <a href={item.docxUrl} className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+                  <a href={item.docxUrl} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] text-foreground hover:bg-muted">
                     <Download className="size-3" /> Word
                   </a>
                 )}
                 {item.pptxUrl && (
-                  <a href={item.pptxUrl} className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10">
+                  <a href={item.pptxUrl} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] text-foreground hover:bg-muted">
                     <Presentation className="size-3" /> PowerPoint
                   </a>
                 )}
               </div>
-              {item.workspaceFile && <p className="mt-1.5 text-[10px] text-slate-400">Копия в файлах рабочей области: {item.workspaceFile}</p>}
+              {item.workspaceFile && <p className="mt-1.5 text-[10px] text-muted-foreground">Копия в файлах рабочей области: {item.workspaceFile}</p>}
             </div>
           ))}
         </section>
       )}
       {taskFiles.length > 0 && (
         <section aria-label="Файлы задачи" className="mx-3 mt-3 shrink-0">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Файлы задачи</p>
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Файлы задачи</p>
           <div className="flex flex-wrap gap-1.5">
             {taskFiles.map((name) => (
               <button
@@ -237,41 +237,41 @@ function AgentSessionStream({
                 type="button"
                 onClick={() => openInEditor(name)}
                 title={`Открыть «${name}» в редакторе`}
-                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-white/12 bg-white/[0.05] px-2 py-1 font-mono text-[11px] text-slate-200 hover:bg-white/10"
+                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted px-2 py-1 font-mono text-[11px] text-foreground hover:bg-muted"
               >
-                <FileText className="size-3 shrink-0 text-violet-300" /> <span className="truncate">{name}</span>
+                <FileText className="size-3 shrink-0 text-primary" /> <span className="truncate">{name}</span>
               </button>
             ))}
           </div>
         </section>
       )}
       {plan && plan.length > 0 && (
-        <div className="mx-3 mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+        <div className="mx-3 mt-3 shrink-0 rounded-xl border border-border bg-muted p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               {running ? <Loader2 className="size-3.5 animate-spin" />
-                : status === "completed" ? <CircleCheck className="size-3.5 text-emerald-400" />
-                  : <CircleX className={`size-3.5 ${status === "failed" ? "text-red-400" : "text-slate-400"}`} />}
+                : status === "completed" ? <CircleCheck className="size-3.5 text-emerald-700" />
+                  : <CircleX className={`size-3.5 ${status === "failed" ? "text-danger" : "text-muted-foreground"}`} />}
               {running ? "Выполняю задачу…"
                 : status === "completed" ? "Задача выполнена"
                   : status === "failed" ? "Задача не выполнена" : "Задача остановлена"}
             </p>
-            {progress !== null && <span className="text-xs text-slate-400">{progress}%</span>}
+            {progress !== null && <span className="text-xs text-muted-foreground">{progress}%</span>}
           </div>
           {progress !== null && (
-            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-muted">
               <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${progress}%` }} />
             </div>
           )}
-          <ul className="space-y-1.5 text-[11px] leading-snug">
+          <ul className="space-y-1.5 text-[13px] leading-snug">
             {plan.map((step, idx) => {
               const stepDone = status === "completed" || (status !== "stopped" && status !== "failed" ? idx < doneSteps : idx < Math.min(doneSteps, plan.length - 1));
               const stepCurrent = running && idx === doneSteps;
               return (
-                <li key={idx} className={`flex items-start gap-2 ${stepDone ? "text-slate-400" : stepCurrent ? "text-slate-100" : "text-slate-500"}`}>
-                  {stepDone ? <CircleCheck className="mt-0.5 size-3 shrink-0 text-emerald-400" />
-                    : stepCurrent ? <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin text-violet-300" />
-                    : <span className="mt-0.5 size-3 shrink-0 rounded-full border border-white/25" />}
+                <li key={idx} className={`flex items-start gap-2 ${stepDone ? "text-muted-foreground" : stepCurrent ? "text-foreground" : "text-muted-foreground"}`}>
+                  {stepDone ? <CircleCheck className="mt-0.5 size-3 shrink-0 text-emerald-700" />
+                    : stepCurrent ? <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
+                    : <span className="mt-0.5 size-3 shrink-0 rounded-full border border-border" />}
                   <span className="flex-1">{step}</span>
                 </li>
               );
@@ -279,32 +279,39 @@ function AgentSessionStream({
           </ul>
         </div>
       )}
+      {events.length === 0 && running && (
+        <p className="mx-3 mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Агент запускается…
+        </p>
+      )}
+      {/* Паузу и запрос входа учитель должен увидеть сразу, а не внутри подробностей. */}
+      {events.filter((e) => e.type === "PAUSED").slice(-1).map((ev, i) => (
+        <div key={i} className="mx-3 mt-3 shrink-0"><EventLine ev={ev} previewIndex={i} /></div>
+      ))}
+      <details className="mx-3 mb-3 mt-3 min-h-0 rounded-xl border border-border bg-surface text-xs">
+        <summary className="cursor-pointer px-3 py-2 font-semibold text-muted-foreground">Подробности работы</summary>
       <div
         ref={scrollRef}
         onScroll={(e) => {
           const el = e.currentTarget;
           atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
         }}
-        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
+        className="max-h-[420px] space-y-2 overflow-y-auto px-3 pb-3 text-[12px] leading-relaxed"
       >
-        {events.length === 0 && running && (
-          <p className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Агент запускается…
-          </p>
-        )}
         {events.filter((e) => e.type !== "META").map((ev, i) => (
           <EventLine key={i} ev={ev} previewIndex={i} />
         ))}
         {status === "completed" && (
-          <p className="flex items-center gap-1.5 pt-1 text-emerald-400"><CircleCheck className="size-3.5" /> Задача завершена</p>
+          <p className="flex items-center gap-1.5 pt-1 text-emerald-700"><CircleCheck className="size-3.5" /> Задача завершена</p>
         )}
         {status === "failed" && (
-          <p className="flex items-center gap-1.5 pt-1 text-red-400"><CircleX className="size-3.5" /> Задача завершилась с ошибкой</p>
+          <p className="flex items-center gap-1.5 pt-1 text-danger"><CircleX className="size-3.5" /> Задача завершилась с ошибкой</p>
         )}
         {status === "stopped" && (
-          <p className="flex items-center gap-1.5 pt-1 text-slate-400"><CircleX className="size-3.5" /> Задача остановлена</p>
+          <p className="flex items-center gap-1.5 pt-1 text-muted-foreground"><CircleX className="size-3.5" /> Задача остановлена</p>
         )}
       </div>
+      </details>
     </div>
   );
 }
@@ -316,21 +323,21 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
     return <p className="text-muted-foreground/70 italic">· {ev.message}</p>;
   }
   if (ev.type === "REASONING") {
-    return <p className="whitespace-pre-wrap text-slate-400">{ev.message}</p>;
+    return <p className="whitespace-pre-wrap text-muted-foreground">{ev.message}</p>;
   }
   if (ev.type === "PAUSED") {
     return (
-      <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 font-sans text-xs text-amber-100">
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 font-sans text-xs text-amber-800">
         <div className="flex items-start gap-2">
-          <Lock className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+          <Lock className="mt-0.5 size-3.5 shrink-0 text-amber-800" />
           <div className="min-w-0 flex-1">
             <p className="font-medium leading-snug">{ev.message}</p>
             <button
               type="button"
               onClick={() => setTab("browser")}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-400/20 px-2.5 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-400/30"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50"
             >
-              <Globe className="size-3" /> Открыть экран в рабочей области ОС →
+              <Globe className="size-3" /> Открыть экран на рабочем месте →
             </button>
           </div>
         </div>
@@ -340,18 +347,18 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
   if (ev.type === "TOOL_CALL") {
     if (tool === "executeCommand" || tool === "runCommand") {
       return (
-        <p className="rounded bg-black/40 px-2 py-1 text-emerald-300">
+        <p className="rounded bg-muted px-2 py-1 text-emerald-700">
           <span className="text-emerald-500">$</span> {ev.message.replace(/^\$ /, "")}
         </p>
       );
     }
     if (tool === "browserNavigate") {
-      return <p className="text-violet-300">🌐 {ev.message}</p>;
+      return <p className="flex items-start gap-1.5 text-primary"><Globe className="mt-0.5 size-3.5 shrink-0" /> {ev.message}</p>;
     }
     if (tool === "writeFile" || tool === "readFile" || tool === "listFiles") {
-      return <p className="text-amber-300">📄 {ev.message}</p>;
+      return <p className="flex items-start gap-1.5 text-amber-800"><FileText className="mt-0.5 size-3.5 shrink-0" /> {ev.message}</p>;
     }
-    return <p className="text-slate-300">⚙ {ev.message}</p>;
+    return <p className="text-muted-foreground">{ev.message}</p>;
   }
   if (ev.type === "TOOL_RESULT") {
     const out = extractResult(ev);
@@ -360,36 +367,36 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
     return (
       <div className="space-y-1.5">
         {out && (
-          <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-black/30 px-2 py-1 text-slate-300">
+          <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-muted px-2 py-1 text-muted-foreground">
             {out}
           </pre>
         )}
         {browserInfo && (
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#151034] font-sans">
-            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-2.5 py-1.5 text-[11px]">
-              <span className="flex min-w-0 items-center gap-1.5 truncate text-slate-300">
+          <div className="overflow-hidden rounded-xl border border-border bg-surface font-sans">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-2.5 py-1.5 text-[11px]">
+              <span className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
                 <Globe className="size-3 shrink-0 text-violet-400" />
                 <span className="truncate">{browserInfo.title || browserInfo.url}</span>
               </span>
               <button
                 type="button"
                 onClick={() => setTab("browser")}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300 hover:bg-violet-500/25"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary-soft"
               >
-                В рабочей области ОС <ExternalLink className="size-2.5" />
+                На рабочем месте <ExternalLink className="size-2.5" />
               </button>
             </div>
             {browserInfo.authBarrier?.requiresUserAction && (
-              <div className="flex items-center gap-1.5 border-b border-amber-400/20 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
-                <Lock className="size-3 shrink-0 text-amber-300" />
+              <div className="flex items-center gap-1.5 border-b border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+                <Lock className="size-3 shrink-0 text-amber-800" />
                 <span>
-                  {browserInfo.authBarrier.reason || "Для входа кликните по полю логина/пароля прямо в рабочей области ОС справа."}
+                  {browserInfo.authBarrier.reason || "Для входа кликните по полю логина/пароля прямо на экране справа."}
                 </span>
                 {browserInfo.authBarrier.kind === "login" && (
                   <button
                     type="button"
                     onClick={() => setTab("browser")}
-                    className="ml-auto shrink-0 rounded-md bg-amber-400/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-400/30"
+                    className="ml-auto shrink-0 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-50"
                   >
                     Ввести данные
                   </button>
@@ -400,7 +407,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
               type="button"
               onClick={() => setTab("browser")}
               title="Перейти к интерактивному экрану в рабочей области ОС"
-              className="block w-full bg-black/40 text-left"
+              className="block w-full bg-muted text-left"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -415,13 +422,13 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
     );
   }
   if (ev.type === "END") {
-    return <p className="whitespace-pre-wrap rounded bg-emerald-500/10 px-2 py-1 text-emerald-300">✓ {ev.message}</p>;
+    return <p className="whitespace-pre-wrap rounded bg-primary/10 px-2 py-1 text-emerald-700">✓ {ev.message}</p>;
   }
   if (ev.type === "ERROR") {
-    return <p className="whitespace-pre-wrap rounded bg-red-500/10 px-2 py-1 text-red-300">✗ {ev.message}</p>;
+    return <p className="whitespace-pre-wrap rounded bg-danger-soft px-2 py-1 text-danger">✗ {ev.message}</p>;
   }
   if (ev.type === "WARNING") {
-    return <p className="whitespace-pre-wrap rounded bg-amber-500/10 px-2 py-1 text-amber-300">⚠ {ev.message}</p>;
+    return <p className="whitespace-pre-wrap rounded bg-amber-50 px-2 py-1 text-amber-800">⚠ {ev.message}</p>;
   }
   return <p className="text-muted-foreground">{ev.message}</p>;
 }

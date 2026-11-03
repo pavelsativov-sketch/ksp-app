@@ -28,7 +28,8 @@ export function ThreeStage({ scene, className }: { scene: SceneName; className?:
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    // Без этих API (старый браузер, тестовая среда) остаётся пустое место, страница работает.
+    if (!canvas || !window.matchMedia || typeof ResizeObserver === "undefined" || typeof IntersectionObserver === "undefined") return;
     let handle: SceneHandle | undefined;
     let raf = 0;
     let onScreen = true;

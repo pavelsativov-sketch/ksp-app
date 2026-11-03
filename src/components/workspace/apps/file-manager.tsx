@@ -179,14 +179,14 @@ export function FileManagerApp() {
   const visibleFiles = (files ?? []).filter((f) => f.name.toLowerCase().includes(filter.trim().toLowerCase()));
 
   return (
-    <div className="flex h-full flex-col bg-[#151034] text-slate-200">
-      <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
-        <Terminal className="size-3.5 text-emerald-400" />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/50">
+    <div className="flex h-full flex-col bg-surface text-foreground">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+        <Terminal className="size-3.5 text-emerald-700" />
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
           Файлы рабочей области
         </span>
         {(busyOp || notice) && (
-          <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-emerald-300" role="status">
+          <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-emerald-700" role="status">
             {busyOp && <Loader2 className="size-3 animate-spin" />}
             {notice}
           </span>
@@ -197,7 +197,7 @@ export function FileManagerApp() {
           disabled={busyOp === 'upload'}
           aria-label="Загрузить файл"
           title="Загрузить текстовый файл до 200 КБ"
-          className="rounded p-1 hover:bg-white/10 disabled:opacity-40"
+          className="rounded p-1 hover:bg-muted disabled:opacity-40"
         >
           {busyOp === 'upload' ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
         </button>
@@ -210,35 +210,35 @@ export function FileManagerApp() {
           aria-label="Выбранные файлы"
           onChange={(event) => void uploadFiles(event.target.files)}
         />
-        <button type="button" onClick={() => setView(view === 'list' ? 'grid' : 'list')} className="rounded p-1 hover:bg-white/10" aria-label="Вид">
+        <button type="button" onClick={() => setView(view === 'list' ? 'grid' : 'list')} className="rounded p-1 hover:bg-muted" aria-label="Вид">
           {view === 'list' ? <LayoutGrid className="size-3.5" /> : <List className="size-3.5" />}
         </button>
-        <button type="button" onClick={() => void load()} className="rounded p-1 hover:bg-white/10" aria-label="Обновить">
+        <button type="button" onClick={() => void load()} className="rounded p-1 hover:bg-muted" aria-label="Обновить">
           <RefreshCw className="size-3.5" />
         </button>
       </div>
 
       {files !== null && files.length > 6 && (
-        <div className="shrink-0 border-b border-white/10 px-3 py-1.5">
+        <div className="shrink-0 border-b border-border px-3 py-1.5">
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             aria-label="Найти файл"
             placeholder={`Найти среди ${files.length} файлов…`}
-            className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 outline-none placeholder:text-white/30 focus:border-violet-400/50"
+            className="w-full rounded-md border border-border bg-muted px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary-soft-hover"
           />
         </div>
       )}
 
       {files === null && (
-        <p className="flex flex-1 items-center justify-center gap-2 text-sm text-white/40"><Loader2 className="size-4 animate-spin" /> Читаю песочницу…</p>
+        <p className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Читаю песочницу…</p>
       )}
       {files?.length === 0 && (
-        <p className="flex flex-1 items-center justify-center p-6 text-center text-sm text-white/40">
+        <p className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
           Песочница пуста. Как только агент создаст файлы — они появятся здесь.
         </p>
       )}
-      {error && <p className="p-3 text-xs text-red-300">{error}</p>}
+      {error && <p className="p-3 text-xs text-danger">{error}</p>}
 
       {files !== null && files.length > 0 && (
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -249,11 +249,11 @@ export function FileManagerApp() {
                   <button
                     type="button"
                     onClick={() => void openFile(f.name)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left hover:bg-white/10"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left hover:bg-muted"
                   >
                     <FileIcon name={f.name} />
                     <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.name}</span>
-                    <span className="shrink-0 text-[10px] text-white/40">{ago(f.modified) ? `${ago(f.modified)} · ` : ''}{f.sizeLabel}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">{ago(f.modified) ? `${ago(f.modified)} · ` : ''}{f.sizeLabel}</span>
                   </button>
                 </li>
               ))}
@@ -265,30 +265,30 @@ export function FileManagerApp() {
                   key={f.name}
                   type="button"
                   onClick={() => void openFile(f.name)}
-                  className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 p-3 hover:bg-white/10"
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-3 hover:bg-muted"
                 >
                   <FileIcon name={f.name} />
                   <span className="w-full truncate text-center text-[10px]">{f.name}</span>
-                  <span className="text-[10px] text-white/40">{f.sizeLabel}</span>
+                  <span className="text-[10px] text-muted-foreground">{f.sizeLabel}</span>
                 </button>
               ))}
             </div>
           )}
           {visibleFiles.length === 0 && (
-            <p className="p-6 text-center text-sm text-white/40">Ничего не найдено по запросу «{filter}».</p>
+            <p className="p-6 text-center text-sm text-muted-foreground">Ничего не найдено по запросу «{filter}».</p>
           )}
         </div>
       )}
 
       {selected && (
-        <div className="flex max-h-[55%] shrink-0 flex-col border-t border-white/10 bg-black/40">
+        <div className="flex max-h-[55%] shrink-0 flex-col border-t border-border bg-muted">
           <div className="flex shrink-0 items-center gap-2 px-3 py-1.5">
-            <FileText className="size-3.5 text-violet-300" />
+            <FileText className="size-3.5 text-primary" />
             <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{selected.name}</span>
             <button
               type="button"
               onClick={() => openInEditor(selected.name)}
-              className="rounded px-1.5 py-0.5 text-[10px] text-violet-300 hover:bg-white/10"
+              className="rounded px-1.5 py-0.5 text-[10px] text-primary hover:bg-muted"
             >
               В редактор
             </button>
@@ -297,21 +297,21 @@ export function FileManagerApp() {
               onClick={() => void renameFile(selected.name)}
               disabled={busyOp === 'rename'}
               aria-label="Переименовать файл"
-              className="rounded px-1.5 py-0.5 text-[10px] text-white/60 hover:bg-white/10 disabled:opacity-40"
+              className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted disabled:opacity-40"
             >
               {busyOp === 'rename' ? <Loader2 className="size-3 animate-spin" /> : <Pencil className="size-3" />} Переименовать
             </button>
             {confirmDelete ? (
               <span className="inline-flex items-center gap-1 text-[10px]">
-                <span className="text-red-300">Удалить навсегда?</span>
-                <button type="button" onClick={() => void deleteFile(selected.name)} className="rounded bg-red-500/20 px-1.5 py-0.5 text-red-200 hover:bg-red-500/30">Да</button>
-                <button type="button" onClick={() => setConfirmDelete(false)} className="rounded px-1.5 py-0.5 text-white/60 hover:bg-white/10">Нет</button>
+                <span className="text-danger">Удалить навсегда?</span>
+                <button type="button" onClick={() => void deleteFile(selected.name)} className="rounded bg-danger-soft px-1.5 py-0.5 text-danger hover:bg-danger-soft">Да</button>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-muted">Нет</button>
               </span>
             ) : (
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-white/10"
+                className="rounded px-1.5 py-0.5 text-[10px] text-danger hover:bg-muted"
               >
                 Удалить
               </button>
@@ -319,16 +319,16 @@ export function FileManagerApp() {
             <a
               href={`/api/agents/sandbox?file=${encodeURIComponent(selected.name)}&download=1`}
               download={selected.name}
-              className="rounded px-1.5 py-0.5 text-[10px] text-white/60 hover:bg-white/10"
+              className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
             >
               Скачать
             </a>
-            <button type="button" onClick={() => setSelected(null)} className="rounded px-1.5 py-0.5 text-[10px] text-white/60 hover:bg-white/10">Закрыть</button>
+            <button type="button" onClick={() => setSelected(null)} className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted">Закрыть</button>
           </div>
           {loadingFile ? (
-            <p className="flex items-center gap-2 px-3 pb-3 text-xs text-white/40"><Loader2 className="size-3.5 animate-spin" /> Читаю…</p>
+            <p className="flex items-center gap-2 px-3 pb-3 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Читаю…</p>
           ) : (
-            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 pb-3 font-mono text-[11px] leading-relaxed text-slate-300">
+            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 pb-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
               {selected.content}
               {selected.truncated && '\n… (файл показан частично)'}
             </pre>
@@ -357,7 +357,7 @@ function FileIcon({ name }: { name: string }) {
   if (['mp3', 'wav'].includes(ext ?? '')) return <Music className="size-4 text-violet-400" />;
   if (['mp4', 'webm'].includes(ext ?? '')) return <Film className="size-4 text-pink-400" />;
   if (['zip', 'rar', '7z'].includes(ext ?? '')) return <Archive className="size-4 text-yellow-500" />;
-  if (['js', 'ts', 'py', 'json', 'sh', 'bat', 'cmd'].includes(ext ?? '')) return <Code className="size-4 text-emerald-400" />;
-  if (['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext ?? '')) return <FileText className="size-4 text-violet-300" />;
+  if (['js', 'ts', 'py', 'json', 'sh', 'bat', 'cmd'].includes(ext ?? '')) return <Code className="size-4 text-emerald-700" />;
+  if (['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext ?? '')) return <FileText className="size-4 text-primary" />;
   return <File className="size-4 text-gray-400" />;
 }
