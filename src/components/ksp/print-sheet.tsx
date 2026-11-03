@@ -63,7 +63,29 @@ function bankLines(prompt: string): string[] {
   return withBlanks.length > 0 ? withBlanks : all;
 }
 
+/** Модель иногда пишет таблицу прямо в тексте задания: показываем её таблицей, а не строками с «|». */
+export function splitMarkdownTable(prompt: string): { intro: string; rows: string[][] } | null {
+  const lines = prompt.split("\n");
+  const isRow = (line: string) => /^\s*\|.*\|\s*$/.test(line);
+  const rows = lines.filter(isRow).filter((line) => !/^\s*\|[\s:|-]+\|\s*$/.test(line));
+  if (rows.length < 2) return null;
+  return {
+    intro: lines.filter((line) => !isRow(line)).join(" ").trim(),
+    rows: rows.map((row) => row.trim().slice(1, -1).split("|").map((cell) => cell.trim())),
+  };
+}
+
 function TaskContent({ task, onLinkChange, fallback }: { task: WorksheetTask; onLinkChange?: (link: string) => void; fallback: (task: WorksheetTask) => ReactNode }) {
+  const table = splitMarkdownTable(task.prompt);
+  if (table) {
+    const [head, ...body] = table.rows;
+    return (
+      <table className={s.table}>
+        <thead><tr>{head!.map((cell, i) => <th key={i} scope="col">{cell}</th>)}</tr></thead>
+        <tbody>{body.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody>
+      </table>
+    );
+  }
   switch (task.type) {
     case "match": {
       const terms = task.options ?? [];
@@ -139,6 +161,8 @@ function TaskContent({ task, onLinkChange, fallback }: { task: WorksheetTask; on
 
 /** В этих типах вопрос или предложения стоят в теле задания, а в шапке только инструкция. */
 function instructionOf(task: WorksheetTask, language: "ru" | "kz"): string {
+  const table = splitMarkdownTable(task.prompt);
+  if (table) return table.intro || worksheetTypeLabel(task.type, language);
   if (task.type === "fill_bank") return worksheetTypeLabel("fill_bank", language);
   if (task.type === "open" && splitLines(task.prompt).length > 1) return worksheetTypeLabel("open", language);
   if (task.type === "fill") return worksheetTypeLabel("fill", language);

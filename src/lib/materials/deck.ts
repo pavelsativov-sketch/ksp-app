@@ -76,8 +76,8 @@ const RULES = `Составь 12–16 слайдов в порядке хода 
 - "cards": понятия или примеры, points до 6 коротких карточек.
 - "question": вопрос классу в title.
 - "quiz": вопрос в title, options 4 варианта, correctIndex с индексом верного.
-- "activity": задание ученикам, title «Индивидуальная работа» или похожий, lead время и форма работы, points шаги.
-- "reflection": points ровно 3 подписи светофора.
+- "activity": задание ученикам, title «Индивидуальная работа» или похожий, lead время и форма работы, points шаги (не steps).
+- "reflection": points ровно 3 подписи светофора без названий цветов.
 - "homework": points это задание.
 - "thanks": завершение, lead итог урока.
 Обязательные правила:
@@ -88,16 +88,66 @@ const RULES = `Составь 12–16 слайдов в порядке хода 
 - imagePrompt на английском, описывает сцену без текста и цифр. Заполняй у 3–5 слайдов, остальным пустая строка.
 Формат: {"slides":[{"kind":"…","title":"…","lead":"","steps":[],"points":[],"takeaway":"","options":[],"correctIndex":null,"notes":"","imagePrompt":""}]}`;
 
+/** В светофоре свои цвета, название цвета в подписи им противоречит. */
+const LIGHT_COLOR = /^(зел[её]ный|ж[её]лтый|синий|красный|жасыл|сары|көк|қызыл)\s*[:–—-]\s*/i;
+
+const TAIL_KINDS: DeckSlide["kind"][] = ["reflection", "homework", "thanks"];
+
+/** Рефлексия, домашнее задание и прощание всегда в конце, куда бы их ни поставила модель. */
+function inLessonOrder(slides: DeckSlide[]): DeckSlide[] {
+  return [
+    ...slides.filter((slide) => !TAIL_KINDS.includes(slide.kind)),
+    ...TAIL_KINDS.flatMap((kind) => slides.filter((slide) => slide.kind === kind)),
+  ];
+}
+
+const asText = (value: unknown, max: number): string => {
+  if (typeof value === "string") return value.trim().slice(0, max);
+  if (typeof value === "number") return String(value);
+  if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    return asText(item.text ?? item.title ?? item.label ?? item.name, max);
+  }
+  return "";
+};
+
+const asLines = (value: unknown, count: number): string[] => {
+  const items = Array.isArray(value) ? value : typeof value === "string" ? value.split("\n") : [];
+  return items.map((item) => asText(item, 400)).filter(Boolean).slice(0, count);
+};
+
+/** Модели пишут null вместо пустой строки, объекты вместо строк и слишком длинный текст: это не повод терять слайд. */
+function coerceSlide(raw: Record<string, unknown>) {
+  const correct = Number(raw.correctIndex ?? raw.correct);
+  const steps = asLines(raw.steps, 8);
+  const points = asLines(raw.points, 8);
+  // Шаги и пункты модель путает: блоки схемы есть только у flow, остальным нужны пункты.
+  const listed = raw.kind !== "flow" && points.length === 0 ? steps : points;
+  return {
+    id: nextId(),
+    kind: raw.kind,
+    title: asText(raw.title, 200),
+    lead: asText(raw.lead, 400),
+    steps: raw.kind === "flow" ? steps.slice(0, 4) : [],
+    points: raw.kind === "reflection" ? listed.map((label) => label.replace(LIGHT_COLOR, "")) : listed,
+    takeaway: asText(raw.takeaway, 160),
+    options: asLines(raw.options, 4),
+    correctIndex: Number.isInteger(correct) && correct >= 0 && correct <= 3 && raw.correctIndex !== null ? correct : null,
+    notes: asText(raw.notes, 2000),
+    imagePrompt: asText(raw.imagePrompt, 600),
+  };
+}
+
 /** Разбирает ответ модели. Плохой слайд отбрасывается, а не губит всю презентацию. */
 export function parseOutline(raw: unknown): DeckSlide[] {
-  const list = (raw as { slides?: unknown })?.slides;
+  const list = Array.isArray(raw) ? raw : (raw as { slides?: unknown })?.slides;
   if (!Array.isArray(list)) throw new Error("AI вернул презентацию без слайдов");
   const slides = list.flatMap((item) => {
-    const parsed = deckSlideSchema.safeParse({ id: nextId(), ...(item as object) });
+    const parsed = deckSlideSchema.safeParse(coerceSlide((item ?? {}) as Record<string, unknown>));
     return parsed.success ? [parsed.data] : [];
   });
   if (slides.length < 5) throw new Error("AI составил слишком мало корректных слайдов");
-  return slides.slice(0, 30);
+  return inLessonOrder(slides.slice(0, 30));
 }
 
 /** Конструктор начинается с анализа плана; при сбое ИИ учитель получает черновик из полей плана. */

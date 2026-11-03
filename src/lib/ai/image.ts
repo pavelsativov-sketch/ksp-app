@@ -255,7 +255,7 @@ async function generateWithGemini(
       parts: [{ text: prompt }]
     }],
     generationConfig: {
-      responseModalities: ["TEXT", "image"],
+      responseModalities: ["TEXT", "IMAGE"],
       temperature: 1.2, // выше температура = более креативные и яркие изображения
     }
   };

@@ -551,6 +551,7 @@ function WorksheetView({
             : "ИИ сейчас недоступен, поэтому лист собран по локальной методической структуре. Перед печатью сверьте задания с учебником и целями урока."}
         </p>
       )}
+      {sheet.imagesFailed && <DegradedNote text={IMAGES_FAILED_NOTE} />}
       <WorksheetSheet
         sheet={sheet}
         grade={meta?.grade}
@@ -616,9 +617,11 @@ function WorksheetView({
  * готовый ответ. Учитель должен видеть это до печати, иначе он раздаёт
  * ученикам непроверенный текст.
  */
+const IMAGES_FAILED_NOTE = "Сервис картинок сейчас не ответил, поэтому материал собран без иллюстраций. Его можно печатать и так или создать заново позже.";
+
 function DegradedNote({ text }: { text: string }) {
   return (
-    <p className="mb-3 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+    <p className="mb-3 print:hidden text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
       {text}
     </p>
   );
@@ -632,6 +635,7 @@ function FlashcardsView({ set }: { set: FlashcardSet }) {
           ? "ЖИ қолжетімсіз болғандықтық, карточкалар тақырыптағы сөздерден құрастырылды. Мәтіндерді оқулық бойынша тексеріп, нақтылаңыз."
           : "ИИ сейчас недоступен, поэтому карточки собраны из слов темы. Проверьте формулировки по учебнику и дополните их перед печатью."} />
       )}
+      {set.imagesFailed && <DegradedNote text={IMAGES_FAILED_NOTE} />}
       <CardsSheet set={set} />
     </div>
   );

@@ -70,9 +70,32 @@ describe("buildDeckPptx", () => {
 });
 
 describe("черновик презентации", () => {
+  it("null, объекты и длинный текст не губят слайд", () => {
+    const slide = { kind: "flow", title: "Т".repeat(300), lead: null, steps: [{ text: "Данные" }, "Результат"], points: null, takeaway: null, options: null, correctIndex: null, notes: null, imagePrompt: null };
+    const [first] = parseOutline({ slides: Array.from({ length: 5 }, () => slide) });
+    expect(first!.title).toHaveLength(200);
+    expect(first!.steps).toEqual(["Данные", "Результат"]);
+    expect(first!.correctIndex).toBeNull();
+  });
+
   it("плохой слайд отбрасывается, остальные остаются", () => {
     const good = Array.from({ length: 5 }, () => ({ kind: "goals", title: "Цели", points: ["Понять"] }));
     expect(parseOutline({ slides: [...good, { kind: "нет такого", title: "x" }] })).toHaveLength(5);
+  });
+
+  it("шаги задания становятся пунктами, цвет убирается из подписи, финал идёт в конце", () => {
+    const parsed = parseOutline({
+      slides: [
+        { kind: "title", title: "Тема" },
+        { kind: "reflection", title: "Рефлексия", points: ["Зелёный: всё понятно", "Красный: нужна помощь"] },
+        { kind: "activity", title: "Работа", steps: ["Нарисуй", "Подпиши"] },
+        { kind: "homework", title: "Дома", points: ["Таблица"] },
+        { kind: "list", title: "Отличия", points: ["Стенка"] },
+      ],
+    });
+    expect(parsed.map((slide) => slide.kind)).toEqual(["title", "activity", "list", "reflection", "homework"]);
+    expect(parsed[1]!.points).toEqual(["Нарисуй", "Подпиши"]);
+    expect(parsed[3]!.points).toEqual(["всё понятно", "нужна помощь"]);
   });
 
   it("запасной черновик строится из плана без ИИ", () => {

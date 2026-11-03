@@ -91,7 +91,8 @@ async function runGeneration(input: HandoutInput): Promise<Handout> {
       sheet.cardLayout = true;
     }
     if (wantImages) {
-      const { items, created } = await illustrateWorksheetTasks(sheet.tasks, {
+      const prepared = withIllustrationPrompt(sheet.tasks, input);
+      const { items, created } = await illustrateWorksheetTasks(prepared, {
         topic: input.topic,
         subject: input.subject,
         grade: input.grade,
@@ -135,6 +136,14 @@ async function runGeneration(input: HandoutInput): Promise<Handout> {
   return await crosswordWithFallback(input);
 }
 
+/** Модель часто забывает про картинку, а лист без неё не похож на образец: одна иллюстрация есть всегда. */
+function withIllustrationPrompt(tasks: WorksheetTask[], input: HandoutInput): WorksheetTask[] {
+  if (tasks.some((task) => task.imagePromptEn?.trim())) return tasks;
+  const target = tasks.findIndex((task) => task.type === "match");
+  const index = target >= 0 ? target : tasks.findIndex((task) => task.type !== "reflection");
+  return tasks.map((task, i) => (i === index ? { ...task, imagePromptEn: `Colourful illustration of the school topic "${input.topic}" (${input.subject}), grade ${input.grade}.` } : task));
+}
+
 /** Резерватор слотов квоты изображений для генератора иллюстраций. */
 function imageSlotReserver(input: HandoutInput) {
   return async () => {
@@ -145,6 +154,7 @@ function imageSlotReserver(input: HandoutInput) {
 
 const SYSTEM = `Ты методист РК, готовящий раздаточные материалы по теме урока.
 Уровень — соответствующий классу. Вопросы и задания привязаны к теме, без воды. Язык — строго язык, заданный пользователем: все подписи, инструкции, критерии, дескрипторы, варианты ответов, ключи и введение пиши на нём. Не смешивай русский и казахский. Перед выдачей проверь, что каждое задание решается по конкретным знаниям темы и соответствует указанной цели обучения.
+Текст заданий не содержит разметки markdown: ни звёздочек, ни таблиц с символом |. Таблицы только через поля compare и table_fix.
 Отвечай строго в JSON по схеме, без markdown и без пояснений.`;
 
 const EXACT_SUBJECT = /математ|алгебр|геометр|физик|хими/i;
@@ -435,6 +445,10 @@ async function flashcardsWithFallback(input: HandoutInput): Promise<FlashcardSet
   }
 }
 
+export function clueRevealsWord({ word, clue }: CrosswordWord): boolean {
+  return clue.toLowerCase().includes(word.toLowerCase().slice(0, 5));
+}
+
 async function aiCrossword(input: HandoutInput): Promise<Crossword> {
   const objectives = (input.kspContext?.learningObjectives ?? []).filter((o) => o.trim());
   // Свои слова учителя: без AI, только нормализация и раскладка.
@@ -448,10 +462,12 @@ async function aiCrossword(input: HandoutInput): Promise<Crossword> {
     return { ...layoutCrossword(parsed.words, parsed.title, parsed.intro), language: input.language };
   }
   const user = `${input.language === "kz" ? "Кроссвордтың сөздері мен барлық анықтамаларын қазақша жаз. Қазақ әліпбиіндегі Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, Һ, І әріптерін дұрыс сақта." : ""}\nПодбери ${input.count} ключевых слов по теме «${input.topic}» (${input.subject}, ${input.grade} класс) для кроссворда.
-Слова — существительные в именительном падеже, длина 3–12 букв, БЕЗ пробелов и дефисов. Желательно с общими буквами для пересечений.
-Для каждого — короткое определение-подсказка (clue) на ${input.language === "kz" ? "казахском" : "русском"}.${objectives.length ? `\nСлова должны отражать цели урока:\n${objectives.map((o) => `• ${o}`).join("\n")}` : ""}`;
+Слова — ОДНО существительное в именительном падеже, длина 3–12 букв, БЕЗ пробелов и дефисов, не склеивай два слова. Желательно с общими буквами для пересечений.
+Для каждого — короткое определение-подсказка (clue) на ${input.language === "kz" ? "казахском" : "русском"}. В подсказке нет самого слова и однокоренных слов.${objectives.length ? `\nСлова должны отражать цели урока:\n${objectives.map((o) => `• ${o}`).join("\n")}` : ""}`;
   const parsed = await chatJson("tasks", "crossword_words", crosswordSchema(), user, 0.5, (content) => validateCrossword(content, input.language));
-  return { ...layoutCrossword(parsed.words, parsed.title, parsed.intro), language: input.language };
+  // Подсказка «Приведение дробей» к слову ПРИВЕДЕНИЕ ничего не загадывает.
+  const fair = parsed.words.filter((word) => !clueRevealsWord(word));
+  return { ...layoutCrossword(fair.length >= 3 ? fair : parsed.words, parsed.title, parsed.intro), language: input.language };
 }
 
 /**
@@ -996,12 +1012,15 @@ function crosswordSchema(): Record<string, unknown> {
  * Нормализация заданий после AI: обрезка строк, чистка массивов,
  * защита от пустых промптов. Вызывается и для AI-ответа, и для заглушки.
  */
+const stripMarkdown = (text: string) => text.replace(/\*\*/g, "");
+
 function normalizeWorksheetTasks(tasks: WorksheetTask[]): WorksheetTask[] {
   return tasks
     .map((task) => {
       const normalized: WorksheetTask = {
         ...task,
-        prompt: task.prompt.trim(),
+        prompt: stripMarkdown(task.prompt).trim(),
+        expectedAnswer: task.expectedAnswer === undefined ? undefined : stripMarkdown(task.expectedAnswer),
         criterion: task.criterion.trim(),
         descriptor: task.descriptor.trim(),
         points: Number.isFinite(task.points) ? Math.max(0, Math.round(task.points)) : 0,

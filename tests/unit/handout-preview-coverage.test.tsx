@@ -13,6 +13,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { HandoutPreview } from "@/components/ksp/handout-preview";
+import { splitMarkdownTable } from "@/components/ksp/print-sheet";
 import type { FlashcardSet, Handout, Worksheet, WorksheetTask, WorksheetTaskType } from "@/lib/handouts/types";
 
 /** Все типы заданий, которые умеет печатать .docx. */
@@ -139,5 +140,16 @@ describe("предупреждение о материале без AI", () => {
     renderPreview({ ...cards, degraded: false });
     expect(screen.queryByText(/ИИ сейчас недоступен/)).toBeNull();
     cleanup();
+  });
+});
+
+describe("таблица в тексте задания", () => {
+  it("показывается таблицей", () => {
+    const parsed = splitMarkdownTable("Найди ошибки\n\n| Шаг | Решение |\n|---|---|\n| 1 | 6*8 |");
+    expect(parsed).toEqual({ intro: "Найди ошибки", rows: [["Шаг", "Решение"], ["1", "6*8"]] });
+  });
+
+  it("обычный текст остаётся текстом", () => {
+    expect(splitMarkdownTable("Вычисли: 1/4 + 2/4 = ____")).toBeNull();
   });
 });
