@@ -57,7 +57,7 @@ export function LikeButton({ planId, initialLikes, initiallyLiked, canLike }: Pr
         onClick={toggle}
         disabled={pending}
         title={liked ? "Убрать лайк" : "Полезный план"}
-        className={liked ? "text-[#c0512f] border-[#c0512f]" : ""}
+        className={liked ? "text-primary border-primary" : ""}
       >
         <Heart className={liked ? "size-4 fill-current" : "size-4"} /> {likes}
       </Button>

@@ -208,7 +208,7 @@ describe("buildHandoutDocx", () => {
     if (h.kind !== "flashcards") return;
     const zip = await JSZip.loadAsync(await buildHandoutDocx(h));
     const documentXml = await zip.file("word/document.xml")?.async("string");
-    expect(documentXml).toContain("ПАМЯТКА 01");
+    expect(documentXml).toContain("КАРТОЧКА 01");
     expect(documentXml).toContain("Пример:");
     expect(documentXml).toContain("Проверь себя:");
   });
@@ -221,11 +221,11 @@ describe("buildHandoutDocx", () => {
       kind: "flashcards", topic: "Дроби", subject: "Математика", grade: 5, language: "ru", count: 8,
     });
     if (worksheet.kind !== "worksheet" || memos.kind !== "flashcards") return;
-    expect(memos.title).toContain("Памятки");
+    expect(memos.title).toContain("Карточки");
     const zip = await JSZip.loadAsync(await buildCombinedDocx([worksheet, memos]));
     const documentXml = await zip.file("word/document.xml")?.async("string");
     expect(documentXml).toContain("Задание 1");
-    expect(documentXml).toContain("Памятки по теме «Дроби»");
+    expect(documentXml).toContain("Карточки по теме «Дроби»");
     expect(documentXml).toContain("Дескрипторы и баллы");
   });
 

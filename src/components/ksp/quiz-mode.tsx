@@ -77,16 +77,16 @@ export function QuizMode({ stages, onClose }: QuizModeProps) {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
-        className="flex w-full max-h-full max-w-none flex-col rounded-none border-0 bg-surface p-0 md:max-w-2xl md:rounded-2xl md:border md:border-[#ddd5cb] md:shadow-[0_2px_16px_rgba(28,26,23,0.16)]"
+        className="flex w-full max-h-full max-w-none flex-col rounded-none border-0 bg-surface p-0 md:max-w-2xl md:rounded-2xl md:border md:border-border md:shadow-[0_2px_16px_rgba(28,26,23,0.16)]"
         overlayClassName="bg-[#17202b]/80 p-0 md:p-4"
         aria-labelledby="quiz-mode-title"
       >
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-[#ddd5cb] px-5 py-4">
-            <Sparkles className="size-5 text-[#c0512f]" />
+        <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+            <Sparkles className="size-5 text-primary" />
           <div className="flex-1">
             <DialogTitle id="quiz-mode-title" className="editorial-kicker text-[#2f5b4f]">Режим квиза</DialogTitle>
-            <p className="mt-1 text-xs text-[#8a817a]">
+            <p className="mt-1 text-xs text-muted-foreground">
               {finished
                 ? `Готово — ${results.length} из ${flat.length}`
                 : `Задание ${idx + 1} из ${flat.length} · ${flat[idx].stageTitle}`}
@@ -108,7 +108,7 @@ export function QuizMode({ stages, onClose }: QuizModeProps) {
         {/* Progress bar */}
         <div className="h-1 bg-[#f1ece4]">
           <div
-            className="h-full bg-[#c0512f] transition-all duration-300"
+            className="h-full bg-primary transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>

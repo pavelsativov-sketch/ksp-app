@@ -58,8 +58,8 @@ export function StageEditor({ title, stageKey, stage, onChange, context, availab
     { value: "ФО + Взаимооценивание", label: st.methodFoPeer },
   ];
   return (
-    <section className="space-y-4 rounded-2xl border border-[#ddd5cb] bg-surface px-5 py-6 md:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd5cb] pb-4">
+    <section className="space-y-4 rounded-2xl border border-border bg-surface px-5 py-6 md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div>
           <p className="editorial-kicker">{st.kicker}</p>
           <h3 className="editorial-display mt-2 text-2xl">{title}</h3>

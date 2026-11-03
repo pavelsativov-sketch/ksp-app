@@ -29,7 +29,7 @@ const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin", "cyrill
 const nunito = Nunito({ variable: "--font-nunito", subsets: ["latin", "cyrillic"], display: "swap" });
 // Выразительный широкий шрифт для крупных заголовков (есть кириллица). В плотных
 // интерфейсах не используется: только лендинг, вход и заставки.
-const unbounded = Unbounded({ variable: "--font-unbounded", subsets: ["latin", "cyrillic"], weight: ["500", "700", "800"], display: "swap" });
+const unbounded = Unbounded({ variable: "--font-unbounded", subsets: ["latin", "cyrillic", "cyrillic-ext"], weight: ["500", "700", "800"], display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

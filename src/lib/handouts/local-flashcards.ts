@@ -33,8 +33,8 @@ const STOP = new Set([
 
 const COPY = {
   ru: {
-    memo: "ПАМЯТКА",
-    title: (topic: string) => `Памятки по теме «${topic}»`,
+    memo: "КАРТОЧКА",
+    title: (topic: string) => `Карточки по теме «${topic}»`,
     intro: (topic: string, grade: number) =>
       `Карточки по теме «${topic}», ${grade} класс. На одной стороне — термин, на другой — объяснение с примером. Проверьте себя по оборотам.`,
     back: (term: string, topic: string) =>

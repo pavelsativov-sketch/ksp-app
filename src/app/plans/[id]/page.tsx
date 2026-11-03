@@ -253,12 +253,12 @@ export default async function PlanViewPage({
       <section id="materials" aria-labelledby="materials-title" className={`${l.section} no-print`}>
         <h2 id="materials-title" className={l.sectionTitle}>Материалы урока</h2>
         <div className={l.tiles}>
-          <div className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>5–10 выборов для учеников, выдаются по коду.</p>
+          <div className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>Live-квиз, пропуски, пары, порядок: выберите формат.</p>
             {isOwner ? <InteractiveButton planId={plan.id} /> : <p className={l.note}>Доступен автору плана.</p>}
             {isOwner && hasTasks(plan) && <Button asChild variant="outline"><Link href={`/quiz/host/${plan.id}`}><Radio /> Live-квиз</Link></Button>}
           </div>
-          <div className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Задания для учеников на 10 баллов.</p>
-            <WorksheetButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
+          <div className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Красочный лист A4: картинка для печати, PDF или Word.</p>
+            <WorksheetButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
           </div>
           <div className={l.tile} data-tone="peach"><MessageSquareText aria-hidden="true" className={l.tileIcon} /><b>Слова педагога</b><p>Живая речь учителя по этапам, в Word.</p>
             {user ? <TeacherSpeechButton planId={plan.id} /> : <Button asChild variant="outline"><a href={`/api/export/teacher-script/${plan.id}`}><ScrollText /> Слова педагога</a></Button>}
@@ -266,20 +266,23 @@ export default async function PlanViewPage({
           <div className={l.tile} data-tone="green"><Grid3x3 aria-hidden="true" className={l.tileIcon} /><b>Кроссворд</b><p>Из терминов этой темы.</p>
             <CrosswordButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
           </div>
-          <div className={l.tile} data-tone="pink"><Layers aria-hidden="true" className={l.tileIcon} /><b>Карточки</b><p>Памятки по теме для повторения.</p>
-            <MemosButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
+          <div className={l.tile} data-tone="pink"><Layers aria-hidden="true" className={l.tileIcon} /><b>Карточки в тетрадь</b><p>Печатаются, вырезаются и вклеиваются в тетрадь.</p>
+            <MemosButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
           </div>
-          <div className={l.tile} data-tone="gray"><Presentation aria-hidden="true" className={l.tileIcon} /><b>Презентация и пакет</b><p>PowerPoint к уроку или весь комплект архивом.</p>
+          <div className={l.tile} data-tone="gray"><Presentation aria-hidden="true" className={l.tileIcon} /><b>Презентация</b><p>ИИ разбирает КСП, вы правите слайды, на выходе PowerPoint с анимацией.</p>
             <div className={l.tileRow}>
-              <Button asChild variant="outline"><a href={`/api/export/pptx/${plan.id}`}><Presentation /> PowerPoint</a></Button>
+              {isOwner
+                ? <Button asChild variant="outline"><Link href={`/plans/${plan.id}/presentation`}><Presentation /> Конструктор</Link></Button>
+                : <Button asChild variant="outline"><a href={`/api/export/pptx/${plan.id}`}><Presentation /> PowerPoint</a></Button>}
               <Button asChild variant="outline"><a href={`/api/export/zip/${plan.id}`}><Archive /> ZIP</a></Button>
             </div>
           </div>
         </div>
+        {isOwner && <KtpBuilder planId={plan.id} topic={plan.content.topic || plan.title} isPro={canUseKtp} grade={plan.grade} subjectId={plan.subject_id} language={plan.language} />}
       </section>
 
       <details className={`${l.more} no-print`}>
-        <summary>Ещё по уроку: проверка качества, КТП, согласование, история</summary>
+        <summary>Ещё по уроку: проверка качества, согласование, история</summary>
         <div className={l.moreBody}>
           <div className={l.tileRow}>
             {isOwner && <Button asChild variant="outline"><Link href={`/plans/${plan.id}/history`}><HistoryIcon /> История</Link></Button>}
@@ -288,7 +291,6 @@ export default async function PlanViewPage({
             {user && !isOwner && plan.visibility === "public" && <ReportPlanButton planId={plan.id} />}
           </div>
           {isOwner && <QualityGate content={plan.content} planId={plan.id} language={plan.language} />}
-          {isOwner && <KtpBuilder planId={plan.id} topic={plan.content.topic || plan.title} isPro={canUseKtp} grade={plan.grade} subjectId={plan.subject_id} language={plan.language} />}
           {isOwner && (approvalSchool?._id ? (
             <SchoolApprovalPanel schoolId={approvalSchool._id.toString()} planId={plan.id} currentUpdatedAt={plan.updated_at} locale={approvalLocale} mode="owner" availableClasses={approvalClassNames} initialClassName={plan.content.header.grade} />
           ) : (

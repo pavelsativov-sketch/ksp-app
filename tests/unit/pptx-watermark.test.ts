@@ -81,13 +81,12 @@ describe("buildKspPptx: типы заданий", () => {
     expect(all).toContain("Задание");
   });
 
-  it("shows a hint when the task has one", async () => {
+  it("keeps the hint off the slide so the class does not see it", async () => {
     const plan = makePlan();
     plan.content.stages.beginning.tasks = [task({ type: "MCQ", options: ["а", "б"], correctIndex: 0, hint: "посчитайте" })];
     const slides = await slideTexts(plan);
     const all = slides.join("\n");
-    expect(all).toContain("Подсказка");
-    expect(all).toContain("посчитайте");
+    expect(all).not.toContain("посчитайте");
   });
 });
 

@@ -34,7 +34,7 @@ it("builds a draft table from topics and downloads the same result without a sec
   fireEvent.click(screen.getByRole("button", { name: "Сформировать таблицу КТП" }));
   await screen.findByRole("table");
   expect(screen.getByText("Заполните по учебной программе")).toBeTruthy();
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ planId: "plan-1", topics: ["Дроби", "Сложение дробей"], startDate: "2026-09-17" });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ planId: "plan-1", topics: ["Дроби", "Сложение дробей"], lessonsPerWeek: 1, startDate: "2026-09-17" });
   fireEvent.click(screen.getByRole("button", { name: "Скачать КТП в Word" }));
   expect(createObjectURL).toHaveBeenCalledTimes(1);
   expect(click).toHaveBeenCalledTimes(1);

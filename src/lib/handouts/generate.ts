@@ -147,6 +147,29 @@ const SYSTEM = `Ты методист РК, готовящий раздаточ�
 Уровень — соответствующий классу. Вопросы и задания привязаны к теме, без воды. Язык — строго язык, заданный пользователем: все подписи, инструкции, критерии, дескрипторы, варианты ответов, ключи и введение пиши на нём. Не смешивай русский и казахский. Перед выдачей проверь, что каждое задание решается по конкретным знаниям темы и соответствует указанной цели обучения.
 Отвечай строго в JSON по схеме, без markdown и без пояснений.`;
 
+const EXACT_SUBJECT = /математ|алгебр|геометр|физик|хими/i;
+
+/** Математика, физика и химия: лист про вычисления. Общая структура давала им «перечисли свойства». */
+export function isExactSubject(subject: string): boolean {
+  return EXACT_SUBJECT.test(subject);
+}
+
+const EXACT_STRUCTURE = `2. ОБЯЗАТЕЛЬНАЯ СТРУКТУРА: на этом предмете ученик РЕШАЕТ, а не рассуждает о теме.
+   - Первое задание: "fill_bank" или "multiple_choice", разминка с 3–4 короткими примерами.
+   - 2–3 задания "open": столбик из 4–6 конкретных примеров с числами («Вычисли: 3/8 + 2/8 = ____»), от простых к сложным. expectedAnswer содержит ответы и ход решения.
+   - Одно задание "match": options это выражения, pairs это их результаты.
+   - Одно задание "table_fix" («Найди ошибку в решении»): 2–3 решения с типичными ошибками, expectedAnswer это «ошибка → исправление».
+   - Одно задание "case_study": задача из жизни с числами, expectedAnswer это решение по шагам.
+   ЗАПРЕЩЕНЫ задания «перечисли свойства», «распредели термины», «нарисуй инфографику». Первому заданию заполни imagePromptEn: красочная иллюстрация темы без текста и чисел. Каждый ответ получи вычислением и проверь.`;
+
+const GENERAL_STRUCTURE = `2. ОБЯЗАТЕЛЬНАЯ СТРУКТУРА (как на образце учителя, при count ≥ 5):
+   - Задание 1 "match": prompt «Соотнеси термин и его определение». options это 6–8 терминов темы, pairs их настоящие определения В ТОМ ЖЕ порядке (перемешивает программа). expectedAnswer перечисляет пары. Обязательно заполни imagePromptEn: широкая красочная иллюстрация темы без текста.
+   - Задание 2 "fill_bank": prompt это ТОЛЬКО 5 пронумерованных предложений с "_____" в начале или середине, каждое с новой строки. wordBank это нужные слова и 1 лишнее. expectedAnswer это предложения с ответами.
+   - Задание 3 "open": prompt это 2 вопроса «Что такое …?», каждый с новой строки, с номером. expectedAnswer это определения.
+   - Задание 4 "compare": prompt «Сравни …». compareColumns: ["Критерий сравнения", "что сравниваем 1", "что сравниваем 2"]. compareRows это 4–5 критериев. expectedAnswer заполняет таблицу строками «критерий: значение 1 / значение 2».
+   - Задание 5 "interactive": prompt «Отсканируй QR-код или перейди по ссылке». link только null, учитель вставит ссылку сам.
+   - Остальные задания при count > 5 выбирай по теме: "sort", "case_study", "multiple_choice", "odd_one_out", "ordering". Последним при count ≥ 6 поставь "reflection".`;
+
 async function aiWorksheet(input: HandoutInput): Promise<Worksheet> {
   const lang = input.language === "kz" ? "казахский" : "русский";
   // Эталон рабочего листа РК (см. _refimg image4..image9):
@@ -166,6 +189,8 @@ async function aiWorksheet(input: HandoutInput): Promise<Worksheet> {
   * Конец: ${stages.find(s => s.stage === "end")?.activities || "нет"}`;
   }
 
+  const exact = isExactSubject(input.subject);
+  const structure = exact ? EXACT_STRUCTURE : GENERAL_STRUCTURE;
   const difficultyLabel = input.difficulty === "easy" ? "лёгкий" : input.difficulty === "hard" ? "сложный" : "средний";
   const user = `${input.language === "kz" ? "НАЗАР АУДАР: барлық мәтін табиғи қазақ тілінде болсын. Егер тақырып, пән немесе оқу мақсаты орысша берілсе, оларды мағынасын сақтап қазақшаға аудар. Орысша нұсқауларды, жауаптарды және бағалау атауларын қоспа. JSON өрістерінің атауларын өзгертпе." : ""}\nСоставь рабочий лист (worksheet) на ${lang} по теме «${input.topic}» для ${input.grade} класса (${input.subject}).${contextBlock}
 
@@ -173,18 +198,11 @@ async function aiWorksheet(input: HandoutInput): Promise<Worksheet> {
 
 ЭТАЛОН КАЧЕСТВА (обязательно, как в лучших листах учителей):
 1. КОНКРЕТИКА ВМЕСТО АБСТРАКЦИИ. Каждое задание содержит реальные факты темы: термины, определения, числа, имена, даты, примеры. ЗАПРЕЩЕНЫ заглушки вида «Понятие 1», «Описание B», «Тема относится к предмету», «Ключевое понятие — _____» без контекста, повтор названия темы вместо ответа. Ученик должен работать с содержанием, а не с названием темы.
-2. ОБЯЗАТЕЛЬНАЯ СТРУКТУРА (при count ≥ 6):
-   - Задание 1 — "sort": «Распредели элементы по двум направлениям». groups — 2 ОСМЫСЛЕННЫХ названия направлений по теме (напр. «Защита учётной записи» / «Защита компьютера и данных»), не «Группа 1/2». items — 16–21 КОНКРЕТНЫЙ термин темы (1–3 слова, без определений внутри), столько, чтобы хватило на 4–6 строк в каждой колонке; expectedAnswer — разнос по группам («Защита учётной записи: надёжный пароль, …; Защита компьютера и данных: антивирус, …»).
-   - Одно задание — "checklist": «Отметь ✓, каким требованиям/признакам соответствует …». options — 4–6 конкретных утверждений (часть верные, часть нет); correctFlags — какие верные.
-   - Одно задание — "open" на ПЕРЕЧИСЛЕНИЕ (не рассуждение): «Перечисли требования/признаки/свойства …» — 5 требований по теме, expectedAnswer — их перечень.
-   - Одно задание — "match": options — 3–5 конкретных терминов темы, pairs — их РЕАЛЬНЫЕ определения (не «Описание А»); expectedAnswer — пары «1–Б, 2–А …».
-   - Одно задание — "open" или "case_study": вопрос «Что такое …? Объясни, как работает и почему … Приведи примеры» + 5–8 строк для ответа; для case_study: situation — кейс 4–8 предложений с конкретными данными (числа, имена, ситуация), prompt — 1–3 вопроса по кейсу; expectedAnswer — эталонный разбор 2–5 предложений.
-   - Одно задание — "interactive" (если count ≥ 5): prompt — «Отсканируй QR-код или перейди по ссылке. Выполни интерактив и запиши результат»; link — ТОЛЬКО null (учитель вставит свою ссылку Wordwall/LearningApps, НЕ выдумывай URL); expectedAnswer — что записать («Мой результат: …»).
-   - Одно задание — "creative" (если count ≥ 6): prompt — пошаговая инструкция создать что-то с помощью ИИ/рисунка (персонаж, памятка, инфографика) + 3–5 конкретных требований (эмодзи-список допустим); expectedAnswer — критерии качества.
-   При count < 6 выбери самые подходящие типы из списка, но конкретика обязательна всегда.
+${structure}
 3. ОСТАЛЬНЫЕ ТИПЫ — только с конкретным содержанием:
    - "multiple_choice": 4 варианта, каждый — факт/число/пример по теме (не «изучается в N классе»); correctIndex (0..3).
-   - "fill_bank": prompt — 3–6 пронумерованных предложений с "_____"; wordBank — 4–8 конкретных слов темы (1–2 лишних); expectedAnswer — предложения с вставленными словами.
+   - "fill_bank": prompt — ТОЛЬКО 3–6 пронумерованных предложений с "_____", каждое с новой строки; wordBank — 4–8 конкретных слов темы (1–2 лишних); expectedAnswer — предложения с вставленными словами.
+   - "compare": таблица сравнения; compareColumns — шапка из 3 столбцов, compareRows — 3–5 критериев; expectedAnswer — заполненные строки.
    - "table_fix"/"scenario_fix": жизненная ситуация с 3–4 ошибками по теме; expectedAnswer — «ошибка → исправление».
    - "choice_buttons": 2–4 варианта-кнопки с данными; correctChoice + объяснение.
    - "fill": предложение с "_____" про конкретный факт (не «ключевое понятие темы»).
@@ -200,7 +218,6 @@ async function aiWorksheet(input: HandoutInput): Promise<Worksheet> {
 8. ОТВЕТЫ УЧИТЕЛЮ: обязательно заполни expectedAnswer (open/fill/fill_bank/sort/checklist/case_study/table_fix/scenario_fix/choice_buttons/creative/interactive/word_search/ordering/odd_one_out/categorize), correctIndex (multiple_choice/true_false), correctChoice (choice_buttons), correctFlags (checklist), oddIndex+oddReason (odd_one_out). Без ключей лист считается браком.
 9. СЛОЖНОСТЬ: каждому заданию укажи difficulty — "easy", "medium" или "hard" в соответствии с уровнем.
 10. ФИНАЛЬНОЕ ЗАДАНИЕ: последним (перед reflection) добавь "creative" с коротким призывом и местом для ответа — «Придумай пример …:», «Составь свой …:». В лист оно печатается отдельной курсивной строкой внизу, поэтому не дублируй длинные инструкции.
-11. ЭТАЛОН ОФОРМЛЕНИЯ (как в лучших листах, не копируй буквально — держи структуру): «Задание 1. Распредели элементы по двум направлениям.» → плашка «Слова для распределения:» и ДЛИННЫЙ список конкретных терминов → таблица из двух колонок с названиями направлений в шапке и пустыми высокими ячейками → «Задание 2. Перечисли/отметь …» → пронумерованные строки 1–5 для письменного ответа → финальная курсивная строка с призывом.
 12. ВИЗУАЛЬНАЯ СТРУКТУРА ЛИСТА: короткий заголовок по теме, место для имени/класса/даты, отдельные хорошо различимые задания. Если тему можно изучать через изображения, добавь одно наблюдательное задание с 3–5 разными объектами/примерами и вопросом на определение или классификацию; для него заполни imagePromptEn. Добавь отдельное задание на сопоставление конкретных примеров с типами/категориями и одно задание с достаточным местом для письменного объяснения. Даже без сгенерированной иллюстрации задания должны оставаться полностью понятными по тексту.`;
 
   const schema = worksheetSchema();
@@ -387,13 +404,13 @@ title/intro/metaLine — короткие нейтральные строки (�
 async function aiFlashcards(input: HandoutInput): Promise<FlashcardSet> {
   const lang = input.language === "kz" ? "казахский" : "русский";
   const objectives = (input.kspContext?.learningObjectives ?? []).filter((o) => o.trim());
-  const user = `${input.language === "kz" ? "Барлық карточка мәтінін қазақша жаз. Орысша тақырып берілсе, оны қазақшаға аудар." : ""}\nСоставь набор памяток-карточек (flashcards) на ${lang} по теме «${input.topic}» для ${input.grade} класса (${input.subject}).
-Количество памяток: РОВНО ${input.count}.
-Каждая карточка — самостоятельная мини-история, а не сухая пара «термин — определение»:
-- front: один термин или короткий вопрос, 1–5 слов;
-- back: понятное объяснение в 1–2 коротких предложениях;
-- example: один конкретный пример, опыт, ситуация или применение по теме;
-- checkQuestion: короткая проверка себя, на которую ученик может ответить без подсказки.
+  const user = `${input.language === "kz" ? "Барлық карточка мәтінін қазақша жаз. Орысша тақырып берілсе, оны қазақшаға аудар." : ""}\nСоставь опорные карточки на ${lang} по теме «${input.topic}» для ${input.grade} класса (${input.subject}). Карточки печатают, вырезают, и ученик вклеивает их в тетрадь: это конспект, к которому он возвращается на уроке и дома.
+Количество карточек: РОВНО ${input.count}.
+Каждая карточка умещается в 1/6 листа A4:
+- front: термин или правило, 1–5 слов;
+- back: определение или правило, не больше 2 коротких предложений;
+- example: один конкретный пример или образец решения;
+- checkQuestion: короткий вопрос для самопроверки.
 Карточки должны отличаться по роли: определение, пример, сравнение, правило, применение, частая ошибка, мини-задача. Не повторяй одну мысль разными словами. Не пиши «Понятие 1», «важный термин», «пример из жизни» без конкретики. Текст должен быть коротким, живым и понятным ученику ${input.grade} класса.${objectives.length ? `\nОпирайся на цели урока:\n${objectives.map((o) => `• ${o}`).join("\n")}` : ""}`;
   const parsed = await chatJson("tasks", "flashcards", flashcardsSchema(), user, 0.5, (content) => validateFlashcards(content, input.language));
   return { kind: "flashcards", language: input.language, ...parsed };
@@ -610,6 +627,14 @@ function validateRichTaskType(
     if (!expectedAnswer) throw new Error(`AI: fill_bank задание ${i + 1} без expectedAnswer`);
     return { ...base, type: "fill_bank" as const, wordBank, expectedAnswer };
   }
+  if (t.type === "compare") {
+    const compareColumns = asStringArray(t.compareColumns);
+    const compareRows = asStringArray(t.compareRows);
+    const expectedAnswer = optionalString(t.expectedAnswer);
+    if (!compareColumns || compareColumns.length < 3 || !compareRows || compareRows.length < 2) throw new Error(`AI: compare задание ${i + 1} без таблицы`);
+    if (!expectedAnswer) throw new Error(`AI: compare задание ${i + 1} без expectedAnswer`);
+    return { ...base, type: "compare" as const, compareColumns, compareRows, expectedAnswer };
+  }
   if (t.type === "table_fix") {
     const headers = (asStringArray(t.tableHeaders) ?? []).map((header) => header.trim()).filter(Boolean);
     const first = headers[0], second = headers[1];
@@ -815,6 +840,8 @@ async function chatJson<T>(
  * поэтому nullable-поля эталонных типов тоже в required.
  */
 const WORKSHEET_TASK_FIELDS = [
+  "compareColumns",
+  "compareRows",
   "type",
   "prompt",
   "criterion",
@@ -868,7 +895,7 @@ function worksheetSchema(): Record<string, unknown> {
           additionalProperties: false,
           required: [...WORKSHEET_TASK_FIELDS],
           properties: {
-            type: { type: "string", enum: ["open", "fill", "multiple_choice", "match", "true_false", "sort", "checklist", "case_study", "fill_bank", "table_fix", "scenario_fix", "choice_buttons", "reflection", "interactive", "creative", "word_search", "ordering", "odd_one_out", "categorize"] },
+            type: { type: "string", enum: ["open", "fill", "multiple_choice", "match", "true_false", "sort", "checklist", "case_study", "fill_bank", "table_fix", "compare", "scenario_fix", "choice_buttons", "reflection", "interactive", "creative", "word_search", "ordering", "odd_one_out", "categorize"] },
             stage: { type: ["string", "null"], enum: ["start", "middle", "end", null] },
             prompt: { type: "string" },
             criterion: { type: "string" },
@@ -881,6 +908,8 @@ function worksheetSchema(): Record<string, unknown> {
             wordBank: { type: ["array", "null"], items: { type: "string" } },
             tableHeaders: { type: ["array", "null"], items: { type: "string" } },
             tableRows: { type: ["integer", "null"] },
+            compareColumns: { type: ["array", "null"], items: { type: "string" } },
+            compareRows: { type: ["array", "null"], items: { type: "string" } },
             situation: { type: ["string", "null"] },
             errorsCount: { type: ["integer", "null"] },
             choices: { type: ["array", "null"], items: { type: "string" } },
@@ -1009,6 +1038,7 @@ function taskWeight(task: WorksheetTask): number {
     sort: 5,               // длинный банк терминов, самое трудоёмкое
     case_study: 5,
     table_fix: 4,
+    compare: 4,
     scenario_fix: 4,
     fill_bank: 4,
     categorize: 3,

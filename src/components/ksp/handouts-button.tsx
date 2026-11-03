@@ -21,7 +21,7 @@ const KIND_STATIC: Record<
   }
 > = {
   worksheet: { counts: [5, 6, 7, 8], defaultCount: 6, icon: FileText, withImages: true },
-  flashcards: { counts: [8, 12, 16, 20], defaultCount: 12, icon: Layers, withImages: true },
+  flashcards: { counts: [6, 12, 18], defaultCount: 6, icon: Layers, withImages: true },
   crossword: { counts: [6, 8, 10], defaultCount: 8, icon: Grid3x3, withImages: false },
 };
 
@@ -45,6 +45,8 @@ interface BaseProps {
   grade: number;
   language: "ru" | "kz";
   kspContext?: KSPContext;
+  /** Подпись внизу листа: школа или учитель. */
+  footer?: string;
 }
 
 type PreviewState = {
@@ -178,7 +180,8 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
 
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(meta.defaultCount);
-  const [withImages, setWithImages] = useState(false);
+  // Лист красочный по умолчанию: иллюстрация входит в образец учителя.
+  const [withImages, setWithImages] = useState(kind === "worksheet");
   const [combine, setCombine] = useState(false);
   const [secondCount, setSecondCount] = useState(
     kind === "worksheet" ? KIND_STATIC.flashcards.defaultCount : KIND_STATIC.worksheet.defaultCount,
@@ -236,8 +239,8 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
         const next: PreviewState = {
           handout: data.worksheet as Worksheet,
           extra: data.memos as FlashcardSet,
-          title: "Рабочий лист + Памятки",
-          fileName: `Рабочий лист + Памятки — ${base.topic}.docx`,
+          title: "Рабочий лист + Карточки",
+          fileName: `Рабочий лист + Карточки — ${base.topic}.docx`,
           docxBase64: data.docxBase64,
         };
         setPreview(next);
@@ -299,7 +302,7 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
           fileName={preview.fileName}
           docxBase64={preview.docxBase64}
           onClose={() => setPreview(null)}
-          meta={{ topic: base.topic, subject: base.subject, grade: base.grade, language: base.language }}
+          meta={{ topic: base.topic, subject: base.subject, grade: base.grade, language: base.language, footer: base.footer }}
         />
       )}
       <Button variant="outline" onClick={() => setOpen((v) => !v)} disabled={!base.topic}>

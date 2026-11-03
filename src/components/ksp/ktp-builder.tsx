@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,9 @@ import { MAX_KTP_TOPICS } from "@/lib/ktp";
 const COPY = {
   ru: {
     title: "Календарно-тематический план",
-    lead: "Черновик для редактирования в Word, не утверждённая учебная программа. Темы — по одной в строке. Часы можно задать прямо в строке: «Дроби · 2 ч.», конкретную дату — «Дроби | 2026-09-01». Если дату первого урока указать, остальные проставятся по неделям. Цели из КСП переносятся только для темы исходного урока; остальные цели заполните по своей программе. На сервере КТП не сохраняется — скачайте результат.",
+    lead: "Черновик для редактирования в Word, не утверждённая учебная программа. Темы — по одной в строке. Часы можно задать прямо в строке: «Дроби · 2 ч.», конкретную дату — «Дроби | 2026-09-01». Цели подбираются из ГОСО по названию темы, проверьте их. На сервере КТП не сохраняется — скачайте результат.",
+    card: "Календарный план на четверть: темы, часы, даты и цели ГОСО, в Word.",
+    perWeekLabel: "Уроков в неделю",
     topicsLabel: "Темы уроков — каждая с новой строки",
     tooMany: (have: number, max: number) => `Тем ${have}, а максимум ${max}. Уберите лишние строки или разбейте план на четверти.`,
     dateLabel: "Дата первого урока (необязательно)",
@@ -27,11 +30,13 @@ const COPY = {
     draftPlans: (n: number) => `Создать черновики уроков (${n})`,
     proNotice: "Календарно-тематический план — фича тарифа Pro.",
     upgrade: "Улучшить до Pro",
-    missingObjectives: "Цели указаны только для темы исходного урока — остальные заполните по учебной программе.",
+    missingObjectives: "Для некоторых тем цели в ГОСО не нашлись: заполните их по учебной программе.",
   },
   kz: {
     title: "Күнтізбелік-тақырыптық жоспар",
-    lead: "Жоба — Word редакциялауға арналған, ресми оқу бағдарламасы емес. Тақырыптардың бірін бір жолға жазыңыз. Сағат санын жол соңындағы «Дробь · 2 сағ.» белгісімен, нақты күнді «Дробь | 2026-09-01» түрімен бере аласыз. Бірінші сабақтың күні көрсетілсе, қалғаны аптасына бір рет толады. Мақсаттар тек бастапқы сабақ тақырыбына көшіріледі. Серверде КТЖ сақталмайды — нәтижені жүктеп алыңыз.",
+    lead: "Жоба — Word редакциялауға арналған, ресми оқу бағдарламасы емес. Тақырыптардың бірін бір жолға жазыңыз. Сағат санын жол соңындағы «Дробь · 2 сағ.» белгісімен, нақты күнді «Дробь | 2026-09-01» түрімен бере аласыз. Мақсаттар тақырып атауы бойынша МЖМБС-тан таңдалады, оларды тексеріңіз. Серверде КТЖ сақталмайды — нәтижені жүктеп алыңыз.",
+    card: "Тоқсанға күнтізбелік жоспар: тақырыптар, сағаттар, күндер және МЖМБС мақсаттары, Word форматында.",
+    perWeekLabel: "Аптасына сабақ саны",
     topicsLabel: "Сабақ тақырыптары — әр жолға бір",
     tooMany: (have: number, max: number) => `Тақырып ${have}, ең көбі ${max}. Артық жолдарды алыңыз немесе жоспарды тоқсандарға бөліңіз.`,
     dateLabel: "Бірінші сабақтың күні (қалаулы)",
@@ -46,7 +51,7 @@ const COPY = {
     draftPlans: (n: number) => `Сабақ жобаларын жасау (${n})`,
     proNotice: "Күнтізбелік-тақырыптық жоспар — Pro жоспарының мүмкіндігі.",
     upgrade: "Pro-ға жаңарту",
-    missingObjectives: "Мақсаттар тек бастапқы сабақ тақырыбына көшірілген — қалғанын оқу бағдарламасы бойынша толтырыңыз.",
+    missingObjectives: "Кейбір тақырыптарға МЖМБС мақсаттары табылмады: оларды оқу бағдарламасы бойынша толтырыңыз.",
   },
 } as const;
 
@@ -70,6 +75,7 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
   const [open, setOpen] = useState(false);
   const [topics, setTopics] = useState(topic);
   const [startDate, setStartDate] = useState("");
+  const [lessonsPerWeek, setLessonsPerWeek] = useState(1);
   const [result, setResult] = useState<KtpResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -92,7 +98,7 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
       const response = await fetch("/api/ktp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId, topics: topicLines, ...(startDate ? { startDate } : {}) }),
+        body: JSON.stringify({ planId, topics: topicLines, lessonsPerWeek, ...(startDate ? { startDate } : {}) }),
       });
       const data = await response.json();
       if (!response.ok || !data.ktp) throw new Error(data.error || "Не удалось создать КТП");
@@ -149,10 +155,16 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
   }
 
   return (
-    <section className="no-print space-y-4 rounded-xl border border-[#ddd5cb] p-5">
-      <Button variant="outline" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="ktp-builder">
-        {open ? copy.hide : copy.show}
-      </Button>
+    <section className="no-print space-y-4 rounded-2xl border border-border bg-surface p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 font-semibold"><CalendarDays aria-hidden="true" className="size-5 text-primary" /> {copy.title}</h3>
+          <p className="text-sm text-muted-foreground">{copy.card}</p>
+        </div>
+        <Button variant="outline" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="ktp-builder">
+          {open ? copy.hide : copy.show}
+        </Button>
+      </div>
       {open && !isPro && (
         <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           {copy.proNotice}{" "}
@@ -160,8 +172,7 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
         </p>
       )}
       {open && isPro && <div id="ktp-builder" className="space-y-4">
-        <h2 className="text-xl font-semibold">{copy.title}</h2>
-        <p className="text-sm text-slate-600">{copy.lead}</p>
+        <p className="text-sm text-muted-foreground">{copy.lead}</p>
         <div className="space-y-2">
           <Label htmlFor="ktp-topics">{copy.topicsLabel} ({topicLines.length}/{MAX_KTP_TOPICS})</Label>
           <textarea id="ktp-topics" value={topics} onChange={(e) => setTopics(e.target.value)} disabled={loading} rows={5} maxLength={12040}
@@ -173,9 +184,18 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
             </p>
           )}
         </div>
-        <div className="max-w-xs space-y-2">
-          <Label htmlFor="ktp-date">{copy.dateLabel}</Label>
-          <Input id="ktp-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={loading} />
+        <div className="flex flex-wrap gap-4">
+          <div className="max-w-xs space-y-2">
+            <Label htmlFor="ktp-date">{copy.dateLabel}</Label>
+            <Input id="ktp-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={loading} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ktp-per-week">{copy.perWeekLabel}</Label>
+            <select id="ktp-per-week" value={lessonsPerWeek} onChange={(e) => setLessonsPerWeek(Number(e.target.value))} disabled={loading}
+              className="h-9 rounded-md border border-border bg-surface px-3 text-sm">
+              {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
         </div>
         <Button onClick={generate} disabled={loading || !topics.trim() || tooManyTopics}>
           {loading ? copy.building : copy.build}
@@ -196,7 +216,7 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
               </tr>)}</tbody>
             </table>
           </div>
-          <p className="text-sm text-slate-600">{copy.missingObjectives}</p>
+          {result.ktp.rows.some((row) => !row.objectives) && <p className="text-sm text-muted-foreground">{copy.missingObjectives}</p>}
           {result.docxBase64 && <Button onClick={download}>{copy.download}</Button>}
           {!drafts && (
             <Button variant="outline" onClick={() => void createDrafts()}>

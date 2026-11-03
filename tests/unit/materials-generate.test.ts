@@ -10,7 +10,7 @@ vi.mock("@/lib/ai/providers", () => ({
     fn({ chat: { completions: { create: async () => ({ choices: [{ finish_reason: "stop", message: { content: mock.reply } }] }) } } }, "m", {}, undefined),
 }));
 
-import { generateChoiceTasks, generateTeacherSpeech } from "@/lib/materials/generate";
+import { buildFormatTask, generateChoiceTasks, generateTeacherSpeech } from "@/lib/materials/generate";
 import { buildSpeechDocx } from "@/lib/materials/speech-docx";
 
 const plan = { id: "a".repeat(24), owner_id: "u", title: "Дроби", grade: 5, language: "ru", content: { ...emptyKsp(), topic: "Дроби" } } as unknown as LessonPlanRow;
@@ -50,5 +50,30 @@ describe("generateTeacherSpeech", () => {
   it("не принимает пустую речь", async () => {
     mock.reply = JSON.stringify({ stages: [{ stage: "beginning", lines: [] }] });
     await expect(generateTeacherSpeech(plan)).rejects.toThrow("некорректный материал");
+  });
+});
+
+describe("buildFormatTask", () => {
+  it("пары покрывают все элементы и ведут к верным определениям", () => {
+    const task = buildFormatTask("match", {
+      question: "Соедини",
+      pairs: [{ left: "А", right: "1" }, { left: "Б", right: "2" }, { left: "В", right: "3" }],
+    });
+    expect(task?.type).toBe("MATCHING");
+    if (task?.type !== "MATCHING") return;
+    for (const pair of task.pairs) {
+      expect(task.right[pair.rightIndex]).toBe({ А: "1", Б: "2", В: "3" }[task.left[pair.leftIndex]!]);
+    }
+  });
+
+  it("порядок восстанавливается по correctOrder", () => {
+    const task = buildFormatTask("order", { question: "По порядку", items: ["раз", "два", "три", "четыре"] });
+    if (task?.type !== "ORDERING") throw new Error("ожидался ORDERING");
+    expect(task.correctOrder.map((i) => task.items[i])).toEqual(["раз", "два", "три", "четыре"]);
+  });
+
+  it("пропусков столько же, сколько ответов, иначе задание отбрасывается", () => {
+    expect(buildFormatTask("fill", { template: "2 + 2 = ___", answers: ["4", "5"] })).toBeNull();
+    expect(buildFormatTask("fill", { template: "2 + 2 = ___", answers: ["4"] })?.type).toBe("FILL_BLANK");
   });
 });

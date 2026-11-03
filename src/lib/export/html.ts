@@ -371,7 +371,7 @@ const RUNTIME_JS = `
     var s = 0, m = 0;
     state.results.forEach(function(r, i){
       if(r){
-        s += Math.max(0, r.score - 2*(state.hintsUsed[i]||0));
+        s += Math.max(0, r.score - hintCost(r.maxScore, state.hintsUsed[i]||0));
         m += r.maxScore;
       } else {
         m += Math.max(1, TASKS[i].task.points|0);
@@ -486,7 +486,7 @@ const RUNTIME_JS = `
     if(!result && task.hint){
       var hintBtn = document.createElement("button");
       hintBtn.className = "btn btn-ghost";
-      hintBtn.innerHTML = '💡 Показать подсказку (−2 балла)';
+      hintBtn.innerHTML = '💡 Показать подсказку' + (hintCost(Math.max(1, task.points|0), 1) ? ' (−1 балл)' : '');
       hintBtn.addEventListener("click", function(){
         state.hintsUsed[idx] = (state.hintsUsed[idx]||0) + 1;
         saveState();
@@ -572,10 +572,15 @@ const RUNTIME_JS = `
     }
   }
 
+  function hintCost(maxScore, hints){
+    return hints > 0 && maxScore > 1 ? 1 : 0;
+  }
+
   function drawFeedback(el, r, hints){
     var cls = r.ok ? "feedback ok" : "feedback err";
-    var hintLine = hints > 0 ? " (−"+(2*hints)+" за подсказки)" : "";
-    var effScore = Math.max(0, r.score - 2*hints);
+    var cost = hintCost(r.maxScore, hints);
+    var hintLine = cost > 0 ? " (−"+cost+" за подсказку)" : "";
+    var effScore = Math.max(0, r.score - cost);
     el.innerHTML = '<div class="'+cls+'"><div class="pts">'+effScore+' / '+r.maxScore+' '+plural(r.maxScore,"балл","балла","баллов")+'</div><div>'+escapeHtml(r.feedback)+hintLine+'</div></div>';
   }
 
@@ -908,7 +913,7 @@ const RUNTIME_JS = `
       + '<ul class="breakdown" style="list-style:none;padding:0">';
     TASKS.forEach(function(it, idx){
       var r = state.results[idx];
-      var s = r ? (Math.max(0, r.score - 2*(state.hintsUsed[idx]||0)) + '/' + r.maxScore) : '—';
+      var s = r ? (Math.max(0, r.score - hintCost(r.maxScore, state.hintsUsed[idx]||0)) + '/' + r.maxScore) : '—';
       html += '<li><span>'+(idx+1)+'. '+escapeHtml(it.task.question||"")+'</span><span class="sc">'+s+'</span></li>';
     });
     html += '</ul>'

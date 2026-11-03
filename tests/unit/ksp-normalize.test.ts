@@ -6,7 +6,7 @@
  * из-за содержания.
  */
 import { describe, expect, it } from "vitest";
-import { normalizeTextFields } from "@/lib/ai/generate";
+import { applyReview, normalizeTextFields } from "@/lib/ai/generate";
 
 describe("список там, где ждали строку", () => {
   it("teacherActions склеивается в строку", () => {
@@ -123,5 +123,39 @@ describe("содержание не выбрасывается", () => {
     const out = normalizeTextFields({ values: "Воспитание", somethingNew: { a: 1 } });
     expect(out.values).toBe("Воспитание");
     expect(out.somethingNew).toEqual({ a: 1 });
+  });
+});
+
+describe("числовой ответ", () => {
+  it("дробь не превращается в склеенное число", () => {
+    expect(normalizeTextFields({ answer: "1/2" }).answer).toBe("1/2");
+  });
+
+  it("единицы и запятая по-прежнему разбираются", () => {
+    expect(normalizeTextFields({ answer: "3,5 км" }).answer).toBe(3.5);
+  });
+});
+
+describe("исправления проверяющего", () => {
+  const draft = {
+    lessonObjectives: ["Цель"],
+    assessmentCriteria: ["Критерий"],
+    stages: {
+      beginning: { tasks: [{ id: "a", type: "MCQ", correctIndex: 0 }] },
+      end: { homework: "с. 80", tasks: [] },
+    },
+  };
+
+  it("заменяет только найденные задания", () => {
+    // @ts-expect-error задания в тесте сокращены
+    const out = applyReview(draft, { tasks: [{ id: "a", correctIndex: 2 }, { id: "чужое", correctIndex: 1 }] });
+    expect(out.stages?.beginning?.tasks).toEqual([{ id: "a", type: "MCQ", correctIndex: 2 }]);
+  });
+
+  it("пустые поля не стирают черновик", () => {
+    // @ts-expect-error задания в тесте сокращены
+    const out = applyReview(draft, { lessonObjectives: [], homework: "  " });
+    expect(out.lessonObjectives).toEqual(["Цель"]);
+    expect(out.stages?.end?.homework).toBe("с. 80");
   });
 });

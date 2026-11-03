@@ -100,7 +100,7 @@ export function AiContextCard({
           </Link>
         </div>
         {onReplay && (
-          <div className="space-y-2 border-t border-[#ddd5cb] pt-3">
+          <div className="space-y-2 border-t border-border pt-3">
             <Button type="button" size="sm" variant="outline" onClick={() => onReplay(context.id)}>
               {canReplayExactly?.(context.id)
                 ? (isKk ? "Дәл сұрауды қайта іске қосу және алдын ала қарау" : "Повторить точный запрос и открыть предпросмотр")
@@ -114,13 +114,13 @@ export function AiContextCard({
           </div>
         )}
         {olderRuns.length > 0 && onReplay && (
-          <details className="border-t border-[#ddd5cb] pt-3">
+          <details className="border-t border-border pt-3">
             <summary className="cursor-pointer font-semibold">{isKk ? `Алдыңғы сұраулар (${history.length - 1})` : `Предыдущие запросы (${history.length - 1})`}</summary>
             <ul className="mt-2 space-y-2">
               {olderRuns.map((run) => {
                 const exact = canReplayExactly?.(run.id) ?? false;
                 const date = new Intl.DateTimeFormat(isKk ? "kk-KZ" : "ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(run.generatedAt));
-                return <li key={run.id} className="rounded-lg border border-[#ddd5cb] bg-white p-2">
+                return <li key={run.id} className="rounded-lg border border-border bg-white p-2">
                   <p className="font-medium">{run.topic} · {date}</p>
                   <p className="text-[11px] text-[#756b63]">{run.promptVersion} · {run.rag.textbookTitle ?? (isKk ? "оқулықсыз" : "без учебника")} · {run.rag.chunkCount} {isKk ? "үзінді" : "фрагментов"}</p>
                   <Button className="mt-2" type="button" size="sm" variant="outline" onClick={() => onReplay(run.id)}>

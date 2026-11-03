@@ -80,7 +80,7 @@ export async function illustrateWorksheetTasks(
   };
 }
 
-async function illustrate<T>(
+export async function illustrate<T>(
   items: T[],
   ctx: { topic: string; subject: string; grade: number },
   promptOf: (item: T) => string,

@@ -1378,7 +1378,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <section aria-labelledby="quality-targets-title" className="rounded-xl border border-[#ddd5cb] bg-[#f8f4ed] p-4">
+          <section aria-labelledby="quality-targets-title" className="rounded-xl border border-border bg-[#f8f4ed] p-4">
             <h3 id="quality-targets-title" className="font-semibold">{locale === "kk" ? "Сабақтың жоспарлау бағдарлары" : "Ориентиры планирования урока"}</h3>
             <p className="mb-3 mt-1 text-xs text-muted-foreground">{locale === "kk" ? "Мұғалім өз сабағына нысаналы мәндерді белгілейді. Бұл мемлекеттік норма емес." : "Задайте значения для своего урока. Это подсказки quality gate, не нормативы."}</p>
             <div className="grid gap-3 sm:grid-cols-2">

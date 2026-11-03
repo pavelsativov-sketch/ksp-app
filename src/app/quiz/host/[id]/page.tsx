@@ -10,10 +10,13 @@ export const dynamic = "force-dynamic";
 
 export default async function LiveQuizHostPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ take?: string }>;
 }) {
   const { id } = await params;
+  const take = Number((await searchParams).take);
   const user = await getCurrentUser();
   if (!user) redirect(`/login?next=/quiz/host/${id}`);
 
@@ -26,11 +29,14 @@ export default async function LiveQuizHostPage({
   }
 
 
-  const tasks: InteractiveTask[] = [
+  const allTasks: InteractiveTask[] = [
     ...(plan.content.stages.beginning.tasks ?? []),
     ...(plan.content.stages.middle.tasks ?? []),
     ...(plan.content.stages.end.tasks ?? []),
   ];
+  // take: квиз только из новых вопросов; интерактив дописывает их в конец середины урока.
+  const middleEnd = (plan.content.stages.beginning.tasks?.length ?? 0) + (plan.content.stages.middle.tasks?.length ?? 0);
+  const tasks = take > 0 ? allTasks.slice(Math.max(0, middleEnd - take), middleEnd) : allTasks;
 
   // Восстановление сессии: если у этого хоста уже есть активная комната для
   // плана (например, страница была обновлена), продолжаем её, а не создаём новую.

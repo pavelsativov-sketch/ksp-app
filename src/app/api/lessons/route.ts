@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Укажите класс, предмет и тему." }, { status: 400 });
 
-  const result = await productTools.createKsp({ ...parsed.data, saveCopy: false }, { userId: auth.user.id, taskId: "site" });
+  const result = await productTools.createKsp({ ...parsed.data, saveCopy: false, teacherName: auth.user.fullName ?? undefined }, { userId: auth.user.id, taskId: "site" });
   if (!result.success || !("planId" in result)) {
     return NextResponse.json({ error: result.error ?? "Не удалось создать урок." }, { status: 503 });
   }

@@ -207,10 +207,11 @@ describe("язык презентации", () => {
         points: 1,
       },
     ] as never;
-    const buffer = await buildKspPptx(makePlan({ stages: content.stages }));
+    const buffer = await buildKspPptx({ ...makePlan({ stages: content.stages }), language: "kz" });
     const xml = (await slides(buffer)).join("");
-    expect(xml).toContain("А. первый");
-    expect(xml).toContain("Ә. второй");
+    expect(xml).toContain("<a:t>А</a:t>");
+    expect(xml).toContain("первый");
+    expect(xml).toContain("<a:t>Ә</a:t>");
   });
 });
 

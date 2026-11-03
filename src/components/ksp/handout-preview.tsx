@@ -1,29 +1,22 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Download, Printer, Settings, X } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { Download, Image as ImageIcon, Printer, Settings, X } from "lucide-react";
 import type { Crossword, FlashcardSet, Handout, Worksheet, WorksheetTask } from "@/lib/handouts/types";
-import { optionLetter, worksheetAnswerLines, worksheetTypeLabel } from "@/lib/handouts/answers";
+import { optionLetter, worksheetAnswerLines } from "@/lib/handouts/answers";
 import { resolveErrorsCount, resolveTableRows } from "@/lib/handouts/layout";
 // Сетка поиска слов берётся из того же модуля, что и печать: иначе на
 // экране и на листе были бы разные головоломки.
 import { buildWordSearchGrid } from "@/lib/handouts/word-search";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { CardsSheet, WorksheetSheet } from "@/components/ksp/print-sheet";
+import { downloadSheetImages } from "@/lib/handouts/sheet-export";
 import { docTitle, docTopic, SaveKitButton } from "@/components/kits/save-kit-button";
 
 /** Цветовая схема эталона РК (как в docx.ts): синие баннеры, персиковое облако, золото. */
 const NAVY = "text-[#2B2D83]";
-const FLASHCARD_ACCENTS = [
-  { top: "bg-[#2B2D83]", soft: "bg-[#EEF4FF]", line: "border-[#9FC5FF]", badge: "bg-[#F6A92D]" },
-  { top: "bg-[#13795B]", soft: "bg-[#EDFAF4]", line: "border-[#8DDBBF]", badge: "bg-[#E8568B]" },
-  { top: "bg-[#7C3F98]", soft: "bg-[#F8F0FF]", line: "border-[#D7AAEF]", badge: "bg-[#F29B38]" },
-  { top: "bg-[#A54A16]", soft: "bg-[#FFF5ED]", line: "border-[#F0BE96]", badge: "bg-[#277DA1]" },
-] as const;
 
-function imageUrl(base64: string, mime?: string): string {
-  return `data:${mime || "image/jpeg"};base64,${base64}`;
-}
 
 /**
  * Настройки предпросмотра.
@@ -293,6 +286,8 @@ function TaskBodyContent({ task, language, onLinkChange }: {
           </div>
         </>
       );
+    case "compare":
+      return null;
     case "table_fix":
       return (
         <table className="mt-2 w-full border-collapse text-sm">
@@ -528,7 +523,11 @@ function WorksheetView({
   regenBusyIndex,
   onLinkChange,
   settings = DEFAULT_SETTINGS,
+  meta,
+  withKey = false,
 }: {
+  meta?: { grade: number; subject: string; footer?: string };
+  withKey?: boolean;
   sheet: Worksheet;
   /** Точечная замена задания (тот же тип/этап/баллы). */
   onRegenerate?: (index: number) => void;
@@ -552,73 +551,17 @@ function WorksheetView({
             : "ИИ сейчас недоступен, поэтому лист собран по локальной методической структуре. Перед печатью сверьте задания с учебником и целями урока."}
         </p>
       )}
-      <div className="flex justify-between text-sm font-bold border-b border-black pb-1 mb-4">
-        <span>{sheet.metaLine?.trim() || `${copy.student} ${copy.classDate}`}</span>
-      </div>
-      <h3 className="text-xl font-bold text-center mb-1 text-[#2B2D83]">{sheet.title}</h3>
-      {sheet.intro && <p className="mt-1 text-sm text-center text-slate-600 mb-4 italic">{sheet.intro}</p>}
-      
-      {sheet.learningObjectives && sheet.learningObjectives.length > 0 && (
-        <div className="mb-6 p-3 bg-violet-50/50 border border-violet-100 rounded text-sm text-violet-900">
-          <strong className="block mb-1">{kazakh ? "Оқу мақсаттары:" : "Цели обучения:"}</strong>
-          <ul className="list-disc pl-5">
-            {sheet.learningObjectives.map((obj, i) => (
-              <li key={i}>{obj}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="space-y-5" style={{ fontSize: `${settings.fontSize}px` }}>
-        {sheet.tasks.map((task, i) => {
-          return (
-          <div key={i} className="overflow-hidden rounded-xl border border-[#B9C6E4] bg-white shadow-sm print:shadow-none print:mb-6" style={{ marginBottom: `${(settings.spacing - 1) * 20}px` }}>
-            <div className="flex items-center justify-between gap-2 border-b border-[#B9C6E4] bg-gradient-to-r from-violet-100 to-violet-100 px-4 py-2 font-bold text-sm text-[#2B2D83]">
-              <span>
-                {copy.task} {i + 1}. {worksheetTypeLabel(task.type, contentLanguage)} <span className="font-normal text-slate-600">({task.points} б.)</span>
-              </span>
-              {onRegenerate && (
-                <button
-                  type="button"
-                  onClick={() => onRegenerate(i)}
-                  disabled={regenBusyIndex === i}
-                  title={h.replaceTitle}
-                  className="print:hidden shrink-0 rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-medium text-[#2B2D83] hover:bg-white disabled:opacity-50"
-                >
-                  {regenBusyIndex === i ? "…" : h.replace}
-                </button>
-              )}
-            </div>
-            <div className="px-4 py-3">
-              <div className="font-bold text-base mb-1">{task.prompt}</div>
-
-            <div className={`flex flex-col sm:flex-row gap-4 ${task.imageBase64 ? 'items-start' : ''}`}>
-              <div className="flex-1">
-                <TaskBody task={task} language={contentLanguage} onLinkChange={onLinkChange ? (link) => onLinkChange(i, link) : undefined} fontSize={settings.fontSize} />
-              </div>
-
-              {settings.showImages && task.imageBase64 && (
-                <div className="sm:w-1/3 shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageUrl(task.imageBase64, task.imageMime)}
-                    alt={task.imageAlt || `Иллюстрация к заданию ${i + 1}`}
-                    className="max-h-48 rounded object-contain mx-auto"
-                  />
-                </div>
-              )}
-            </div>
-            {settings.showDescriptors && (
-              <>
-                <p className="mt-2 text-[11px] italic text-slate-500">{copy.criterion}: {task.criterion}</p>
-                <p className="text-[11px] italic text-slate-500">{copy.descriptor}: {task.descriptor}</p>
-              </>
-            )}
-            </div>
-          </div>
-          );
-        })}
-      </div>
+      <WorksheetSheet
+        sheet={sheet}
+        grade={meta?.grade}
+        subject={meta?.subject}
+        footer={meta?.footer}
+        withKey={withKey}
+        onRegenerate={onRegenerate}
+        regeneratingIndex={regenBusyIndex}
+        onLinkChange={onLinkChange}
+        fallback={(task) => <TaskBody task={task} language={contentLanguage} fontSize={settings.fontSize} />}
+      />
 
       {(settings.showAnswers || settings.showDescriptors) && (
       <details className="mt-8 border border-slate-300 rounded-lg overflow-hidden group print:hidden">
@@ -666,49 +609,6 @@ function WorksheetView({
   );
 }
 
-function FlashcardTile({ card, index, language, showImage = true, fontSize }: {
-  card: FlashcardSet["cards"][number];
-  index: number;
-  language: "ru" | "kz";
-  showImage?: boolean;
-  fontSize?: number;
-}) {
-  const accent = FLASHCARD_ACCENTS[index % FLASHCARD_ACCENTS.length];
-  const copy = language === "kz"
-    ? { title: "ЖАДНАМА", example: "Мысал", check: "Өзіңді тексер" }
-    : { title: "ПАМЯТКА", example: "Пример", check: "Проверь себя" };
-  return (
-    <article className={`group overflow-hidden rounded-2xl border-2 ${accent.line} bg-white shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md print:break-inside-avoid print:shadow-none`}>
-      <div className={`${accent.top} flex items-center justify-between px-3 py-2 text-white`}>
-        <span className="text-[10px] font-bold tracking-[0.18em]">{copy.title}</span>
-        <span className={`${accent.badge} inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1.5 text-sm font-black text-slate-900`}>{index + 1}</span>
-      </div>
-      {showImage && card.imageBase64 && (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={imageUrl(card.imageBase64, card.imageMime)}
-          alt={card.imageAlt || card.front}
-          className="h-32 w-full object-cover"
-        />
-      )}
-      <div className="p-3" style={fontSize ? { fontSize: `${fontSize}px` } : undefined}>
-        <h4 className="text-base font-extrabold leading-tight text-[#20216B]">{card.front}</h4>
-        <p className="mt-2 text-sm leading-relaxed text-slate-700">{card.back}</p>
-        {card.example && (
-          <div className={`mt-3 rounded-xl border ${accent.line} ${accent.soft} px-2.5 py-2 text-xs leading-relaxed text-slate-700`}>
-            <b className="text-[#20216B]">{copy.example}: </b>{card.example}
-          </div>
-        )}
-        {card.checkQuestion && (
-          <div className="mt-3 border-t border-dashed border-slate-300 pt-2 text-xs leading-relaxed text-slate-600">
-            <b className="text-[#20216B]">✦ {copy.check}: </b>{card.checkQuestion}
-          </div>
-        )}
-      </div>
-    </article>
-  );
-}
-
 /**
  * Пометка о материале, собранном без AI.
  *
@@ -724,9 +624,7 @@ function DegradedNote({ text }: { text: string }) {
   );
 }
 
-function FlashcardsView({ set, settings = DEFAULT_SETTINGS }: { set: FlashcardSet; settings?: PreviewSettings }) {
-  const { t } = useUiLocale();
-  const h = t.handouts;
+function FlashcardsView({ set }: { set: FlashcardSet }) {
   return (
     <div>
       {set.degraded && (
@@ -734,20 +632,7 @@ function FlashcardsView({ set, settings = DEFAULT_SETTINGS }: { set: FlashcardSe
           ? "ЖИ қолжетімсіз болғандықтық, карточкалар тақырыптағы сөздерден құрастырылды. Мәтіндерді оқулық бойынша тексеріп, нақтылаңыз."
           : "ИИ сейчас недоступен, поэтому карточки собраны из слов темы. Проверьте формулировки по учебнику и дополните их перед печатью."} />
       )}
-      <h3 className="text-lg font-bold text-center">{set.title}</h3>
-      {set.intro && <p className="mt-1 text-sm text-center text-slate-600">{set.intro}</p>}
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {set.cards.map((card, i) => (
-          <FlashcardTile
-            key={i}
-            card={card}
-            index={i}
-            language={set.language ?? "ru"}
-            showImage={settings.showImages}
-            fontSize={settings.fontSize}
-          />
-        ))}
-      </div>
+      <CardsSheet set={set} />
     </div>
   );
 }
@@ -851,7 +736,7 @@ export function HandoutPreview({
   docxBase64?: string;
   onClose: () => void;
   /** Контекст для точечной перегенерации заданий. */
-  meta?: { topic: string; subject: string; grade: number; language: "ru" | "kz" };
+  meta?: { topic: string; subject: string; grade: number; language: "ru" | "kz"; footer?: string };
 }) {
   const { t } = useUiLocale();
   const h = t.handouts;
@@ -863,6 +748,22 @@ export function HandoutPreview({
   const [printError, setPrintError] = useState<string | null>(null);
   const [settings, setSettings] = useState<PreviewSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
+  const [withKey, setWithKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+
+  async function saveImages() {
+    if (!sheetRef.current) return;
+    setSaving(true);
+    setPrintError(null);
+    try {
+      await downloadSheetImages(sheetRef.current, (fileName ?? "Лист").replace(/\.docx$/i, ""));
+    } catch (error) {
+      setPrintError(error instanceof Error ? error.message : h.downloadFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Новый сгенерированный материал — сбрасываем правки (корректировка
   // состояния при рендере: новый объект handout означает новую генерацию).
@@ -979,13 +880,13 @@ export function HandoutPreview({
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
-        className="rounded-xl bg-white shadow-2xl print:shadow-none"
+        className="max-w-[880px] rounded-xl bg-white shadow-2xl print:shadow-none"
         overlayClassName="overflow-y-auto p-4"
         aria-label={h.previewTitle}
       >
-        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200 bg-[#3D6DB5] text-white rounded-t-xl">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-200 bg-[#6d3bea] text-white rounded-t-xl print:hidden">
           <DialogTitle className="font-bold text-sm sm:text-base">{title ?? h.previewTitle}</DialogTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 [&>*]:whitespace-nowrap">
             <button
               type="button"
               onClick={() => setShowSettings((open) => !open)}
@@ -997,6 +898,23 @@ export function HandoutPreview({
               <Settings className="w-4 h-4" />
               <span className="sr-only">{(doc.language ?? "ru") === "kz" ? "Параметрлер" : "Настройки"}</span>
             </button>
+            {doc.kind !== "crossword" && (
+              <button
+                type="button"
+                onClick={saveImages}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 rounded-md bg-white text-[#5a2cd0] px-3 py-1.5 text-sm font-bold hover:bg-violet-100 disabled:opacity-50"
+              >
+                <ImageIcon className="w-4 h-4" />
+                {saving ? "Сохраняем…" : "Картинка PNG"}
+              </button>
+            )}
+            {doc.kind === "worksheet" && (
+              <label className="inline-flex items-center gap-1.5 rounded-md bg-white/15 px-2.5 py-1.5 text-sm font-medium">
+                <input type="checkbox" checked={withKey} onChange={(e) => setWithKey(e.target.checked)} />
+                С ответами
+              </label>
+            )}
             <button
               type="button"
               onClick={() => downloadDoc(true)}
@@ -1062,7 +980,7 @@ export function HandoutPreview({
             />
           </div>
         )}
-        <div className="p-4 sm:p-6">
+        <div ref={sheetRef} className="p-4 sm:p-6 print:p-0">
           {doc.kind === "worksheet" && (
             <WorksheetView
               sheet={doc}
@@ -1070,9 +988,11 @@ export function HandoutPreview({
               regenBusyIndex={regenBusy?.part === "main" ? regenBusy.index : null}
               onLinkChange={(index, link) => patchTask("main", index, { link })}
               settings={settings}
+              meta={meta}
+              withKey={withKey}
             />
           )}
-          {doc.kind === "flashcards" && <FlashcardsView set={doc} settings={settings} />}
+          {doc.kind === "flashcards" && <FlashcardsView set={doc} />}
           {doc.kind === "crossword" && <CrosswordView puzzle={doc} />}
           {extraDoc && (
             <div className="mt-8 border-t-2 border-dashed border-slate-300 pt-6">
@@ -1083,9 +1003,11 @@ export function HandoutPreview({
                   regenBusyIndex={regenBusy?.part === "extra" ? regenBusy.index : null}
                   onLinkChange={(index, link) => patchTask("extra", index, { link })}
                   settings={settings}
+                  meta={meta}
+                  withKey={withKey}
                 />
               )}
-              {extraDoc.kind === "flashcards" && <FlashcardsView set={extraDoc} settings={settings} />}
+              {extraDoc.kind === "flashcards" && <FlashcardsView set={extraDoc} />}
               {extraDoc.kind === "crossword" && <CrosswordView puzzle={extraDoc} />}
             </div>
           )}

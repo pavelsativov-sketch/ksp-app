@@ -136,7 +136,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   if (phase === "name") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1c1a17] p-4">
-        <div className="w-full max-w-sm space-y-5 rounded-2xl border border-[#ddd5cb] bg-surface p-6 text-[#1c1a17]">
+        <div className="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-surface p-6 text-[#1c1a17]">
           <div className="text-center">
             <p className="editorial-kicker">Классный режим</p><h1 className="editorial-display mt-2 text-4xl">Live-квиз</h1>
             <p className="mt-2 text-sm text-[#5f5751]">Введите код от учителя</p>

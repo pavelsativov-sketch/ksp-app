@@ -485,12 +485,12 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
           )}
 
           {catalogLoading ? (
-            <div className="flex items-center gap-2 py-6 text-sm text-[#8a817a]">
+            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               Загружаем каталог учебников Арман-ПВ…
             </div>
           ) : filteredCatalog.length === 0 ? (
-            <p className="py-4 text-sm text-[#8a817a]">
+            <p className="py-4 text-sm text-muted-foreground">
               По выбранным фильтрам учебники в каталоге Арман-ПВ не найдены. Попробуйте выбрать
               «Все классы» или «Все издания».
             </p>
@@ -510,7 +510,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                 return (
                   <div
                     key={item.id}
-                    className="flex gap-3 rounded-xl border border-[#ddd5cb] bg-white/90 p-3 shadow-xs"
+                    className="flex gap-3 rounded-xl border border-border bg-white/90 p-3 shadow-xs"
                   >
                     {item.coverUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -704,13 +704,13 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center gap-2 text-[#8a817a]">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" /> Загрузка…
             </div>
           ) : items.length === 0 ? (
-            <p className="text-sm text-[#8a817a]">Учебники ещё не загружены.</p>
+            <p className="text-sm text-muted-foreground">Учебники ещё не загружены.</p>
           ) : (
-            <ul className="divide-y divide-[#ddd5cb]">
+            <ul className="divide-y divide-border">
               {items.map((t) => {
                 const canAdvanceEmbeddings =
                   t.owner_id === currentUserId || t.owner_id === "system:armanpv";

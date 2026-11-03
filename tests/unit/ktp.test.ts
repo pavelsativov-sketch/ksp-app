@@ -132,3 +132,17 @@ describe("KTP Word export", () => {
     expect(xml).toContain("Оқу мақсаттары");
   });
 });
+
+describe("КТП: цели и частота уроков", () => {
+  const plan = { title: "T", grade: 5, language: "ru" as const, content: { ...emptyKsp(), topic: "Дроби" } };
+
+  it("для других тем цели подбираются из ГОСО", () => {
+    const ktp = buildKtp(plan, "Математика", { topics: ["Дроби", "Проценты"] }, (topic) => `цель: ${topic}`);
+    expect(ktp.rows[1].objectives).toBe("цель: Проценты");
+  });
+
+  it("при трёх уроках в неделю даты идут через день и пропускают воскресенье", () => {
+    const ktp = buildKtp(plan, "Математика", { topics: ["А", "Б", "В", "Г"], startDate: "2026-09-01", lessonsPerWeek: 3 });
+    expect(ktp.rows.map((r) => r.date)).toEqual(["2026-09-01", "2026-09-03", "2026-09-05", "2026-09-07"]);
+  });
+});

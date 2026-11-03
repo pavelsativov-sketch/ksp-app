@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const TASK_TYPES = [
   "open", "fill", "multiple_choice", "match", "true_false",
-  "sort", "checklist", "case_study", "fill_bank", "table_fix",
+  "sort", "checklist", "case_study", "fill_bank", "table_fix", "compare",
   "scenario_fix", "choice_buttons", "reflection", "interactive", "creative",
 ] as const;
 

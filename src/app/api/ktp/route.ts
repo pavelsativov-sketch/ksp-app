@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getPlanById, getSubjectById } from "@/lib/plans-repo";
 import { buildKtp, ktpRequestSchema } from "@/lib/ktp";
+import { objectivesForTopic } from "@/lib/goso/match";
 import { buildKtpDocx } from "@/lib/export/ktp-docx";
 import { resolveWatermark } from "@/lib/billing/watermark";
 import { getPlanForUser } from "@/lib/billing/quota";
@@ -67,7 +68,8 @@ export async function POST(request: Request) {
     if (!plan || plan.owner_id !== auth.user.id) return errorResponse("Not found", 404);
     const subject = plan.subject_id ? await getSubjectById(plan.subject_id) : null;
     const subjectName = subject ? (plan.language === "kz" ? subject.name_kz || subject.name_ru : subject.name_ru) : "";
-    const ktp = buildKtp(plan, subjectName, parsed.data);
+    // ГОСО хранит предметы по-русски, поэтому подбор целей идёт по русскому названию и у казахских планов.
+    const ktp = buildKtp(plan, subjectName, parsed.data, (topic) => objectivesForTopic(subject?.name_ru ?? "", plan.grade, topic));
     const watermark = await resolveWatermark(auth.user);
 
     // Ошибка сборки документа ловится здесь: раньше исключение из docx

@@ -227,7 +227,7 @@ export function PlanHistory({
       ) : (
         <ul className="space-y-3">
           {versions.map((version) => (
-            <li key={version.id} className="rounded-2xl border border-[#ddd5cb] bg-surface p-5">
+            <li key={version.id} className="rounded-2xl border border-border bg-surface p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">
@@ -244,7 +244,7 @@ export function PlanHistory({
               </div>
 
               {selected?.id === version.id && (
-                <div className="mt-4 space-y-4 rounded-xl border border-[#ddd5cb] bg-[#faf7f2] p-4 text-sm">
+                <div className="mt-4 space-y-4 rounded-xl border border-border bg-[#faf7f2] p-4 text-sm">
                   <div>
                     <p className="font-medium">Сравнение с текущим КСП</p>
                     <p className="mt-1 text-xs text-[#5f5751]">Отмеченные разделы будут восстановлены. Ничего не меняется до нажатия кнопки.</p>
@@ -255,7 +255,7 @@ export function PlanHistory({
                     <fieldset className="space-y-3">
                       <legend className="sr-only">Выберите разделы для восстановления</legend>
                       {diffs.map((diff) => (
-                        <label key={diff.section} className="block rounded-lg border border-[#ddd5cb] bg-white p-3">
+                        <label key={diff.section} className="block rounded-lg border border-border bg-white p-3">
                           <span className="flex items-center gap-2 font-medium">
                             <input
                               type="checkbox"

@@ -113,7 +113,7 @@ export function AiEnhanceButton<T extends string | string[]>({
             <ThumbsUp className="size-3.5 text-[#2f5b4f]" />
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={() => void sendFeedback("down")} title="Плохо">
-            <ThumbsDown className="size-3.5 text-[#8a817a]" />
+            <ThumbsDown className="size-3.5 text-muted-foreground" />
           </Button>
         </span>
       )}

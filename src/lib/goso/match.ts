@@ -44,3 +44,8 @@ export function matchObjectives(opts: { subject: string; grade: number; topic: s
     .slice(0, opts.limit ?? 3)
     .map(({ o }) => ({ code: o.code, text: o.text_ru }));
 }
+
+/** Цели одной темы КТП строками «код — текст». */
+export function objectivesForTopic(subject: string, grade: number, topic: string): string {
+  return matchObjectives({ subject, grade, topic, limit: 2 }).map((o) => `${o.code} — ${o.text}`).join("\n");
+}

@@ -14,6 +14,7 @@ type PptxCopy = {
   objectives: string;
   criteria: string;
   languageGoals: string;
+  optionLetters: string[];
   terms: string;
   phrases: string;
   stageBeginning: string;
@@ -38,12 +39,17 @@ type PptxCopy = {
 };
 
 /** Буквы вариантов ответа в алфавитном порядке для казахского. */
-const OPTION_LETTERS = ["А", "Ә", "Б", "В", "Г", "Д", "Е", "Ж", "З", "И"];
+const SOFT = "efe8ff";
+const CARD_LINE = "e3defa";
+
+const OPTION_LETTERS_RU = ["А", "Б", "В", "Г", "Д", "Е", "Ж", "З", "И", "К"];
+const OPTION_LETTERS_KZ = ["А", "Ә", "Б", "В", "Г", "Ғ", "Д", "Е", "Ж", "З"];
 
 const COPY_RU: PptxCopy = {
   objectives: "Цели урока",
   criteria: "Критерии успеха",
   languageGoals: "Языковые цели",
+  optionLetters: OPTION_LETTERS_RU,
   terms: "Ключевые термины",
   phrases: "Ключевые фразы",
   stageBeginning: "Начало урока",
@@ -71,6 +77,7 @@ const COPY_KZ: PptxCopy = {
   objectives: "Сабақтың мақсаты",
   criteria: "Табысты критерийлері",
   languageGoals: "Тілдік мақсаттар",
+  optionLetters: OPTION_LETTERS_KZ,
   terms: "Негізгі терминдер",
   phrases: "Негізгі сөздер",
   stageBeginning: "Сабақтың басы",
@@ -113,6 +120,8 @@ const COPY_KZ: PptxCopy = {
  *
  * Returns a Node Buffer (zipped .pptx).
  */
+// Не добавлять shrinkText рядом с fit: "shrink": библиотека вставляет <a:normAutofit/> дважды,
+// и PowerPoint не открывает файл.
 export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: boolean } = {}): Promise<Buffer> {
   const c = plan.content;
   const pres = new PptxGenJS();
@@ -121,10 +130,9 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
   pres.company = c.header.school || "—";
   pres.title = plan.title;
 
-  const ACCENT = "1d4ed8"; // blue-700
-  const SOFT = "eef2ff"; // indigo-50
-  const INK = "0f172a"; // slate-900
-  const MUTED = "64748b"; // slate-500
+  const ACCENT = "6d3bea";
+  const INK = "1e1a3c";
+  const MUTED = "6b6490";
 
   // Заголовки слайдов на языке плана. Раньше они были зашиты по-русски, и
   // казахский КСП получал презентацию с русскими подписями при казахском
@@ -135,15 +143,18 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
   {
     const s = pres.addSlide();
     s.background = { color: SOFT };
+    s.addShape("ellipse" as PptxGenJS.ShapeType, { x: 9.2, y: 0, w: 4.13, h: 4.13, fill: { color: ACCENT, transparency: 8 }, line: { color: ACCENT, width: 0, transparency: 100 } });
+    s.addShape("ellipse" as PptxGenJS.ShapeType, { x: 8.6, y: 3.7, w: 2.1, h: 2.1, fill: { color: "8fa6fb", transparency: 25 }, line: { color: "8fa6fb", width: 0, transparency: 100 } });
     s.addText(c.topic || plan.title, {
       x: 0.7,
-      y: 2.2,
-      w: 11.9,
-      h: 1.6,
-      fontSize: 44,
+      y: 1.6,
+      w: 8.2,
+      h: 2.2,
+      fontSize: 42,
       bold: true,
       color: INK,
       fontFace: "Calibri",
+      fit: "shrink",
     });
     // Подзаголовок собирается из того, что реально есть. Раньше класс
     // подставлялся шаблоном безусловно, и план без класса давал на титуле
@@ -159,12 +170,11 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
         {
           x: 0.7,
           y: 4.0,
-          w: 11.9,
+          w: 7.5,
           h: 0.6,
           fontSize: 22,
           color: ACCENT,
           fit: "shrink",
-          shrinkText: true,
         },
       );
     }
@@ -172,12 +182,11 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
       s.addText(metaLine(c), {
         x: 0.7,
         y: 4.7,
-        w: 11.9,
+        w: 7.5,
         h: 0.5,
         fontSize: 16,
         color: MUTED,
         fit: "shrink",
-        shrinkText: true,
       });
     }
     s.addShape(pres.ShapeType.line, {
@@ -240,7 +249,6 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
         fontSize: 20,
         color: INK,
         fit: "shrink",
-        shrinkText: true,
       });
     }
     if (c.languageObjectives.phrases.length) {
@@ -255,7 +263,7 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
       });
       s.addText(
         c.languageObjectives.phrases.map((t) => ({ text: t, options: { bullet: true } })),
-        { x: 0.7, y: 3.9, w: 11.9, h: 2.4, fontSize: 18, color: INK, fit: "shrink", shrinkText: true },
+        { x: 0.7, y: 3.9, w: 11.9, h: 2.4, fontSize: 18, color: INK, fit: "shrink" },
       );
     }
   }
@@ -310,7 +318,6 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
       color: INK,
       valign: "top",
       fit: "shrink",
-      shrinkText: true,
     });
   }
 
@@ -335,10 +342,9 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
         w: 10.3,
         h: 1.5,
         fontSize: 18,
-        color: "e0e7ff",
+        color: SOFT,
         align: "center",
         fit: "shrink",
-        shrinkText: true,
       });
     }
   }
@@ -388,8 +394,7 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
         w: 0.9,
         h: 0.32,
         fontSize: 10,
-        color: "ffffff",
-        transparency: 40,
+        color: index === total - 1 ? "ffffff" : MUTED,
         align: "right",
       });
     });
@@ -409,8 +414,6 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
  * показывал классу обрезанный текст. PowerPoint сам уменьшит кегль до
  * читаемого размера.
  *
- * `shrinkText: true` включает уменьшение, когда текст формально помещается
- * по высоте блока, но не помещается по ширине строки.
  */
 function bodyOpts() {
   return {
@@ -421,11 +424,10 @@ function bodyOpts() {
     // которые раньше перекрывались текстом.
     h: 4.9,
     fontSize: 24,
-    color: "0f172a",
+    color: "1e1a3c",
     valign: "top" as const,
     paraSpaceAfter: 6,
     fit: "shrink" as const,
-    shrinkText: true,
   };
 }
 
@@ -499,7 +501,7 @@ function addStageSlide(
 
   // Слайды — для проектора ученикам: вопросы классу + их работа.
   // Слова педагога сюда не выносим (они живут в документе «Слова педагога»).
-  const columnOpts = { fontSize: 18, color: ink, valign: "top" as const, fit: "shrink" as const, shrinkText: true };
+  const columnOpts = { fontSize: 22, color: ink, valign: "top" as const, fit: "shrink" as const };
 
   if (hasQuestions) {
     s.addText(T.questions, {
@@ -517,8 +519,8 @@ function addStageSlide(
     if (stageTasks.length) {
       s.addText(
         stageTasks.slice(0, 3).map((t, i) => ({
-          text: `${i + 1}. ${t.question}`,
-          options: { bullet: false },
+          text: `${i + 1}. ${t.type === "FILL_BLANK" ? t.template : t.question}`,
+          options: { breakLine: true },
         })),
         { x: 6.9, y: 1.75, w: 5.7, h: 3.2, paraSpaceAfter: 8, ...columnOpts },
       );
@@ -527,22 +529,12 @@ function addStageSlide(
     }
   }
 
-  const bottom: Array<{ text: string; options?: object }> = [];
-  if (stage.descriptors?.length) {
-    // Дескрипторы раньше склеивались без обрезки, тогда как resources
-    // обрезались: длинные критерии вылезали за край слайда. Теперь оба
-    // проходят одну обрезку.
-    bottom.push({ text: `Оцениваем: ${truncate(stage.descriptors.slice(0, 3).join(" · "), 160)}` });
-  }
-  if (stage.resources) {
-    bottom.push({ text: `Нужно: ${truncate(stage.resources, 120)}` });
-  }
-  if (bottom.length) {
-    s.addText(bottom, {
-      x: 0.7, y: 5.3, w: 11.9, h: 1.1, fontSize: 14, italic: true, color: muted,
-      valign: "top", fit: "shrink", shrinkText: true,
-    });
-  }
+  // Оценивание и ресурсы нужны учителю, а не классу: они в заметках докладчика.
+  const notes = [
+    stage.descriptors?.length ? `Оцениваем: ${stage.descriptors.join(" · ")}` : "",
+    stage.resources ? `Нужно: ${stage.resources}` : "",
+  ].filter(Boolean);
+  if (notes.length) s.addNotes(notes.join("\n"));
 }
 
 /** Короткая выжимка действий учеников для слайда (первые 2 предложения). */
@@ -579,29 +571,21 @@ function addTaskSlide(
     color: ink,
     valign: "top",
     fit: "shrink",
-    shrinkText: true,
   });
 
   switch (task.type) {
     case "MCQ": {
-      const items = task.options.map((opt, i) => ({
-        // Буквы вариантов по алфавиту казахского: Ә стоит второй. Раньше
-        // варианты шли А, Б, В, Г…, и в казахской типографике это читалось
-        // как ошибка — между А и Б не хватало Ә.
-        text: `${OPTION_LETTERS[i] ?? String.fromCharCode(0x0410 + i)}. ${opt}`,
-        options: { bullet: false, fontSize: 22, color: ink },
-      }));
-      s.addText(items, {
-        x: 1.0,
-        y: 3.2,
-        w: 11.5,
-        h: 3.2,
-        fontSize: 22,
-        color: ink,
-        valign: "top",
-        paraSpaceAfter: 10,
-        fit: "shrink",
-        shrinkText: true,
+      const gap = 0.2;
+      const rows = Math.ceil(task.options.length / 2);
+      const h = Math.min(1.4, (3.3 - gap * (rows - 1)) / rows);
+      const w = 5.85;
+      task.options.forEach((opt, i) => {
+        const x = 0.7 + (i % 2) * (w + gap);
+        const y = 3.0 + Math.floor(i / 2) * (h + gap);
+        s.addShape("roundRect" as PptxGenJS.ShapeType, { x, y, w, h, rectRadius: 0.12, fill: { color: SOFT }, line: { color: CARD_LINE, width: 1 } });
+        // Буквы вариантов по алфавиту языка урока: в казахском Ә стоит второй.
+        s.addText(T.optionLetters[i] ?? String(i + 1), { x: x + 0.15, y, w: 0.7, h, fontSize: 28, bold: true, color: accent });
+        s.addText(opt, { x: x + 0.85, y, w: w - 1, h, fontSize: 24, color: ink, valign: "middle", fit: "shrink" });
       });
       break;
     }
@@ -619,6 +603,7 @@ function addTaskSlide(
       break;
     }
     case "FILL_BLANK": {
+      if (task.template.trim() === task.question.trim()) break;
       s.addText(task.template, {
         x: 0.7,
         y: 3.2,
@@ -629,7 +614,6 @@ function addTaskSlide(
         color: ink,
         valign: "top",
         fit: "shrink",
-        shrinkText: true,
       });
       break;
     }
@@ -642,9 +626,9 @@ function addTaskSlide(
       s.addText(T.matchRight, {
         x: 6.9, y: 3.1, w: 5.7, h: 0.35, fontSize: 15, bold: true, color: muted,
       });
-      const left = task.left.map((x, i) => ({ text: `${i + 1}. ${x}`, options: { bullet: false } }));
+      const left = task.left.map((x, i) => ({ text: `${i + 1}. ${x}`, options: { breakLine: true } }));
       const right = task.right.map((x) => ({ text: x, options: { bullet: true } }));
-      const opts = { y: 3.5, h: 3.0, fontSize: 18, color: ink, valign: "top" as const, fit: "shrink" as const, shrinkText: true };
+      const opts = { y: 3.5, h: 3.0, fontSize: 18, color: ink, valign: "top" as const, fit: "shrink" as const };
       s.addText(left, { x: 0.7, w: 5.8, ...opts });
       s.addText(right, { x: 6.9, w: 5.7, ...opts });
       break;
@@ -654,8 +638,7 @@ function addTaskSlide(
         task.items.map((x) => ({ text: x, options: { bullet: { code: "2192" } } })),
         {
           x: 0.7, y: 3.2, w: 11.9, h: 3.2, fontSize: 20, color: ink,
-          fit: "shrink", shrinkText: true,
-        },
+          fit: "shrink",        },
       );
       break;
     }
@@ -684,19 +667,6 @@ function addTaskSlide(
     }
   }
 
-  if (task.hint) {
-    // Подсказка поднята на 6.4 и ограничена по высоте: раньше она занимала
-    // 6.7–7.2 и наезжала на водяной знак (7.05–7.4 при x от 8.6).
-    s.addText(`${T.hintPrefix}${task.hint}`, {
-      x: 0.7,
-      y: 6.4,
-      w: 11.9,
-      h: 0.5,
-      fontSize: 14,
-      italic: true,
-      color: muted,
-      fit: "shrink",
-      shrinkText: true,
-    });
-  }
+  // На проекторе подсказку видел бы весь класс: учитель открывает её сам из заметок.
+  if (task.hint) s.addNotes(`${T.hintPrefix}${task.hint}`);
 }

@@ -45,6 +45,7 @@ export type WorksheetTaskType =
   | "case_study" // кейс с данными + вопросы
   | "fill_bank" // вставить слова из банка
   | "table_fix" // таблица «Что неправильно / Как исправить»
+  | "compare" // таблица сравнения: критерии по строкам, что сравниваем по столбцам
   | "scenario_fix" // сценарий-облако + ошибки/исправления
   | "choice_buttons" // выбор варианта-кнопки
   | "reflection" // рефлексия-смайлики
@@ -108,6 +109,10 @@ export interface WorksheetTask {
   tableHeaders?: [string, string];
   /** Сколько пустых строк дать в таблице table_fix. */
   tableRows?: number;
+  /** Для compare: шапка таблицы, первый столбец это «Критерий сравнения». */
+  compareColumns?: string[];
+  /** Для compare: критерии, заполняет ученик. */
+  compareRows?: string[];
   /**
    * Текст сценария для scenario_fix (печатается на цветном
    * «облаке»-подложке справа/сверху). Ошибки ученик разбирает

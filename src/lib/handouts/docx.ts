@@ -79,7 +79,7 @@ function worksheetCopy(language: "ru" | "kz" | undefined): WorksheetCopy {
     cutNote: "Сызық бойымен қиып, ортасынан бүктеңіз. Бір бетінде термин, екінші бетінде анықтама.",
     across: "Көлденеңінен", down: "Тігінен", extraWords: "Қосымша сөздер (торға кірмеді)",
     answer: "Жауап", findWords: "Сөздерді тап", qr: "QR-код", scan: "сканерлеңіз", teacherAdds: "(мұғалім енгізеді)", link: "Сілтеме", myResult: "Менің нәтижем:",
-    memo: "ЖАДНАМА", example: "Мысал", selfCheck: "Өзіңді тексер",
+    memo: "КАРТОЧКА", example: "Мысал", selfCheck: "Өзіңді тексер",
   };
   return {
     task: "Задание", points: "б.", studentLine: "ФИО ученика: ____ Класс: ____ Дата: ____",
@@ -93,7 +93,7 @@ function worksheetCopy(language: "ru" | "kz" | undefined): WorksheetCopy {
     cutNote: "Разрежьте по линиям, согните по середине. С одной стороны — термин, с другой — определение.",
     across: "По горизонтали", down: "По вертикали", extraWords: "Дополнительные слова (не вошли в сетку)",
     answer: "Ответ", findWords: "Найди слова", qr: "QR-код", scan: "сканируй", teacherAdds: "(вставит учитель)", link: "Ссылка", myResult: "Мой результат:",
-    memo: "ПАМЯТКА", example: "Пример", selfCheck: "Проверь себя",
+    memo: "КАРТОЧКА", example: "Пример", selfCheck: "Проверь себя",
   };
 }
 
@@ -462,6 +462,8 @@ function taskBody(t: WorksheetTask, index: number, copy: WorksheetCopy): (Paragr
       return [...promptParagraphs(t.prompt, index, t), p(`${copy.match}:`, { italics: true }), matchTable(t.options ?? [], t.pairs ?? [], copy)];
     case "table_fix":
       return [...promptParagraphs(t.prompt, index, t), tableFixBodyInner(t, copy)];
+    case "compare":
+      return [...promptParagraphs(t.prompt, index, t), compareTable(t)];
     case "scenario_fix":
       return [...promptParagraphs(t.prompt, index, t), scenarioTable(t, copy)];
     case "choice_buttons":
@@ -707,6 +709,22 @@ function caseCloud(situation: string, copy: WorksheetCopy): Table {
   });
 }
 /** «Рассмотри рисунок»: только сама таблица исправлений (остальное делает taskBlock). */
+function compareTable(t: WorksheetTask): Table {
+  const columns = t.compareColumns ?? [];
+  const cell = (text: string, bold = false) => new TableCell({
+    borders: THIN_BORDERS,
+    margins: CELL_MARGINS,
+    children: [new Paragraph({ children: [new TextRun({ text, bold, size: 20 })] })],
+  });
+  return new Table({
+    width: FULL_WIDTH,
+    rows: [
+      new TableRow({ children: columns.map((column) => cell(column, true)) }),
+      ...(t.compareRows ?? []).map((row) => new TableRow({ children: [cell(row), ...columns.slice(1).map(() => cell(""))] })),
+    ],
+  });
+}
+
 function tableFixBodyInner(t: WorksheetTask, copy: WorksheetCopy): Table {
   const headers: [string, string] =
     t.tableHeaders && t.tableHeaders.length === 2 ? t.tableHeaders : [copy.error, copy.correction];
@@ -964,7 +982,7 @@ function buildFlashcards(f: FlashcardSet): (Paragraph | Table)[] {
  * материала выглядели как черновики рядом с оформленным листом.
  */
 function flashcardTitle(title: string, language: "ru" | "kz" | undefined): Paragraph {
-  const label = language === "kz" ? "ПАМЯТКАЛАР" : "ПАМЯТКИ";
+  const label = language === "kz" ? "КАРТОЧКАЛАР" : "КАРТОЧКИ В ТЕТРАДЬ";
   return new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 120 },

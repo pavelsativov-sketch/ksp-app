@@ -309,8 +309,8 @@ function Lobby({
             Или зайдите на <span className="font-mono">/quiz/join</span> и введите код:
           </li>
         </ol>
-        <div className="border-y border-[#ddd5cb] bg-[#f1ece4] p-6 text-center">
-          <p className="font-mono text-5xl font-bold tracking-widest text-[#c0512f]">{code}</p>
+        <div className="border-y border-border bg-[#f1ece4] p-6 text-center">
+          <p className="font-mono text-5xl font-bold tracking-widest text-primary">{code}</p>
         </div>
         <Button variant="outline" onClick={copy} className="w-full">
           <Copy className="w-4 h-4" />
@@ -385,7 +385,7 @@ function QuestionView({
           <span
             className={
               "font-mono text-3xl font-bold " +
-              (seconds <= 5 ? "text-[#c0512f] animate-pulse" : "text-[#2f5b4f]")
+              (seconds <= 5 ? "text-primary animate-pulse" : "text-[#2f5b4f]")
             }
           >
             {seconds}
@@ -399,9 +399,9 @@ function QuestionView({
           {task.options.map((opt, i) => (
             <div
               key={i}
-              className="border border-[#ddd5cb] bg-surface p-4 text-lg"
+              className="border border-border bg-surface p-4 text-lg"
             >
-              <span className="mr-2 font-bold text-[#c0512f]">
+              <span className="mr-2 font-bold text-primary">
                 {String.fromCharCode(0x0410 + i)}.
               </span>
               {opt}
@@ -423,7 +423,7 @@ function QuestionView({
         <p className="text-xl text-slate-600 italic">{task.template}</p>
       )}
 
-      <div className="flex items-center justify-between border-t border-[#ddd5cb] pt-4">
+      <div className="flex items-center justify-between border-t border-border pt-4">
         <p className="text-sm text-slate-500">
           Ответили: <span className="font-bold text-slate-900">{answered}</span> из {connected}
         </p>
@@ -432,9 +432,9 @@ function QuestionView({
           Показать ответ
         </Button>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-[#ddd5cb]">
+      <div className="h-1.5 overflow-hidden rounded-full bg-border">
         <div
-          className="h-full bg-[#c0512f] transition-all"
+          className="h-full bg-primary transition-all"
           style={{ width: `${connected > 0 ? (answered / connected) * 100 : 0}%` }}
         />
       </div>
@@ -481,7 +481,7 @@ function RevealView({
 function EndView({ code, leaderboard }: { code: string; leaderboard: LiveLeaderboardEntry[] }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-[#c0512f] p-8 text-center text-[#faf7f2]">
+      <div className="rounded-2xl bg-primary p-8 text-center text-[#faf7f2]">
         <Trophy className="w-12 h-12 mx-auto mb-2" />
         <h2 className="text-3xl font-bold mb-1">Квиз завершён!</h2>
         <p className="text-violet-100">Поздравляем участников</p>

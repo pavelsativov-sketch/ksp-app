@@ -25,8 +25,8 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
     ["Тема урока", c.topic],
   ];
   return (
-    <div className="print-plan space-y-8 rounded-2xl border border-[#ddd5cb] bg-surface p-5 md:p-8">
-      <div className="border-b border-[#ddd5cb] pb-5 text-center"><p className="editorial-kicker">Краткосрочный план урока</p><h2 className="editorial-display mt-3 break-words text-3xl sm:text-4xl">{plan.title}</h2></div>
+    <div className="print-plan space-y-8 rounded-2xl border border-border bg-surface p-5 md:p-8">
+      <div className="border-b border-border pb-5 text-center"><p className="editorial-kicker">Краткосрочный план урока</p><h2 className="editorial-display mt-3 break-words text-3xl sm:text-4xl">{plan.title}</h2></div>
 
       {totalTasks > 0 && (
         <div className="no-print flex justify-center">
@@ -53,10 +53,10 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
         />
       )}
 
-      <div className="hidden overflow-x-auto border-y border-[#ddd5cb] sm:block"><table className="w-full min-w-[560px] text-sm"><tbody>
+      <div className="hidden overflow-x-auto border-y border-border sm:block"><table className="w-full min-w-[560px] text-sm"><tbody>
           {headerItems.map(([label, value]) => <TableRow key={label} label={label} value={value} />)}
         </tbody></table></div>
-      <dl className="grid gap-2 border-y border-[#ddd5cb] py-3 sm:hidden">
+      <dl className="grid gap-2 border-y border-border py-3 sm:hidden">
         {headerItems.map(([label, value]) => <div key={label} className="rounded-lg bg-muted/40 px-3 py-2">
           <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
           <dd className="mt-0.5 break-words text-sm">{value || "—"}</dd>
@@ -146,7 +146,7 @@ function Section({
 }) {
   return (
     <section className="space-y-2">
-      <h2 className="editorial-display border-b border-[#ddd5cb] pb-2 text-2xl">
+      <h2 className="editorial-display border-b border-border pb-2 text-2xl">
         {title}
       </h2>
       <div className="break-words text-sm space-y-1">{children}</div>

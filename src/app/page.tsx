@@ -10,7 +10,7 @@ export default async function HomePage() {
   const signedIn = Boolean(await getCurrentUser());
   const { t } = await getDict();
   const l = t.landing;
-  const createHref = signedIn ? "/plans/new" : "/register";
+  const createHref = signedIn ? "/dashboard?new=1" : "/register";
   const createLabel = signedIn ? l.createNew : l.createFirst;
   // Длинные FAQ-ответы — следующий этап перевода, пока RU.
   const faqs = [

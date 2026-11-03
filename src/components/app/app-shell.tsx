@@ -46,7 +46,7 @@ export function AppShell({
   const inSchool = path === "/school" || path.startsWith("/school/");
   const main: NavItem[] = [
     { href: "/dashboard", label: c.nav.home, icon: Home, active: (p) => p === "/dashboard" },
-    { href: "/plans/new", label: c.nav.constructor, icon: FileText, active: (p) => p === "/plans/new" },
+    { href: "/dashboard?new=1", label: c.nav.constructor, icon: FileText, active: (p) => p === "/plans/new" },
     { href: "/plans", label: c.nav.plans, icon: CalendarDays, active: (p) => p === "/plans" || (p.startsWith("/plans/") && p !== "/plans/new") },
     { href: "/library", label: c.nav.library, icon: BookOpen, active: (p) => p.startsWith("/library") || p.startsWith("/kits") || p.startsWith("/templates") || p.startsWith("/textbooks") },
     { href: "/school", label: c.nav.agent, icon: Bot, active: (p) => p === "/school" || p.startsWith("/school/agents") || p.startsWith("/school/workspace") },

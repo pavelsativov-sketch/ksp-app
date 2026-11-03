@@ -186,7 +186,6 @@ function assessmentCellChildren(stage: LessonStage): Paragraph[] {
         (d) =>
           new Paragraph({
             children: [
-              new TextRun({ text: "Дескриптор: ", italics: true }),
               new TextRun({ text: d }),
             ],
           }),
@@ -281,11 +280,13 @@ function renderTask(task: InteractiveTask, n: number): Paragraph[] {
       );
       break;
     case "FILL_BLANK":
-      body.push(
-        new Paragraph({
-          children: [new TextRun({ text: `   ${task.template}` })],
-        }),
-      );
+      if (task.template.trim() !== task.question.trim()) {
+        body.push(
+          new Paragraph({
+            children: [new TextRun({ text: `   ${task.template}` })],
+          }),
+        );
+      }
       body.push(
         new Paragraph({
           children: [
@@ -389,7 +390,7 @@ export async function buildKspDocx(
       ),
       labelRow("Дата", c.header.date),
       labelRow("ФИО учителя", c.header.teacherName),
-      labelRow("Класс", c.header.grade),
+      labelRow("Класс", c.header.grade || String(plan.grade)),
       labelRow(
         "Присутствовало / Отсутствовало",
         `${c.header.studentsPresent ?? "—"} / ${c.header.studentsAbsent ?? "—"}`,

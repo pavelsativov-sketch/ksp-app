@@ -24,7 +24,7 @@ function switches() {
   return screen.getAllByRole("switch");
 }
 
-it("worksheet: отправляет kind+count без cardLayout и без withImages по умолчанию", async () => {
+it("worksheet: красочный по умолчанию, с иллюстрациями и без cardLayout", async () => {
   openWorksheet();
   // Пилюля по умолчанию — 6 заданий.
   expect(screen.getByRole("button", { name: "6" }).getAttribute("aria-pressed")).toBe("true");
@@ -35,17 +35,17 @@ it("worksheet: отправляет kind+count без cardLayout и без withI
   const body = JSON.parse(init.body);
   expect(body).toMatchObject({ kind: "worksheet", count: 6 });
   expect(body).not.toHaveProperty("cardLayout");
-  expect(body).not.toHaveProperty("withImages");
+  expect(body.withImages).toBe(true);
   // Сообщение об ошибке извлекается из JSON, а не показывается сырым телом ответа.
   await screen.findByText("Тест: провайдер недоступен");
 });
 
-it("worksheet: переключатель иллюстраций включает withImages", async () => {
+it("worksheet: переключатель иллюстраций выключает withImages", async () => {
   openWorksheet();
-  fireEvent.click(switches()[0]); // ИИ-иллюстрации
+  fireEvent.click(switches()[0]); // ИИ-иллюстрации включены сразу
   fireEvent.click(screen.getByRole("button", { name: "Создать и посмотреть" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ kind: "worksheet", withImages: true });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body).withImages).toBeUndefined();
 });
 
 it("worksheet: объединение шлёт комплект в /api/handouts/combined", async () => {
@@ -56,16 +56,16 @@ it("worksheet: объединение шлёт комплект в /api/handouts
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
   const [url, init] = fetchMock.mock.calls[0];
   expect(url).toBe("/api/handouts/combined");
-  expect(JSON.parse(init.body)).toMatchObject({ worksheetCount: 6, memosCount: 12 });
+  expect(JSON.parse(init.body)).toMatchObject({ worksheetCount: 6, memosCount: 6 });
 });
 
-it("memos: отдельная кнопка Памятки с пилюлями 8/12/16/20", async () => {
+it("карточки: отдельная кнопка с количеством под лист A4", async () => {
   render(<MemosButton {...baseProps} />);
-  fireEvent.click(screen.getByRole("button", { name: "Памятки" }));
-  expect(screen.getByRole("button", { name: "12" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "Карточки в тетрадь" }));
+  expect(screen.getByRole("button", { name: "6" }).getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "Создать и посмотреть" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ kind: "flashcards", count: 12 });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ kind: "flashcards", count: 6 });
 });
 
 it("crossword: отдельная кнопка без переключателя иллюстраций", async () => {

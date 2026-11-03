@@ -78,6 +78,7 @@ export const productTools = {
       const base = emptyKsp();
       base.topic = input.topic;
       base.learningObjectives = autoObjectives;
+      if (typeof args.teacherName === 'string') base.header.teacherName = args.teacherName;
       const content = mergeAiIntoKsp(base, payload);
       const subject = await getSubjectByName(input.subject).catch(() => null);
       const title = `${input.subject}: ${input.topic}`.slice(0, 200);
@@ -183,7 +184,8 @@ export const productTools = {
       const objectives = plan.content.learningObjectives.length
         ? plan.content.learningObjectives
         : (plan.content.lessonObjectives ?? []).map((text, index) => ({ code: `Цель ${index + 1}`, text }));
-      const ktp = buildKtp({ ...plan, content: { ...plan.content, learningObjectives: objectives } }, subjectName, request.data);
+      const { objectivesForTopic } = await import('@/lib/goso/match');
+      const ktp = buildKtp({ ...plan, content: { ...plan.content, learningObjectives: objectives } }, subjectName, request.data, (topic) => objectivesForTopic(subject?.name_ru ?? '', plan.grade, topic));
 
       const file = await saveCopyToWorkspace(ctx.userId, `ktp-${slugForFile(plan.content.topic || plan.title)}.md`, ktpToMarkdown(ktp));
       return {

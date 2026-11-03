@@ -22,6 +22,8 @@ export interface HomePlan {
 }
 
 export interface HomeProps {
+  /** Открыть окно нового урока сразу: на него ведут меню и ссылки «Создать». */
+  startLesson?: boolean;
   subjects: Array<{ name: string; min: number; max: number }>;
   recent: HomePlan[];
   favorites: HomePlan[];
@@ -40,11 +42,28 @@ function when(iso: string, c: AppCopy, locale: string): string {
 }
 
 /** Новый урок: три поля и кнопка. Пока ИИ пишет, робот работает и показывает этап. */
+const LAST_LESSON_KEY = "mekty:last-lesson";
+
+function readLastLesson(): { grade: number; subject: string } {
+  const fallback = { grade: 5, subject: "" };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAST_LESSON_KEY) ?? "null") as { grade?: unknown; subject?: unknown } | null;
+    return {
+      grade: typeof saved?.grade === "number" ? saved.grade : fallback.grade,
+      subject: typeof saved?.subject === "string" ? saved.subject : fallback.subject,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: () => void; subjects: HomeProps["subjects"]; c: AppCopy }) {
   const router = useRouter();
   const ref = useRef<HTMLDialogElement | null>(null);
-  const [grade, setGrade] = useState(5);
-  const [subject, setSubject] = useState("");
+  const topicRef = useRef<HTMLInputElement | null>(null);
+  const [grade, setGrade] = useState(() => readLastLesson().grade);
+  const [subject, setSubject] = useState(() => readLastLesson().subject);
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState<"ru" | "kz">("ru");
   const [busy, setBusy] = useState(false);
@@ -54,7 +73,11 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      // autoFocus срабатывает раньше showModal, и фокус уходил на кнопку закрытия.
+      topicRef.current?.focus();
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
@@ -76,6 +99,11 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
     setBusy(true);
     setStep(0);
     setError("");
+    try {
+      localStorage.setItem(LAST_LESSON_KEY, JSON.stringify({ grade, subject: chosen }));
+    } catch {
+      // Память о выборе необязательна.
+    }
     try {
       const res = await fetch("/api/lessons", {
         method: "POST",
@@ -133,7 +161,7 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
               </div>
               <label className={s.field}>
                 <span>{c.topicLabel}</span>
-                <input autoFocus value={topic} onChange={(e) => { setTopic(e.target.value); setError(""); }} placeholder={c.topicHint} maxLength={300} />
+                <input ref={topicRef} value={topic} onChange={(e) => { setTopic(e.target.value); setError(""); }} placeholder={c.topicHint} maxLength={300} />
               </label>
               {error && <p role="alert" className={s.error}>{error}</p>}
               <div className={s.dialogActions}>
@@ -245,10 +273,14 @@ function AgentPanel({ c, bilimConnected, agentOnline }: { c: AppCopy; bilimConne
   );
 }
 
-export function Home({ subjects, recent, favorites, bilimConnected, agentOnline }: HomeProps) {
+export function Home({ startLesson = false, subjects, recent, favorites, bilimConnected, agentOnline }: HomeProps) {
   const { locale } = useUiLocale();
   const c = appCopy(locale);
-  const [lessonOpen, setLessonOpen] = useState(false);
+  const [lessonOpen, setLessonOpen] = useState(startLesson);
+  useEffect(() => {
+    // Иначе обновление страницы снова открывало бы окно.
+    if (startLesson) window.history.replaceState(null, "", "/dashboard");
+  }, [startLesson]);
   const [pickOpen, setPickOpen] = useState(false);
   const [tab, setTab] = useState<"recent" | "favorites">("recent");
 
@@ -269,7 +301,7 @@ export function Home({ subjects, recent, favorites, bilimConnected, agentOnline 
     { tone: "gray", icon: LayoutGrid, text: c.materials.more },
   ];
   const caps: Array<{ tone: Tone; icon: LucideIcon; text: string[]; href: string }> = [
-    { tone: "violet", icon: FileText, text: c.caps.ksp, href: "/plans/new" },
+    { tone: "violet", icon: FileText, text: c.caps.ksp, href: "/dashboard?new=1" },
     { tone: "blue", icon: CalendarDays, text: c.caps.plan, href: "/plans" },
     { tone: "green", icon: Library, text: c.caps.library, href: "/library" },
     { tone: "peach", icon: MonitorSmartphone, text: c.caps.os, href: "/school/dashboard" },

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { executeWithFallback, isAnyProviderConfigured } from "@/lib/ai/providers";
 import { extractJson } from "@/lib/ai/extract-json";
-import { emptyTask, type McqTask } from "@/lib/ksp/tasks";
+import { emptyTask, type InteractiveTask, type McqTask } from "@/lib/ksp/tasks";
+import { interactiveTaskSchema } from "@/lib/validation/ksp";
+import type { InteractiveFormat } from "./interactive-formats";
 import type { LessonPlanRow } from "@/lib/types/ksp";
 
 export const MIN_CHOICES = 5;
@@ -111,4 +113,94 @@ export async function generateChoiceTasks(plan: LessonPlanRow, count: number): P
     aiGenerated: true,
     aiReviewed: false,
   }));
+}
+
+type RawStep = Record<string, unknown>;
+const stepsSchema = z.object({ steps: z.array(z.record(z.string(), z.unknown())).min(1) });
+
+const FORMAT_PROMPTS: Record<Exclude<InteractiveFormat, "live" | "mcq">, { what: string; shape: string }> = {
+  truefalse: {
+    what: "утверждений «верно или неверно»: примерно половина верных, половина с правдоподобной ошибкой",
+    shape: '{"question":"утверждение","correct":true,"hint":"подсказка"}',
+  },
+  fill: {
+    what: "предложений с пропусками: пропущено ключевое понятие или результат",
+    shape: '{"question":"короткая инструкция","template":"предложение, где пропуск обозначен ___","answers":["ответ на каждый пропуск по порядку"],"hint":"подсказка"}',
+  },
+  match: {
+    what: "наборов «найди пары», в каждом 4–6 пар: термин и определение или выражение и результат",
+    shape: '{"question":"Соедини термин и определение","pairs":[{"left":"термин","right":"определение"}],"hint":"подсказка"}',
+  },
+  order: {
+    what: "заданий «расставь по порядку», в каждом 4–6 шагов алгоритма или этапов процесса",
+    shape: '{"question":"Расставь шаги по порядку","items":["шаги строго в ВЕРНОМ порядке"],"hint":"подсказка"}',
+  },
+};
+
+function shuffled<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+const text = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+const textList = (value: unknown): string[] => (Array.isArray(value) ? value.map(text).filter(Boolean) : []);
+
+/** Собирает задание из ответа модели. Порядок правых колонок и шагов перемешиваем сами: модели это не доверить. */
+export function buildFormatTask(format: Exclude<InteractiveFormat, "live" | "mcq">, step: RawStep): InteractiveTask | null {
+  const hint = text(step.hint);
+  const common = { question: text(step.question), ...(hint ? { hint } : {}), aiGenerated: true, aiReviewed: false };
+  let task: unknown = null;
+  if (format === "truefalse" && typeof step.correct === "boolean") {
+    task = { ...emptyTask("TRUE_FALSE"), ...common, correct: step.correct };
+  }
+  if (format === "fill") {
+    const template = text(step.template);
+    const answers = textList(step.answers);
+    const blanks = template.match(/_{3,}/g)?.length ?? 0;
+    if (answers.length > 0 && blanks === answers.length) {
+      task = { ...emptyTask("FILL_BLANK"), ...common, question: common.question || "Заполни пропуск", template, answers };
+    }
+  }
+  if (format === "match" && Array.isArray(step.pairs)) {
+    const pairs = (step.pairs as RawStep[]).map((pair) => ({ left: text(pair?.left), right: text(pair?.right) })).filter((pair) => pair.left && pair.right);
+    if (pairs.length >= 2) {
+      const right = shuffled(pairs.map((pair) => pair.right));
+      task = {
+        ...emptyTask("MATCHING"),
+        ...common,
+        points: 2,
+        left: pairs.map((pair) => pair.left),
+        right,
+        pairs: pairs.map((pair, leftIndex) => ({ leftIndex, rightIndex: right.indexOf(pair.right) })),
+      };
+    }
+  }
+  if (format === "order") {
+    const steps = textList(step.items);
+    if (steps.length >= 3) {
+      const items = shuffled(steps);
+      task = { ...emptyTask("ORDERING"), ...common, points: 2, items, correctOrder: steps.map((value) => items.indexOf(value)) };
+    }
+  }
+  const parsed = interactiveTaskSchema.safeParse(task);
+  return parsed.success ? (parsed.data as InteractiveTask) : null;
+}
+
+/** Интерактив выбранного формата: каждый формат даёт свой тип заданий. */
+export async function generateInteractiveTasks(plan: LessonPlanRow, format: InteractiveFormat, count: number): Promise<InteractiveTask[]> {
+  if (format === "live" || format === "mcq") return generateChoiceTasks(plan, count);
+  const { what, shape } = FORMAT_PROMPTS[format];
+  const system = "Ты методист. Составляешь интерактивные задания для школьников на языке плана. Каждое задание опирается на содержание урока и проверяется однозначно. Перед ответом сам реши задание и проверь ключ. Отвечай только JSON.";
+  const user = `${planBrief(plan)}
+
+Составь ровно ${count} ${what}. От простого к сложному, каждое задание на цель урока.
+Формат: {"steps":[${shape}]}.`;
+  const { steps } = await askJson(stepsSchema, system, user);
+  const tasks = steps.map((step) => buildFormatTask(format, step)).filter((task): task is InteractiveTask => task !== null);
+  if (tasks.length === 0) throw new Error("AI не составил ни одного корректного задания");
+  return tasks.slice(0, count);
 }

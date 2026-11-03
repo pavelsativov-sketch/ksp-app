@@ -149,7 +149,7 @@ export function TaskBuilder({ tasks, onChange, context, availableObjectives = []
   }
 
   return (
-    <div className="space-y-4 border-t border-[#ddd5cb] pt-4">
+    <div className="space-y-4 border-t border-border pt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="editorial-kicker">
           {isKk ? "Интерактивті тапсырмалар" : "Интерактивные задания"} {tasks.length > 0 && `(${tasks.length})`}
@@ -237,7 +237,7 @@ export function TaskBuilder({ tasks, onChange, context, availableObjectives = []
         </section>
       )}
       {tasks.length === 0 && (
-        <p className="text-xs text-[#8a817a] italic">
+        <p className="text-xs text-muted-foreground italic">
           {isKk ? "Әзірге тапсырма жоқ — қолмен қосыңыз немесе AI нұсқаларын қарап шығыңыз." : "Пока заданий нет — добавьте вручную или просмотрите AI-варианты."}
         </p>
       )}
@@ -275,7 +275,7 @@ function TaskCandidate({
   onReject: () => void;
 }) {
   return (
-    <article className="space-y-3 rounded-xl border border-[#ddd5cb] bg-white p-3">
+    <article className="space-y-3 rounded-xl border border-border bg-white p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold">{isKk ? `Ұсыныс ${index + 1}` : `Вариант ${index + 1}`}</h4>
         <span className="flex items-center gap-1 text-xs text-[#756b63]">{taskTypeLabel(task.type)} · {task.points} {isKk ? "ұпай" : "балл"}{task.differentiationLevel && <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${differentiationLevelBadgeClass(task.differentiationLevel)}`}>{task.differentiationLevel}</span>}</span>
@@ -346,15 +346,15 @@ function TaskCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#ddd5cb] bg-[#f1ece4]">
-      <div className="flex items-center justify-between border-b border-[#ddd5cb] bg-[#f1ece4] px-4 py-3">
+    <div className="overflow-hidden rounded-2xl border border-border bg-[#f1ece4]">
+      <div className="flex items-center justify-between border-b border-border bg-[#f1ece4] px-4 py-3">
         <button
           type="button"
           onClick={() => setOpen(!open)}
           className="flex items-center gap-2 text-sm font-medium text-[#5f5751] hover:text-[#1c1a17]"
         >
           {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          <span className="text-xs uppercase tracking-wider text-[#8a817a]">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
             {taskTypeLabel(task.type)}
           </span>
           {task.differentiationLevel && (
@@ -416,7 +416,7 @@ function TaskCard({
       </div>
 
       {task.aiGenerated && (
-        <aside className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd5cb] bg-[#fff9e8] px-4 py-3 text-xs" aria-label={isKk ? "AI мазмұнының тексерілу күйі" : "Проверка AI-содержимого"}>
+        <aside className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-[#fff9e8] px-4 py-3 text-xs" aria-label={isKk ? "AI мазмұнының тексерілу күйі" : "Проверка AI-содержимого"}>
           <div>
             <p className="font-semibold text-[#594715]">{task.aiReviewed ? (isKk ? "Мұғалім тексерді" : "Учитель проверил") : (isKk ? "Мұғалім тексеруі қажет" : "Нужно проверить учителю")}</p>
             <p className="mt-0.5 text-[#756b63]">{isKk ? "Дереккөз тіркелмеген — қолмен тексеру бөлек белгіленеді." : "Источники не указаны; ручная проверка — отдельная отметка."}</p>
@@ -428,14 +428,14 @@ function TaskCard({
         </aside>
       )}
       {task.copiedFrom && (
-        <p className="border-b border-[#ddd5cb] bg-white px-4 py-2 text-xs text-[#756b63]">
+        <p className="border-b border-border bg-white px-4 py-2 text-xs text-[#756b63]">
           {isKk ? "Дереккөз жоспар" : "Скопировано из плана"} «{task.copiedFrom.sourcePlanTitle}» · {task.copiedFrom.sourceGrade} {isKk ? "сынып" : "класс"}
         </p>
       )}
 
       {variantError && <p role="alert" className="mx-3 mt-3 rounded-lg border border-[#e8c8bf] bg-[#f7e6e1] p-2 text-xs text-[#a84023]">{variantError}</p>}
       {variants.length > 0 && (
-        <section className="space-y-3 border-b border-[#ddd5cb] bg-[#f8f4ed] p-3" aria-label={isKk ? "Тапсырма баламалары" : "Альтернативы текущего задания"}>
+        <section className="space-y-3 border-b border-border bg-[#f8f4ed] p-3" aria-label={isKk ? "Тапсырма баламалары" : "Альтернативы текущего задания"}>
           <div>
             <h3 className="text-sm font-semibold">{isKk ? "Бастапқы тапсырманың баламалары" : "Варианты исходного задания"}</h3>
             <p className="mt-1 text-xs text-[#756b63]">{isKk ? "Бастапқы нұсқа өзгермейді. Таңдасаңыз ғана мәтін жаңарады; ұпайлар мен мақсаттар сақталады." : "Исходная задача не меняется до принятия; при замене баллы, цель и критерии сохраняются."}</p>
@@ -472,7 +472,7 @@ function TaskCard({
       )}
 
       {preview && (
-        <div className="border-t border-[#ddd5cb] bg-surface p-4">
+        <div className="border-t border-border bg-surface p-4">
           <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
             Превью для ученика
           </p>
@@ -559,7 +559,7 @@ function TaskOptions({
       </summary>
       <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-3">
-          <Label>Подсказка ученику (за показ — штраф на пару баллов)</Label>
+          <Label>Подсказка ученику (за показ снимается 1 балл, у задания на 1 балл бесплатна)</Label>
           <Input
             value={task.hint ?? ""}
             onChange={(e) => onChange({ ...task, hint: e.target.value })}
@@ -632,7 +632,7 @@ function TaskOptions({
               {criteria.map((criterion, index) => {
                 const id = `criterion-${task.id}-${index}`;
                 return (
-                  <label key={criterion} htmlFor={id} className="flex items-start gap-2 rounded-lg border border-[#ddd5cb] bg-surface p-2 text-sm">
+                  <label key={criterion} htmlFor={id} className="flex items-start gap-2 rounded-lg border border-border bg-surface p-2 text-sm">
                     <input
                       id={id}
                       type="checkbox"

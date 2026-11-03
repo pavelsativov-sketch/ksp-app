@@ -60,7 +60,7 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
   const warns = items.filter((i) => i.status === "warn").length;
   const isKk = locale === "kk";
   return (
-    <section aria-labelledby="quality-title" data-testid="quality-gate" className="no-print space-y-4 rounded-xl border border-[#ddd5cb] p-5">
+    <section aria-labelledby="quality-title" data-testid="quality-gate" className="no-print space-y-4 rounded-xl border border-border p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 id="quality-title" className="text-xl font-semibold">{isKk ? `Мазмұн тексерістері: ${score}%` : `Автоматические проверки содержания: ${score}%`}</h2>

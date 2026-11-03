@@ -14,6 +14,7 @@ export const ktpRequestSchema = z.object({
   planId: z.string().regex(/^[0-9a-f]{24}$/i, "Некорректный идентификатор"),
   topics: z.array(z.string().trim().min(1).max(300)).min(1).max(40).optional(),
   startDate: z.string().refine(isCalendarDate, "Некорректная дата").optional(),
+  lessonsPerWeek: z.number().int().min(1).max(6).optional(),
 }).strict();
 
 /** Предел тем в КТП. Объявлен здесь, чтобы форма и сервер считали одно и то же. */
@@ -82,7 +83,9 @@ export function parseTopicLine(line: string, fallbackDate: string): ParsedTopicL
  * входят — их учитель правит вручную, и таблица для этого остаётся
  * редактируемой в Word.
  */
-function weeklyDates(start: string, count: number): string[] {
+function weeklyDates(start: string, count: number, lessonsPerWeek = 1): string[] {
+  // shortcut: уроки распределяются равномерно, а не по расписанию школы; учитель правит даты в Word.
+  const step = lessonsPerWeek === 1 ? 7 : Math.max(1, Math.floor(6 / lessonsPerWeek));
   const dates: string[] = [];
   if (!start) return dates;
   const [year, month, day] = start.split("-").map(Number);
@@ -95,7 +98,7 @@ function weeklyDates(start: string, count: number): string[] {
   // не заканчивался. От воскресенья шаг один день — на понедельник.
   let cursorDay = cursor.getUTCDay();
   while (dates.length < count) {
-    cursor.setUTCDate(cursor.getUTCDate() + (cursorDay === 0 ? 1 : 7));
+    cursor.setUTCDate(cursor.getUTCDate() + (cursorDay === 0 ? 1 : step));
     cursorDay = cursor.getUTCDay();
     if (cursorDay !== 0) dates.push(cursor.toISOString().slice(0, 10));
   }
@@ -122,7 +125,9 @@ export interface Ktp {
 export function buildKtp(
   plan: Pick<LessonPlanRow, "title" | "grade" | "language" | "content">,
   subject: string,
-  options: Pick<KtpRequest, "topics" | "startDate"> = {},
+  options: Pick<KtpRequest, "topics" | "startDate" | "lessonsPerWeek"> = {},
+  /** Цели для тем, которых нет в исходном уроке: сервер подбирает их из ГОСО. */
+  objectivesFor: (topic: string) => string = () => "",
 ): Ktp {
   const sourceTopic = plan.content.topic.trim();
   const objectives = plan.content.learningObjectives
@@ -131,7 +136,7 @@ export function buildKtp(
 
   const lines = options.topics ?? [sourceTopic];
   const parsed = lines.map((line) => parseTopicLine(line, ""));
-  const dates = weeklyDates(options.startDate ?? "", parsed.length);
+  const dates = weeklyDates(options.startDate ?? "", parsed.length, options.lessonsPerWeek);
 
   return {
     title: plan.title,
@@ -147,7 +152,7 @@ export function buildKtp(
       // Цели переносятся по совпадению темы без учёта регистра и лишних
       // пробелов. Раньше сравнение было точным, и та же тема, вписанная чуть
       // иначе, теряла цели урока.
-      objectives: normalizeTopic(entry.topic) === normalizeTopic(sourceTopic) ? objectives : "",
+      objectives: normalizeTopic(entry.topic) === normalizeTopic(sourceTopic) ? objectives : objectivesFor(entry.topic),
     })),
   };
 }

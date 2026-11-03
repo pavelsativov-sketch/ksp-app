@@ -36,6 +36,7 @@ const ALL_TYPES: WorksheetTaskType[] = [
   "ordering",
   "odd_one_out",
   "categorize",
+  "compare",
 ];
 
 function taskOfType(type: WorksheetTaskType): WorksheetTask {
@@ -58,6 +59,8 @@ function taskOfType(type: WorksheetTaskType): WorksheetTask {
     categories: ["Категория А", "Категория Б"],
     categoryItems: ["Элемент 1", "Элемент 2"],
     tableHeaders: ["Что не так", "Как исправить"],
+    compareColumns: ["Критерий", "Первое", "Второе"],
+    compareRows: ["Размер", "Цена"],
     choices: ["Кнопка 1", "Кнопка 2"],
     reflectionOptions: ["Понятно", "Вопросы", "Нужна помощь"],
     link: "https://example.com",
@@ -88,12 +91,10 @@ describe("предпросмотр показывает все печатные 
     expect(screen.getByText(`Задание типа ${type}`)).toBeTruthy();
     // Диалог рендерится порталом в document.body, поэтому ищем там, а не в
     // контейнере render: иначе проверка всегда находила бы пустоту.
-    const body = document.body.querySelector(".mt-2");
-    expect(body, `нет тела задания для типа ${type}`).toBeTruthy();
-    expect(
-      body!.textContent?.trim() || body!.querySelector("table, input, td"),
-      `тело пустое для типа ${type}`,
-    ).toBeTruthy();
+    const body = document.body.querySelector("[data-task]");
+    expect(body, `нет блока задания для типа ${type}`).toBeTruthy();
+    // Пять элементов занимают шапка задания и очистка обтекания: остальное и есть тело.
+    expect(body!.querySelectorAll("*").length, `тело пустое для типа ${type}`).toBeGreaterThan(5);
     cleanup();
   });
 });

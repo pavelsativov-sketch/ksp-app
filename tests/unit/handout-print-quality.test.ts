@@ -153,7 +153,7 @@ describe("печать памяток", () => {
   it("у памяток есть оформленный заголовок, как у рабочего листа", async () => {
     const xml = await xmlOf(await buildHandoutDocx(set));
     // Раньше заголовок был пустым абзацем без размера и цвета.
-    expect(xml).toContain("ПАМЯТКИ");
+    expect(xml).toContain("КАРТОЧКИ В ТЕТРАДЬ");
     expect(xml).toMatch(/w:sz w:val="60"|<w:sz w:val="30"/);
   });
 

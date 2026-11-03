@@ -77,14 +77,14 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
 
   function submit() {
     const base = evaluateTask(task, answer);
-    const penalty = hintsUsed * 2;
+    const penalty = hintPenalty(task.points, hintsUsed);
     const finalScore = Math.max(0, base.score - penalty);
     const final: TaskResult = {
       ...base,
       score: finalScore,
       feedback:
-        hintsUsed > 0
-          ? `${base.feedback} (−${penalty} за подсказки)`
+        penalty > 0
+          ? `${base.feedback} (−${penalty} за подсказку)`
           : base.feedback,
     };
     setResult(final);
@@ -108,7 +108,7 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
     <div ref={rootRef} className="relative space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
-          <p className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-[0.1em] text-[#8a817a]">
+          <p className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             <span>
               {taskTypeLabel(task.type)} · {task.points}{" "}
               {pluralPoints(task.points)}
@@ -194,6 +194,7 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
         <HintBlock
           hint={task.hint}
           used={hintsUsed}
+          cost={hintPenalty(task.points, 1)}
           onShow={() => setHintsUsed((n) => n + 1)}
         />
       )}
@@ -215,13 +216,20 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
   );
 }
 
+/** Штраф не может съесть весь балл: у задания на 1 балл подсказка бесплатна. */
+function hintPenalty(points: number, used: number): number {
+  return used > 0 && points > 1 ? 1 : 0;
+}
+
 function HintBlock({
   hint,
   used,
+  cost,
   onShow,
 }: {
   hint: string;
   used: number;
+  cost: number;
   onShow: () => void;
 }) {
   if (used === 0) {
@@ -233,7 +241,7 @@ function HintBlock({
         className="text-amber-700 hover:text-amber-800"
         onClick={onShow}
       >
-        <Lightbulb className="w-4 h-4" /> Показать подсказку (−2 балла)
+        <Lightbulb className="w-4 h-4" /> Показать подсказку{cost > 0 ? ` (−${cost} балл)` : ""}
       </Button>
     );
   }
@@ -362,8 +370,8 @@ function McqInput({
           className={
             "flex cursor-pointer items-center gap-2 border p-3 transition-colors " +
               (answer.selectedIndex === i
-              ? "border-[#c0512f] bg-[#f7e6e1]"
-              : "border-[#ddd5cb] bg-white hover:bg-[#f1ece4]")
+              ? "border-primary bg-[#f7e6e1]"
+              : "border-border bg-white hover:bg-[#f1ece4]")
           }
         >
           <input
@@ -495,7 +503,7 @@ function NumericInput({
         }}
         placeholder="Ответ"
       />
-      {task.unit && <span className="text-sm text-[#8a817a]">{task.unit}</span>}
+      {task.unit && <span className="text-sm text-muted-foreground">{task.unit}</span>}
     </div>
   );
 }

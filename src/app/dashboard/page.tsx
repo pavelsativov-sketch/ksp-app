@@ -21,9 +21,10 @@ function toHomePlan(p: PlanDoc): HomePlan {
 
 const PROJECTION = { title: 1, grade: 1, updated_at: 1, "content.topic": 1 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/dashboard");
+  const startLesson = (await searchParams).new === "1";
 
   const subjects = localSubjects().map((x) => ({ name: x.name_ru, min: x.grade_min, max: x.grade_max }));
   let recent: HomePlan[] = [];
@@ -54,6 +55,8 @@ export default async function DashboardPage() {
 
   return (
     <Home
+      key={String(startLesson)}
+      startLesson={startLesson}
       subjects={subjects}
       recent={recent}
       favorites={favorites}

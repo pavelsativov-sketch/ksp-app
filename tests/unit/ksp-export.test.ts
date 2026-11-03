@@ -155,6 +155,23 @@ describe("buildKspPptx", () => {
     expect(all).toContain("Что такое дробь?");
     expect(all).toContain("Вопросы классу");
   });
+
+  it("файл открывается в PowerPoint: автоподбор не дублируется", async () => {
+    const zip = await JSZip.loadAsync(await buildKspPptx(makePlan()));
+    const slides = await Promise.all(zip.file(/^ppt\/slides\/slide\d+\.xml$/).map((f) => f.async("string")));
+    expect(slides.join("\n")).not.toMatch(/<a:normAutofit\/>\s*<a:normAutofit\/>/);
+  });
+
+  it("варианты ответа подписаны по языку урока, подсказка не на слайде", async () => {
+    const plan = makePlan();
+    plan.content.stages.beginning.tasks = [{ id: "t1", type: "MCQ", question: "Сколько?", points: 1, options: ["1", "2"], correctIndex: 0, hint: "Секретная подсказка" }] as never;
+    const zip = await JSZip.loadAsync(await buildKspPptx(plan));
+    const slides = await Promise.all(zip.file(/^ppt\/slides\/slide\d+\.xml$/).map((f) => f.async("string")));
+    const all = slides.join("\n");
+    expect(all).toContain("<a:t>Б</a:t>");
+    expect(all).not.toContain("Ә");
+    expect(all).not.toContain("Секретная подсказка");
+  });
 });
 
 describe("generateKsp (configured AI only)", () => {

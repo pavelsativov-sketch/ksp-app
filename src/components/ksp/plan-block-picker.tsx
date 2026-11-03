@@ -134,7 +134,7 @@ export function PlanBlockPicker({
             {blocks.map((block) => {
               const mismatch = warnings(block);
               return (
-                <article key={block.id} className="space-y-2 rounded-lg border border-[#ddd5cb] bg-white p-3">
+                <article key={block.id} className="space-y-2 rounded-lg border border-border bg-white p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h5 className="text-sm font-semibold">{block.source.title}</h5>

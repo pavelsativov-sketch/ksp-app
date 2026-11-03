@@ -10,7 +10,7 @@ import type { KitRow } from "@/lib/kits";
 
 const KIND_LABEL: Record<string, string> = {
   worksheet: "Рабочий лист",
-  flashcards: "Памятки",
+  flashcards: "Карточки в тетрадь",
   crossword: "Кроссворд",
 };
 
