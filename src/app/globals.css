@@ -36,6 +36,8 @@
   --mekty-shadow-button: 0 8px 20px rgb(109 59 234 / 28%);
   --success: #2f5b4f;
   --warning: #9b651f;
+  --warning-soft: #fbf1df;
+  --success-soft: #e6f4ee;
   --danger: #a84023;
   --danger-soft: #f7e6e1;
   /* Compatibility aliases for existing consumers; document overrides below. */
@@ -77,6 +79,9 @@
   --color-yellow-soft: var(--yellow-soft);
   --color-yellow-foreground: var(--yellow-foreground);
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --radius-control: var(--mekty-radius-control);
@@ -117,6 +122,8 @@ html { scroll-behavior: smooth; }
   --yellow-foreground: #f0c96b;
   --success: #6fc3ab;
   --warning: #e0a35a;
+  --warning-soft: #33271a;
+  --success-soft: #16302a;
   --danger: #f08a70;
   --danger-soft: #351f1c;
   --pen: #f87171;

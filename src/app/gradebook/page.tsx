@@ -80,7 +80,7 @@ export default async function GradebookPage() {
                       student.average >= 80
                         ? "bg-emerald-100 text-emerald-800"
                         : student.average >= 50
-                          ? "bg-amber-100 text-amber-800"
+                          ? "bg-warning-soft text-warning"
                           : "bg-red-100 text-red-800"
                     }`}
                   >
@@ -97,7 +97,7 @@ export default async function GradebookPage() {
                       student.average >= 80
                         ? "bg-emerald-500"
                         : student.average >= 50
-                          ? "bg-amber-500"
+                          ? "bg-warning"
                           : "bg-red-500"
                     }`}
                     style={{ width: `${student.average}%` }}
@@ -145,7 +145,7 @@ export default async function GradebookPage() {
                           row.percentage >= 80
                             ? "bg-emerald-100 text-emerald-800"
                             : row.percentage >= 50
-                              ? "bg-amber-100 text-amber-800"
+                              ? "bg-warning-soft text-warning"
                               : "bg-red-100 text-red-800"
                         }`}
                       >

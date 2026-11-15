@@ -172,7 +172,7 @@ export function ObjectivesPicker({
       </div>
 
       {(source === "local" || source === "tup") && (
-        <div className="px-3 py-2 text-xs text-amber-700 bg-amber-50 border-b border-amber-200">
+        <div className="px-3 py-2 text-xs text-warning bg-warning-soft border-b border-warning/40">
           {source === "tup" ? "Актуальный ТУП для информатики." : "Локальный справочник ТУП."} {sourceNote ?? ""}
         </div>
       )}

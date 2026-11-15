@@ -225,9 +225,9 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
       <div className="mx-auto max-w-5xl space-y-8 px-4 py-10">
         <div className="flex items-baseline justify-between flex-wrap gap-2">
           <div>
-            <p className="editorial-kicker text-[#d6ded1]">Классный режим · ведущий</p><h1 className="editorial-display mt-3 text-4xl text-foreground">{planTitle}</h1>
+            <p className="editorial-kicker text-muted-foreground">Классный режим · ведущий</p><h1 className="editorial-display mt-3 text-4xl text-foreground">{planTitle}</h1>
           </div>
-          <div className="text-right"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-[#b9cce8]">Код для входа</p><p className="mt-1 tabular-nums text-4xl font-bold tracking-[0.16em] text-[#fffdf8]">{code}</p></div>
+          <div className="text-right"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-[#b9cce8]">Код для входа</p><p className="mt-1 tabular-nums text-4xl font-bold tracking-[0.16em] text-white">{code}</p></div>
         </div>
 
         {phase === "lobby" && (
@@ -296,7 +296,7 @@ function Lobby({
   }
   return (
       <div className="grid gap-5 md:grid-cols-2">
-      <div className="space-y-4 rounded-2xl border border-[#3a3631] bg-muted p-6 text-foreground">
+      <div className="space-y-4 rounded-2xl border border-border-strong bg-muted p-6 text-foreground">
         <h2 className="text-lg font-semibold">Как присоединиться</h2>
         <ol className="text-sm space-y-2 text-foreground list-decimal list-inside">
           <li>
@@ -348,7 +348,7 @@ function Lobby({
           Начать квиз ({students.length} учеников)
         </Button>
         {tasksCount === 0 && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-warning">
             В этом плане нет интерактивных заданий. Добавьте их в редакторе.
           </p>
         )}
@@ -376,7 +376,7 @@ function QuestionView({
 }) {
   const seconds = remainingMs !== null ? Math.ceil(remainingMs / 1000) : null;
   return (
-    <div className="space-y-5 rounded-2xl border border-[#3a3631] bg-muted p-6 text-foreground">
+    <div className="space-y-5 rounded-2xl border border-border-strong bg-muted p-6 text-foreground">
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           Вопрос {index + 1} из {total}
@@ -519,11 +519,11 @@ function Leaderboard({ entries }: { entries: LiveLeaderboardEntry[] }) {
             className={
               "px-4 py-2 flex items-center gap-3 " +
               (i === 0
-                ? "bg-amber-50"
+                ? "bg-warning-soft"
                 : i === 1
                   ? "bg-muted"
                   : i === 2
-                    ? "bg-orange-50"
+                    ? "bg-warning-soft"
                     : "")
             }
           >

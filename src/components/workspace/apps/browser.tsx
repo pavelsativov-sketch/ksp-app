@@ -710,7 +710,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
               setCredError('');
               setCredDialog(true);
             }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 hover:bg-amber-50 hover:text-amber-800 border border-amber-300 transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-warning-soft text-warning hover:bg-warning-soft hover:text-warning border border-warning/40 transition-colors"
           >
             <KeyRound className="w-3 h-3" />
             <span>Пароль</span>
@@ -731,7 +731,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
           <div className="bg-surface border border-border rounded-xl shadow-2xl p-5 w-80 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-medium">
-                <KeyRound className="w-4 h-4 text-amber-800" />
+                <KeyRound className="w-4 h-4 text-warning" />
                 Авто-вход
               </div>
               <button type="button" onClick={() => setCredDialog(false)} className="text-muted-foreground hover:text-foreground">
@@ -742,7 +742,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
               Введите логин и пароль один раз — браузер сам заполнит форму и войдёт в аккаунт,
               в том числе когда этим занимается ИИ-агент. Данные хранятся зашифрованными, ИИ их не видит.
             </p>
-            {credReason && <p className="text-[11px] text-amber-800" role="status">{credReason}</p>}
+            {credReason && <p className="text-[11px] text-warning" role="status">{credReason}</p>}
             <div className="text-[11px] text-muted-foreground tabular-nums truncate">
               {credDomain || domainOf(pageUrl)}
             </div>
@@ -796,7 +796,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
                   setCredSaving(false);
                 }
               }}
-              className="flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-medium text-sm transition-colors"
+              className="flex items-center justify-center gap-2 py-2 rounded-lg bg-warning hover:bg-warning disabled:opacity-40 disabled:cursor-not-allowed text-black font-medium text-sm transition-colors"
             >
               {credSaved ? <><Check className="w-4 h-4" /> Сохранено!</> : credSaving ? 'Сохранение...' : <><KeyRound className="w-4 h-4" /> Сохранить</>}
             </button>
@@ -899,9 +899,9 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
 
         {/* Баннер авторизации (Логин / Пароль / CAPTCHA / 2FA) */}
         {authBarrier?.requiresUserAction && imgSrc && (
-          <div className="absolute left-3 right-3 top-2.5 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-surface/95 px-3.5 py-2 text-xs text-amber-800 shadow-xl backdrop-blur-md">
+          <div className="absolute left-3 right-3 top-2.5 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-surface/95 px-3.5 py-2 text-xs text-warning shadow-xl backdrop-blur-md">
             <div className="flex min-w-0 items-center gap-2">
-              <Lock className="size-3.5 shrink-0 text-amber-800" />
+              <Lock className="size-3.5 shrink-0 text-warning" />
               <span className="truncate">
                 {authBarrier.reason || 'Кликните на поле логина или пароля прямо на экране и введите данные с клавиатуры'}
               </span>
@@ -927,7 +927,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
             style={fieldOverlayStyle}
             className={`pointer-events-none absolute z-20 rounded border-2 transition-all flex items-center px-2 overflow-hidden ${
               activeField?.isPassword
-                ? 'border-amber-300 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] bg-muted backdrop-blur-[1px]'
+                ? 'border-warning/40 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] bg-muted backdrop-blur-[1px]'
                 : 'border-primary-soft-hover shadow-[0_0_0_2px_rgba(56,189,248,0.3)] bg-muted backdrop-blur-[1px]'
             }`}
           >
@@ -958,7 +958,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
         )}
         {!isWarmingUp && error && (
           <div className={`absolute z-10 flex justify-center px-3 ${imgSrc ? 'left-3 right-3 top-3' : 'inset-0 items-center bg-surface'}`}>
-            <div className={`flex max-w-full items-center gap-3 rounded-lg border border-amber-300/20 bg-surface/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
+            <div className={`flex max-w-full items-center gap-3 rounded-lg border border-warning/40/20 bg-surface/95 px-3 py-2 shadow-xl ${imgSrc ? 'w-full' : 'flex-col text-center'}`} role="status" aria-live="polite">
               <p className="min-w-0 flex-1 text-sm text-foreground">
                 {retryCountdown !== null
                   ? (isThrottled

@@ -84,7 +84,7 @@ export function AiContextCard({
               </li>)}
             </ul>
           ) : <p className="mt-1">{isKk ? "Қолданылған үзінділер жоқ." : "Использованных фрагментов нет."}</p>}
-          {rag.warnings.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-800">{rag.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul>}
+          {rag.warnings.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-warning">{rag.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul>}
         </div>
         <p className="text-[11px] text-muted-foreground">
           {isKk ? "AI-дың жасырын ішкі пайымдары көрсетілмейді. Қауіпсіз метадеректер ағымдағы қойындының sessionStorage ішінде сақталады." : "Внутренние рассуждения AI не показываются. Безопасные метаданные хранятся в sessionStorage текущей вкладки."}
@@ -95,7 +95,7 @@ export function AiContextCard({
           </p>
         )}
         <div className="flex flex-wrap gap-2">
-          <Link href="/ai/history" className="text-[11px] font-medium text-[#6b5e52] underline underline-offset-2 hover:text-muted-foreground">
+          <Link href="/ai/history" className="text-[11px] font-medium text-muted-foreground underline underline-offset-2 hover:text-muted-foreground">
             {isKk ? "Сервердегі тарихты ашу" : "Открыть серверную историю"}
           </Link>
         </div>
@@ -107,7 +107,7 @@ export function AiContextCard({
                 : (isKk ? "Қауіпсіз қайталау және алдын ала қарау" : "Повторить безопасно и открыть предпросмотр")}
             </Button>
             {context.replayInput.previousHomeworkIncluded && !canReplayExactly?.(context.id) && (
-              <p className="text-[11px] text-amber-800">
+              <p className="text-[11px] text-warning">
                 {isKk ? "Құпиялылық үшін үй тапсырмасының мәтіні тарихта сақталмайды; қайталау оны қоспайды." : "Текст домашнего задания не сохраняется в истории; повтор из истории будет без него."}
               </p>
             )}
@@ -126,7 +126,7 @@ export function AiContextCard({
                   <Button className="mt-2" type="button" size="sm" variant="outline" onClick={() => onReplay(run.id)}>
                     {exact ? (isKk ? "Дәл қайталау" : "Повторить точный запрос") : (isKk ? "Қауіпсіз қайталау" : "Повторить безопасно")}
                   </Button>
-                  {run.replayInput.previousHomeworkIncluded && !exact && <p className="mt-1 text-[11px] text-amber-800">{isKk ? "Үй жұмысының мәтіні әдейі сақталмады." : "Текст домашнего задания намеренно не сохранялся."}</p>}
+                  {run.replayInput.previousHomeworkIncluded && !exact && <p className="mt-1 text-[11px] text-warning">{isKk ? "Үй жұмысының мәтіні әдейі сақталмады." : "Текст домашнего задания намеренно не сохранялся."}</p>}
                 </li>;
               })}
             </ul>

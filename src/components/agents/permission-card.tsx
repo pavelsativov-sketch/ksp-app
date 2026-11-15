@@ -52,13 +52,13 @@ export function PermissionCard({ active }: { active: boolean }) {
 
   return (
     <div className="mx-3 mb-2 shrink-0 space-y-2">
-      {alwaysAllowed && <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+      {alwaysAllowed && <div className="flex items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning-soft px-2.5 py-2 text-[11px] text-warning">
         <span><ShieldCheck className="mr-1 inline size-3.5" />Опасные команды всегда разрешены для этого аккаунта.</span>
         <button type="button" onClick={() => void revokeAlways()} className="shrink-0 underline underline-offset-2 hover:text-white">Отозвать</button>
       </div>}
       {pending.map((r) => (
-        <div key={r.id} className="rounded-xl border border-amber-300 bg-amber-50 p-2.5">
-          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800">
+        <div key={r.id} className="rounded-xl border border-warning/40 bg-warning-soft p-2.5">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-warning">
             <ShieldAlert className="size-3.5" /> ИИ хочет выполнить команду, которой нужно ваше разрешение
           </p>
           <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted px-2 py-1 tabular-nums text-[11px] text-foreground">{r.command}</pre>

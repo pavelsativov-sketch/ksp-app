@@ -147,7 +147,7 @@ export function EditedReissueForm({
                     <article className="space-y-2 rounded-xl border border-border p-3">
                       <p className="text-xs font-semibold text-muted-foreground">{copy.taskOf(index + 1, previewTasks.length)} · {copy.points(task.points)}</p>
                       <h3 className="text-sm font-semibold">{task.question}</h3>
-                      {task.hint && <p className="text-xs text-amber-800">{copy.hintLabel} {task.hint}</p>}
+                      {task.hint && <p className="text-xs text-warning">{copy.hintLabel} {task.hint}</p>}
                       {previewDetails(task)}
                     </article>
                   </li>

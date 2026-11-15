@@ -147,7 +147,7 @@ export function PlanBlockPicker({
                     {block.kind === "stage" && <p className="mt-1 text-xs text-muted-foreground">{isKk ? `Тапсырмалар: ${block.payload.tasks?.length ?? 0}` : `Заданий: ${block.payload.tasks?.length ?? 0}`}</p>}
                     {block.kind === "task" && block.payload.objectiveCode && <p className="mt-1 text-xs text-muted-foreground">{isKk ? "Оқу мақсаты" : "Цель обучения"}: {block.payload.objectiveCode}</p>}
                   </details>
-                  {mismatch.length > 0 && <ul className="list-disc space-y-1 pl-5 text-xs text-amber-800" aria-label={isKk ? "Сәйкессіздік ескертулері" : "Предупреждения о несовпадении"}>{mismatch.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+                  {mismatch.length > 0 && <ul className="list-disc space-y-1 pl-5 text-xs text-warning" aria-label={isKk ? "Сәйкессіздік ескертулері" : "Предупреждения о несовпадении"}>{mismatch.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
                   <Button type="button" size="sm" onClick={() => { onUse(block); setOpen(false); }}>{labels.use}</Button>
                 </article>
               );

@@ -1040,7 +1040,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
               </div>
             )}
             {ragNote && (
-              <div className={`text-xs ${lastRunContext?.rag.status === "unavailable" || lastRunContext?.rag.status === "degraded" ? "text-amber-800" : "text-emerald-700"}`} role="status">{ragNote}</div>
+              <div className={`text-xs ${lastRunContext?.rag.status === "unavailable" || lastRunContext?.rag.status === "degraded" ? "text-warning" : "text-emerald-700"}`} role="status">{ragNote}</div>
             )}
             {aiError && (
               <div className="text-xs text-red-600">{aiError}</div>
@@ -1621,7 +1621,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
           </section>
         )}
 
-        {saveNotice && <p role="status" className="rounded-xl border border-[#b9d4c6] bg-[#eef6f1] p-3 text-sm text-success">{saveNotice}</p>}
+        {saveNotice && <p role="status" className="rounded-xl border border-success bg-success-soft p-3 text-sm text-success">{saveNotice}</p>}
 
         {saveError && (
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
@@ -1708,7 +1708,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
                   <li key={d.label} className="rounded-md border border-border px-3 py-2 text-sm">
                     <p className="font-medium">
                       {d.label}{" "}
-                      <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] ${d.filled ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                      <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] ${d.filled ? "bg-emerald-100 text-emerald-800" : "bg-warning-soft text-warning"}`}>
                         {d.filled ? pe.aiDialog.tagNew : pe.aiDialog.tagOverwrite}
                       </span>
                     </p>

@@ -215,7 +215,7 @@ export function TaskBuilder({ tasks, onChange, context, availableObjectives = []
       {alternatives.length > 0 && (
         <section aria-label={isKk ? "AI тапсырма нұсқалары" : "Предлагаемые AI варианты"} className="space-y-3 rounded-2xl border border-border bg-muted p-4">
           <div>
-            <h3 className="text-sm font-semibold text-[#302820]">{isKk ? "Таңдау үшін ұсыныстар" : "Варианты для выбора"}</h3>
+            <h3 className="text-sm font-semibold text-foreground">{isKk ? "Таңдау үшін ұсыныстар" : "Варианты для выбора"}</h3>
             <p className="mt-1 text-xs text-muted-foreground">{isKk ? "Әрқайсысын қарап шығыңыз. Таңдалған нұсқа ғана КСП-ға қосылады." : "Просмотрите варианты; в КСП попадёт только тот, который вы примете."}</p>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
@@ -280,9 +280,9 @@ function TaskCandidate({
         <h4 className="text-sm font-semibold">{isKk ? `Ұсыныс ${index + 1}` : `Вариант ${index + 1}`}</h4>
         <span className="flex items-center gap-1 text-xs text-muted-foreground">{taskTypeLabel(task.type)} · {task.points} {isKk ? "ұпай" : "балл"}{task.differentiationLevel && <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${differentiationLevelBadgeClass(task.differentiationLevel)}`}>{task.differentiationLevel}</span>}</span>
       </div>
-      <p className="text-sm text-[#302820]">{task.question}</p>
+      <p className="text-sm text-foreground">{task.question}</p>
       <details>
-        <summary className="cursor-pointer text-xs font-medium text-[#655b53]">{isKk ? "Оқушы көрінісін алдын ала қарау" : "Предпросмотр для ученика"}</summary>
+        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{isKk ? "Оқушы көрінісін алдын ала қарау" : "Предпросмотр для ученика"}</summary>
         <div className="mt-2 rounded-lg bg-muted p-3"><TaskPlayer task={task} /></div>
       </details>
       <div className="flex flex-wrap gap-2">
@@ -418,10 +418,10 @@ function TaskCard({
       {task.aiGenerated && (
         <aside className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-[#fff9e8] px-4 py-3 text-xs" aria-label={isKk ? "AI мазмұнының тексерілу күйі" : "Проверка AI-содержимого"}>
           <div>
-            <p className="font-semibold text-[#594715]">{task.aiReviewed ? (isKk ? "Мұғалім тексерді" : "Учитель проверил") : (isKk ? "Мұғалім тексеруі қажет" : "Нужно проверить учителю")}</p>
+            <p className="font-semibold text-warning">{task.aiReviewed ? (isKk ? "Мұғалім тексерді" : "Учитель проверил") : (isKk ? "Мұғалім тексеруі қажет" : "Нужно проверить учителю")}</p>
             <p className="mt-0.5 text-muted-foreground">{isKk ? "Дереккөз тіркелмеген — қолмен тексеру бөлек белгіленеді." : "Источники не указаны; ручная проверка — отдельная отметка."}</p>
           </div>
-          <label className="flex cursor-pointer items-center gap-2 font-medium text-[#45370f]">
+          <label className="flex cursor-pointer items-center gap-2 font-medium text-warning">
             <input type="checkbox" checked={task.aiReviewed === true} onChange={(event) => onReviewChange(event.target.checked)} />
             {task.aiReviewed ? (isKk ? "Тексерілген деп белгіленді" : "Отмечено как проверенное") : (isKk ? "Мазмұнды тексердім" : "Я проверил(а) содержание")}
           </label>

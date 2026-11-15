@@ -85,7 +85,7 @@ export function ModerationQueue({ items }: { items: ModerationQueue }) {
                 <p className="font-medium">{item.planTitle}</p>
                 <p className="tabular-nums text-xs text-muted-foreground">{item.planId}</p>
                 {item.hidden ? (
-                  <p className="text-xs font-medium text-amber-700">Скрыт</p>
+                  <p className="text-xs font-medium text-warning">Скрыт</p>
                 ) : (
                   item.openCount > 1 && <p className="text-xs text-muted-foreground">Жалоб: {item.openCount}</p>
                 )}

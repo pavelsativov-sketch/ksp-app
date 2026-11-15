@@ -275,8 +275,8 @@ function TaskBodyContent({ task, language, onLinkChange }: {
     case "case_study":
       return (
         <>
-          <div className="mt-2 rounded-2xl border-2 border-border bg-[#F6C89F] px-4 py-3 text-sm leading-relaxed">
-          <b className="text-[#7A3E12]">{label.caseLabel}</b>
+          <div className="mt-2 rounded-2xl border-2 border-border bg-warning-soft px-4 py-3 text-sm leading-relaxed">
+          <b className="text-warning">{label.caseLabel}</b>
             {task.situation}
           </div>
           <div className="mt-2 space-y-2 text-sm">
@@ -310,7 +310,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
     case "scenario_fix":
       return (
         <>
-          <div className="mt-2 rounded-2xl border-2 border-border bg-[#F6C89F] px-4 py-3 text-sm leading-relaxed">
+          <div className="mt-2 rounded-2xl border-2 border-border bg-warning-soft px-4 py-3 text-sm leading-relaxed">
             {task.situation}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">{language === "kz" ? `${resolveErrorsCount(task.errorsCount)} қатені тауып, «Қате → Түзету» жолдарын толтыр.` : `Ошибок найти: ${resolveErrorsCount(task.errorsCount)} — заполни строки «Ошибка → Исправление».`}</p>
@@ -423,7 +423,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
             {grid.placed.join(" · ")}
           </p>
           {grid.dropped.length > 0 && (
-            <p className="mt-1 text-xs text-amber-600">
+            <p className="mt-1 text-xs text-warning">
               {language === "kz"
                 ? `Келесі сөздер торға сыймады: ${grid.dropped.join(", ")}`
                 : `Следующие слова не поместились в сетку: ${grid.dropped.join(", ")}`}
@@ -545,7 +545,7 @@ function WorksheetView({
   return (
     <div>
       {sheet.degraded && (
-        <p className="mb-3 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+        <p className="mb-3 text-xs text-warning bg-warning-soft border border-warning/40 rounded px-3 py-2">
           {kazakh
             ? "AI қолжетімсіз болғандықтан, парақ жергілікті әдістемелік құрылыммен жасалды. Басып шығармас бұрын тапсырмаларды оқулық пен сабақ мақсаттарына сәйкестендіріңіз."
             : "ИИ сейчас недоступен, поэтому лист собран по локальной методической структуре. Перед печатью сверьте задания с учебником и целями урока."}
@@ -621,7 +621,7 @@ const IMAGES_FAILED_NOTE = "Сервис картинок сейчас не от
 
 function DegradedNote({ text }: { text: string }) {
   return (
-    <p className="mb-3 print:hidden text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+    <p className="mb-3 print:hidden text-xs text-warning bg-warning-soft border border-warning/40 rounded px-3 py-2">
       {text}
     </p>
   );

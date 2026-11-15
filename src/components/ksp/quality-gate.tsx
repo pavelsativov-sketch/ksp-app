@@ -18,7 +18,7 @@ const icon: Record<QualityStatus, typeof CheckCircle2> = {
 
 const color: Record<QualityStatus, string> = {
   ok: "text-emerald-600",
-  warn: "text-amber-600",
+  warn: "text-warning",
   fail: "text-red-600",
 };
 
@@ -70,16 +70,16 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
               : isKk ? `Түзетуге болатын байланыс қатесі: ${fails}. Қажетті өріске өтіп, шешімді мұғалім қабылдайды.` : `Найдены ошибки связей: ${fails}. Перейдите к полю; решение по содержанию остаётся за учителем.`}
           </p>
           {warns > 0 && fails === 0 && (
-            <p className="text-xs text-amber-700">{isKk ? `Ескерту: ${warns}` : `Предупреждений: ${warns} — не блокируют сохранение, но стоит проверить перед печатью.`}</p>
+            <p className="text-xs text-warning">{isKk ? `Ескерту: ${warns}` : `Предупреждений: ${warns} — не блокируют сохранение, но стоит проверить перед печатью.`}</p>
           )}
-          <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900" data-testid="quality-disclaimer">
+          <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-warning/40 bg-warning-soft px-3 py-2 text-xs leading-snug text-warning" data-testid="quality-disclaimer">
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             <span>{isKk ? "Бұл — көмекші эвристикалар; ресми нормативтерге сәйкестікті растамайды. Ұпай мен уақыт бағдарларын мұғалім «Сабақ барысы → Ориентиры планирования» бөлімінде өзі белгілейді." : "Это вспомогательные эвристики, а не официальная проверка соответствия нормативам. Ориентиры по баллам и времени задаёт учитель в «Ход урока → Ориентиры планирования»."}</span>
           </p>
         </div>
         <div role="progressbar" aria-label={isKk ? "Орындалған тексерістер" : "Автоматические проверки без замечаний"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} className="h-2.5 w-44 shrink-0 overflow-hidden rounded-full bg-muted">
           <div
-            className={`h-full transition-all ${score >= 80 ? "bg-emerald-500" : score >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+            className={`h-full transition-all ${score >= 80 ? "bg-emerald-500" : score >= 50 ? "bg-warning" : "bg-red-500"}`}
             style={{ width: `${score}%` }}
           />
         </div>
@@ -99,7 +99,7 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
                 <p className="font-medium leading-tight">
                   {label}
                   {item.nonNormative && (
-                    <span className="ml-2 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                    <span className="ml-2 inline-flex items-center rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
                       {isKk ? "бағдар" : "ориентир"}
                     </span>
                   )}
@@ -115,7 +115,7 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
                     </summary>
                     <p className="mt-1.5 rounded-md bg-muted px-2.5 py-2 text-xs leading-relaxed text-foreground">{item.details}</p>
                     {item.nonNormative && (
-                      <p className="mt-1 text-[11px] italic text-amber-800">{isKk ? "Бұл тексеріс ресми норма емес — шешімді мұғалім қабылдайды." : "Эта проверка — не норматив: решение принимает учитель."}</p>
+                      <p className="mt-1 text-[11px] italic text-warning">{isKk ? "Бұл тексеріс ресми норма емес — шешімді мұғалім қабылдайды." : "Эта проверка — не норматив: решение принимает учитель."}</p>
                     )}
                   </details>
                 )}
@@ -124,7 +124,7 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
                     href={href}
                     aria-label={`${isKk ? "Түзету" : "Перейти к исправлению"}: ${label}`}
                     data-testid={`quality-link-${item.id}`}
-                    className="mt-1 inline-flex rounded-sm text-xs font-medium text-ink underline underline-offset-2 hover:text-[#1a1c6b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                    className="mt-1 inline-flex rounded-sm text-xs font-medium text-ink underline underline-offset-2 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                   >
                     {whereText} →
                   </Link>

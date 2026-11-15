@@ -58,7 +58,7 @@ export default async function AdminAnalyticsPage() {
             { label: "Всего событий", value: summary.totalEvents, color: "text-blue-600" },
             { label: "Просмотры страниц", value: summary.pageViews, color: "text-green-600" },
             { label: "Создано планов", value: summary.planCreations, color: "text-purple-600" },
-            { label: "AI-генерации", value: summary.aiGenerations, color: "text-orange-600" },
+            { label: "AI-генерации", value: summary.aiGenerations, color: "text-warning" },
             { label: "Экспорты", value: summary.exports, color: "text-violet-600" },
             { label: "Ошибки", value: summary.errors, color: "text-red-600" },
             { label: "Среднее событий/пользователь", value: engagement.avgEventsPerUser, color: "text-indigo-600" },

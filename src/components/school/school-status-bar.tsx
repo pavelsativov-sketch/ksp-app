@@ -25,7 +25,7 @@ export function SchoolStatusBar({ sysInfo }: { sysInfo: string }) {
         : status === "failed"
           ? "bg-red-400"
           : status === "stopped"
-            ? "bg-amber-400"
+            ? "bg-warning"
             : "bg-foreground";
 
   return (

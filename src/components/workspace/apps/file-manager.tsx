@@ -356,7 +356,7 @@ function FileIcon({ name }: { name: string }) {
   if (['png', 'jpg', 'jpeg', 'gif'].includes(ext ?? '')) return <ImageIcon className="size-4 text-cyan-400" />;
   if (['mp3', 'wav'].includes(ext ?? '')) return <Music className="size-4 text-violet-400" />;
   if (['mp4', 'webm'].includes(ext ?? '')) return <Film className="size-4 text-pink-400" />;
-  if (['zip', 'rar', '7z'].includes(ext ?? '')) return <Archive className="size-4 text-yellow-500" />;
+  if (['zip', 'rar', '7z'].includes(ext ?? '')) return <Archive className="size-4 text-warning" />;
   if (['js', 'ts', 'py', 'json', 'sh', 'bat', 'cmd'].includes(ext ?? '')) return <Code className="size-4 text-emerald-700" />;
   if (['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext ?? '')) return <FileText className="size-4 text-primary" />;
   return <File className="size-4 text-muted-foreground" />;

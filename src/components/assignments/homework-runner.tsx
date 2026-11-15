@@ -267,7 +267,7 @@ export function HomeworkRunner({ assignment }: { assignment: PublicAssignment })
       <div className="rounded-2xl border border-border bg-surface p-5">
         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{r.points.replace("{n}", String(task.points))}</p>
         <h2 className="mt-1 text-lg font-semibold">{task.question}</h2>
-        {task.hint && <p className="mt-1 text-sm text-amber-800">{r.hintL} {task.hint}</p>}
+        {task.hint && <p className="mt-1 text-sm text-warning">{r.hintL} {task.hint}</p>}
         <div className="mt-4">
           <AnswerInput
             task={task}

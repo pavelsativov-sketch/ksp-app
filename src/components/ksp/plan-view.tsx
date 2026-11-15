@@ -233,7 +233,7 @@ function StageBody({ stage }: { stage: LessonStage }) {
     <>
     <div className="hidden overflow-x-auto sm:block"><table className="w-full min-w-[620px] text-sm border border-border">
       <thead>
-        <tr className="bg-[#ebe3d4]">
+        <tr className="bg-muted">
           <th className="w-[15%] border border-border p-2 text-left">Время</th>
           <th className="w-[40%] border border-border p-2 text-left">Действия учителя</th>
           <th className="w-[30%] border border-border p-2 text-left">Действия учеников</th>

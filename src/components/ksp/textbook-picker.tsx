@@ -345,7 +345,7 @@ export function TextbookPicker({
       )}
 
       {importError && (
-        <div className="text-xs text-amber-700 max-w-xs text-right">{importError}</div>
+        <div className="text-xs text-warning max-w-xs text-right">{importError}</div>
       )}
     </div>
   );

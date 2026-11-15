@@ -238,7 +238,7 @@ function HintBlock({
         type="button"
         variant="ghost"
         size="sm"
-        className="text-amber-700 hover:text-amber-800"
+        className="text-warning hover:text-warning"
         onClick={onShow}
       >
         <Lightbulb className="w-4 h-4" /> Показать подсказку{cost > 0 ? ` (−${cost} балл)` : ""}
@@ -260,7 +260,7 @@ function ResultBanner({ result }: { result: TaskResult }) {
         "flex items-start gap-2 p-2 rounded border transition-colors " +
         (result.isCorrect
           ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-          : "bg-amber-50 border-amber-200 text-amber-800")
+          : "bg-warning-soft border-warning/40 text-warning")
       }
     >
       {result.isCorrect ? (

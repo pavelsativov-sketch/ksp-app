@@ -166,7 +166,7 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
         </Button>
       </div>
       {open && !isPro && (
-        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <p className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning">
           {copy.proNotice}{" "}
           <a href="/pricing" className="font-medium underline">{copy.upgrade}</a>
         </p>

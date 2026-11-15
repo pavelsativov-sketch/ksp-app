@@ -216,7 +216,7 @@ export function PlanHistory({
         </div>
       )}
       {restoredAt && !selected && (
-        <div role="status" className="rounded-2xl border border-[#b9d4c6] bg-[#eef6f1] p-4 text-sm text-success">
+        <div role="status" className="rounded-2xl border border-success bg-success-soft p-4 text-sm text-success">
           Изменения восстановлены; создан новый снимок истории. Текущая публикация и видимость сохранены.
         </div>
       )}

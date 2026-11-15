@@ -301,7 +301,7 @@ export default async function PlanViewPage({
         </div>
       </details>
       {plan.moderationHidden && (
-        <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 no-print">
+        <p role="alert" className="rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning no-print">
           План скрыт модерацией и не виден другим пользователям. {isOwner && "Проверьте содержание и смените видимость после исправлений — скрытие снимет администратор."}
         </p>
       )}

@@ -11,7 +11,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
   if (!token) {
     return (
-      <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <p className="rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm text-warning">
         Ссылка неполная: откройте её из письма или запросите новую на странице
         восстановления доступа.
       </p>

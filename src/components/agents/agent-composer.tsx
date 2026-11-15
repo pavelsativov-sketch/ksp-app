@@ -162,17 +162,17 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
 
         {/* ── Подсказка: задача с браузером (BilimClass / Kundelik / НОБД) ── */}
         {wantsBrowser && (
-          <div className="mt-2 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-2.5">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-800" />
+          <div className="mt-2 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-soft p-2.5">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-warning" />
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-amber-800">Режим работы с BilimClass / НОБД</p>
-              <p className="mt-0.5 text-[12px] text-amber-800">
+              <p className="text-xs font-semibold text-warning">Режим работы с BilimClass / НОБД</p>
+              <p className="mt-0.5 text-[12px] text-warning">
                 Нажмите <strong>«Запустить агента»</strong> (ИИ сам откроет вкладку «Браузер» справа, перейдёт на дэшборд BilimClass, найдёт 3 кнопки над предметом и проведёт урок) или откройте отдельное приложение <strong>«Работа с компьютером»</strong>.
               </p>
               <button
                 type="button"
                 onClick={openComputerUse}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1 text-xs font-semibold text-warning hover:bg-warning-soft"
               >
                 <MonitorPlay className="size-3.5" /> Открыть «Работа с компьютером»
               </button>

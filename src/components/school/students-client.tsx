@@ -137,7 +137,7 @@ export function StudentsClient({ schoolId }: { schoolId: string }) {
         {classes.map((c) => (
           <button key={c} type="button" onClick={() => setClassFilter(c)} aria-pressed={classFilter === c} className={`rounded-full border px-3 py-1 text-xs ${classFilter === c ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"}`}>{c}</button>
         ))}
-        <button type="button" onClick={() => setIncludeInactive((value) => !value)} aria-pressed={includeInactive} className={`rounded-full border px-3 py-1 text-xs ${includeInactive ? "border-amber-500 bg-amber-500/10 text-amber-700" : "border-border text-muted-foreground"}`}>{includeInactive ? "Архив включён" : "Показать архив"}</button>
+        <button type="button" onClick={() => setIncludeInactive((value) => !value)} aria-pressed={includeInactive} className={`rounded-full border px-3 py-1 text-xs ${includeInactive ? "border-warning/40 bg-warning/10 text-warning" : "border-border text-muted-foreground"}`}>{includeInactive ? "Архив включён" : "Показать архив"}</button>
         <span className="ml-auto text-xs text-muted-foreground">{students?.length ?? 0} чел.</span>
       </div>
 

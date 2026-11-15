@@ -76,7 +76,7 @@ export default async function SchoolDashboardPage() {
                   </p>
                 ))}
                 {overview.warnings.map((i, idx) => (
-                  <p key={idx} className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">
+                  <p key={idx} className="flex items-start gap-2 rounded-lg border border-warning/40/30 bg-warning/5 px-3 py-2 text-sm text-warning">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {i.description}
                   </p>
                 ))}

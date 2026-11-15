@@ -55,7 +55,7 @@ export function RegisterForm() {
         )}
       </div>
       {state.error && (
-        <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+        <p className="text-sm text-warning bg-warning-soft p-2 rounded border border-warning/40">
           {state.error}
         </p>
       )}

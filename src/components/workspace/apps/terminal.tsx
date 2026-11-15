@@ -167,7 +167,7 @@ export function TerminalApp() {
             {entry.stderr && <pre className="mt-1 whitespace-pre-wrap font-mono text-rose-300">{entry.stderr.replace(/\n$/, "")}</pre>}
             {entry.error && <p className="mt-1 text-rose-300">{entry.error}</p>}
             {!entry.stdout && !entry.stderr && !entry.error && entry.exitCode === 0 && <p className="mt-1 text-white/30">Готово, вывода нет</p>}
-            {entry.exitCode !== undefined && entry.exitCode !== 0 && <p className="mt-1 text-amber-300">Процесс завершился с кодом {entry.exitCode}</p>}
+            {entry.exitCode !== undefined && entry.exitCode !== 0 && <p className="mt-1 text-warning">Процесс завершился с кодом {entry.exitCode}</p>}
           </div>
         ))}
         {busy && (
@@ -183,7 +183,7 @@ export function TerminalApp() {
             </button>
           </div>
         )}
-        {!available && entries.length === 0 && <p className="mt-4 text-amber-200/80">Файлы и браузер агента доступны. Запуск команд требует отдельной среды выполнения и здесь отключён.</p>}
+        {!available && entries.length === 0 && <p className="mt-4 text-warning/80">Файлы и браузер агента доступны. Запуск команд требует отдельной среды выполнения и здесь отключён.</p>}
         <div ref={endRef} />
       </div>
       <form onSubmit={submit} className="flex shrink-0 items-center gap-2 border-t border-white/10 px-4 py-3">

@@ -68,7 +68,7 @@ export default function AgentHistoryPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {t.status === "queued" && <Loader2 className="size-4 text-violet-500" aria-label="в очереди" />}
-              {t.status === "running" && <Loader2 className="size-4 animate-spin text-amber-500" aria-label="выполняется" />}
+              {t.status === "running" && <Loader2 className="size-4 animate-spin text-warning" aria-label="выполняется" />}
               {t.status === "completed" && <CircleCheck className="size-4 text-emerald-500" aria-label="готово" />}
               {t.status === "failed" && <CircleX className="size-4 text-red-500" aria-label="ошибка" />}
               {t.status === "stopped" && <CircleX className="size-4 text-muted-foreground" aria-label="остановлена" />}

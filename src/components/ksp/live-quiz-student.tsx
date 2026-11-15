@@ -211,7 +211,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
     const myRank = myEntry ? leaderboard.indexOf(myEntry) + 1 : null;
     return (
       <CenterScreen>
-        <Trophy className="w-12 h-12 text-amber-500 mb-2" />
+        <Trophy className="w-12 h-12 text-warning mb-2" />
         <p className="text-2xl font-bold mb-1">Квиз завершён</p>
         {myEntry ? (
           <>
@@ -252,7 +252,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   const seconds = remainingMs !== null ? Math.ceil(remainingMs / 1000) : null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f0e6] p-4">
+    <div className="flex min-h-screen flex-col bg-background p-4">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{name}</span>
@@ -267,7 +267,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
             </span>
           )}
         </div>
-        <div className="border-b border-border bg-[#fffdf8] p-5"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-ink">Вопрос в работе</p><p className="mt-2 text-xl font-bold leading-7">{currentQ.task.question}</p></div>
+        <div className="border-b border-border bg-surface p-5"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-ink">Вопрос в работе</p><p className="mt-2 text-xl font-bold leading-7">{currentQ.task.question}</p></div>
         <AnswerForm key={`${currentQ.index}-${currentQ.endsAt}`} task={currentQ.task} onSubmit={submit} />
       </div>
     </div>
@@ -276,7 +276,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
 
 function CenterScreen({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#f5f0e6] p-6 text-center text-foreground">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 text-center text-foreground">
       {children}
     </div>
   );

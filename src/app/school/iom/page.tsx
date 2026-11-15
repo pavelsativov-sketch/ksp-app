@@ -50,7 +50,7 @@ export default function IomPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 md:px-6">
       <header>
-        <p className="editorial-kicker text-amber-400">Дифференцированное обучение</p>
+        <p className="editorial-kicker text-warning">Дифференцированное обучение</p>
         <h1 className="editorial-display mt-1 text-3xl font-bold">Индивидуальные образовательные маршруты (ИОМ)</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Пошаговые программы работы со слабоуспевающими или высокомотивированными учащимися: диагностика пробелов, понедельный план ликвидации затруднений, дидактические карточки и критерии контроля.
@@ -71,7 +71,7 @@ export default function IomPage() {
                   type="text"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-amber-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-warning/40"
                 />
               </div>
               <div>
@@ -80,7 +80,7 @@ export default function IomPage() {
                   type="text"
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-amber-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-warning/40"
                 />
               </div>
             </div>
@@ -92,7 +92,7 @@ export default function IomPage() {
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-amber-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-warning/40"
                 />
               </div>
               <div>
@@ -100,7 +100,7 @@ export default function IomPage() {
                 <select
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-amber-500"
+                  className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-warning/40"
                 >
                   <option value="2 недели (интенсив)">2 недели (интенсив)</option>
                   <option value="1 месяц (4 недели)">1 месяц (4 недели)</option>
@@ -115,7 +115,7 @@ export default function IomPage() {
               <select
                 value={trackType}
                 onChange={(e) => setTrackType(e.target.value)}
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-xs outline-none focus:border-amber-500"
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-xs outline-none focus:border-warning/40"
               >
                 <option value="Ликвидация пробелов в знаниях (слабоуспевающий)">
                   Ликвидация пробелов в знаниях (слабоуспевающий)
@@ -139,14 +139,14 @@ export default function IomPage() {
                 onChange={(e) => setGaps(e.target.value)}
                 rows={3}
                 placeholder="Темы пробелов или разделы олимпиадной подготовки..."
-                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-amber-500"
+                className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-warning/40"
               />
             </div>
 
             <Button
               onClick={handleGenerate}
               disabled={loading || !studentName.trim()}
-              className="w-full gap-2 bg-gradient-to-r from-amber-500 to-orange-600 font-semibold text-white shadow-lg hover:opacity-90"
+              className="w-full gap-2 bg-gradient-to-r from-warning to-warning font-semibold text-white shadow-lg hover:opacity-90"
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {loading ? "Формирую маршрут..." : "Сформировать маршрут ИОМ"}
@@ -189,7 +189,7 @@ export default function IomPage() {
             {loading && (
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
                 <div className="space-y-3">
-                  <Loader2 className="mx-auto size-8 animate-spin text-amber-400" />
+                  <Loader2 className="mx-auto size-8 animate-spin text-warning" />
                   <p className="text-sm font-medium text-white">ИИ проектирует образовательный маршрут...</p>
                   <p className="text-xs text-muted-foreground/70">Формируется понедельный план повторения и консультаций</p>
                 </div>

@@ -189,7 +189,7 @@ function FinalScreen({
     <div className="space-y-4">
       <div className="text-center py-6">
         <div className="text-5xl mb-2">{emoji}</div>
-        <Trophy className="w-10 h-10 text-amber-500 mx-auto mb-2" />
+        <Trophy className="w-10 h-10 text-warning mx-auto mb-2" />
         <h3 className="text-2xl font-bold">{total} / {max}</h3>
         <p className="text-muted-foreground">{tier} · {pct}%</p>
         <p className="text-xs text-muted-foreground mt-1">
@@ -205,7 +205,7 @@ function FinalScreen({
               "p-2 rounded border flex items-start gap-2 " +
               (r.isCorrect
                 ? "bg-emerald-50 border-emerald-200"
-                : "bg-amber-50 border-amber-200")
+                : "bg-warning-soft border-warning/40")
             }
           >
             <span className="text-xs text-muted-foreground w-6">{i + 1}.</span>

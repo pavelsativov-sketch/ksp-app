@@ -168,7 +168,7 @@ export function VoiceInput({
       {isSupported && !listening && !error && (
         <p className="text-xs text-muted-foreground">Нажмите 🎤 и продиктуйте тему урока</p>
       )}
-      {listening && <p className="text-xs text-amber-700">Слушаю… говорите чётко</p>}
+      {listening && <p className="text-xs text-warning">Слушаю… говорите чётко</p>}
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );

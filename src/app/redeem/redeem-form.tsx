@@ -19,7 +19,7 @@ export function RedeemForm() {
       day: "numeric", month: "long", year: "numeric",
     });
     return (
-      <div className="rounded-xl border border-[#15803d33] bg-[#15803d0d] p-4 text-sm text-[#14532d]">
+      <div className="rounded-xl border border-[#15803d33] bg-[#15803d0d] p-4 text-sm text-success">
         <p className="font-semibold">Готово! Тариф «Учитель Pro» активирован.</p>
         <p className="mt-1">Действует до {until}. Приятной работы — теперь без лимитов и водяных знаков.</p>
         <Button className="mt-4 w-full" onClick={() => router.push("/dashboard")}>
@@ -61,7 +61,7 @@ export function RedeemForm() {
           Код выдаётся после оплаты (Kaspi / карта). Вводите без пробелов — регистр не важен.
         </p>
       </div>
-      {error && <p className="text-sm text-[#dc2626]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Активируем…" : "Активировать"}
       </Button>

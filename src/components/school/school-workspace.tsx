@@ -243,7 +243,7 @@ export function SchoolWorkspace({
         )}
 
         {pendingCount > 0 && (
-          <div role="status" className="mx-3 mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+          <div role="status" className="mx-3 mb-2 rounded-lg border border-warning/40 bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning">
             Агент ждёт вашего решения ({pendingCount}): разрешите или отклоните действие ниже.
           </div>
         )}

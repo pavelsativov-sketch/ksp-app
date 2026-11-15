@@ -101,7 +101,7 @@ export function FeedbackForm({ userId, onSuccess }: FeedbackFormProps) {
                 className={cn(
                   "h-8 w-8 transition-colors",
                   (hoveredRating || rating) >= star
-                    ? "fill-yellow-400 text-yellow-400"
+                    ? "fill-yellow-400 text-warning"
                     : "text-muted-foreground",
                 )}
               />

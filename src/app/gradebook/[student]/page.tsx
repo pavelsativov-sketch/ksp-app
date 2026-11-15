@@ -20,8 +20,8 @@ export default async function StudentGradebookPage({ params }: { params: Promise
   const student = await getStudentResults(user.id, studentName);
   if (!student) notFound();
 
-  const scoreColor = (percentage: number) => percentage >= 80 ? "bg-emerald-500" : percentage >= 50 ? "bg-amber-500" : "bg-red-500";
-  const scoreTextColor = (percentage: number) => percentage >= 80 ? "text-emerald-700" : percentage >= 50 ? "text-amber-700" : "text-red-700";
+  const scoreColor = (percentage: number) => percentage >= 80 ? "bg-emerald-500" : percentage >= 50 ? "bg-warning" : "bg-red-500";
+  const scoreTextColor = (percentage: number) => percentage >= 80 ? "text-emerald-700" : percentage >= 50 ? "text-warning" : "text-red-700";
   const maxPercentage = 100;
 
   return (

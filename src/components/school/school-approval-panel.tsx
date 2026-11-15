@@ -166,7 +166,7 @@ export function SchoolApprovalPanel({ schoolId, planId, currentUpdatedAt, locale
               <span className="rounded-full bg-muted px-2.5 py-1">{copy.statusLabels[currentCycle.status]}</span>
               <span className="text-muted-foreground">{copy.cycle} {currentCycle.cycle}</span>
             </div>
-            {mode === "owner" && versionIsStale && <p role="status" className="rounded-md border border-amber-400/50 bg-amber-50 p-3 text-sm text-amber-950">{copy.versionChanged}</p>}
+            {mode === "owner" && versionIsStale && <p role="status" className="rounded-md border border-warning/40/50 bg-warning-soft p-3 text-sm text-warning">{copy.versionChanged}</p>}
             {mode === "reviewer" && (
               <>
                 <p className="rounded-md border border-border bg-muted/50 p-3 text-sm">{copy.snapshotNotice}</p>

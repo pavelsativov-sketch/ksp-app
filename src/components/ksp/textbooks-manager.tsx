@@ -539,7 +539,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                             {langBadge}
                           </span>
                           {item.isGuide && (
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+                            <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[11px] text-warning">
                               Метод. пособие
                             </span>
                           )}
@@ -757,7 +757,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                             {` — ${t.embedding.completed} / ${t.embedding.total} фрагментов`}
                           </p>
                           {t.embedding.status !== "ready" && (
-                            <p className="text-amber-800">
+                            <p className="text-warning">
                               Пока доступен резервный поиск по словам. {t.embedding.error}
                             </p>
                           )}
@@ -839,7 +839,7 @@ function StatusBadge({
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-amber-700">
+    <span className="inline-flex items-center gap-1 text-warning">
       <Clock className="w-3 h-3" /> {status === "indexing" ? "индексация…" : "ожидание"}
     </span>
   );

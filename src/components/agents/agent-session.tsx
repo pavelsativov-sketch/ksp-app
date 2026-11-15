@@ -192,13 +192,13 @@ function AgentSessionStream({
       )}
       {summary && (
         <section aria-label="Итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-border bg-muted p-3">
-          <p className="flex items-center gap-1.5 text-sm font-bold text-foreground">{summaryFailed ? <CircleX className="size-3.5 text-amber-700" /> : <CircleCheck className="size-3.5 text-emerald-700" />} {summaryFailed ? "Итог: не выполнено" : "Итог"}</p>
+          <p className="flex items-center gap-1.5 text-sm font-bold text-foreground">{summaryFailed ? <CircleX className="size-3.5 text-warning" /> : <CircleCheck className="size-3.5 text-emerald-700" />} {summaryFailed ? "Итог: не выполнено" : "Итог"}</p>
           <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-foreground">{summary}</p>
         </section>
       )}
       {partial && (
-        <section aria-label="Частичный итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-amber-300 bg-amber-50 p-3">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800"><CircleX className="size-3.5 text-amber-800" /> Частичный итог</p>
+        <section aria-label="Частичный итог задачи" className="mx-3 mt-3 shrink-0 rounded-xl border border-warning/40 bg-warning-soft p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-warning"><CircleX className="size-3.5 text-warning" /> Частичный итог</p>
           <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-foreground">{partial}</p>
         </section>
       )}
@@ -330,15 +330,15 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
   }
   if (ev.type === "PAUSED") {
     return (
-      <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 font-sans text-xs text-amber-800">
+      <div className="rounded-xl border border-warning/40 bg-warning-soft p-2.5 font-sans text-xs text-warning">
         <div className="flex items-start gap-2">
-          <Lock className="mt-0.5 size-3.5 shrink-0 text-amber-800" />
+          <Lock className="mt-0.5 size-3.5 shrink-0 text-warning" />
           <div className="min-w-0 flex-1">
             <p className="font-medium leading-snug">{ev.message}</p>
             <button
               type="button"
               onClick={() => setTab("browser")}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1 text-[11px] font-semibold text-warning hover:bg-warning-soft"
             >
               <Globe className="size-3" /> Открыть экран на рабочем месте →
             </button>
@@ -359,7 +359,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
       return <p className="flex items-start gap-1.5 text-primary"><Globe className="mt-0.5 size-3.5 shrink-0" /> {ev.message}</p>;
     }
     if (tool === "writeFile" || tool === "readFile" || tool === "listFiles") {
-      return <p className="flex items-start gap-1.5 text-amber-800"><FileText className="mt-0.5 size-3.5 shrink-0" /> {ev.message}</p>;
+      return <p className="flex items-start gap-1.5 text-warning"><FileText className="mt-0.5 size-3.5 shrink-0" /> {ev.message}</p>;
     }
     return <p className="text-muted-foreground">{ev.message}</p>;
   }
@@ -390,8 +390,8 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
               </button>
             </div>
             {browserInfo.authBarrier?.requiresUserAction && (
-              <div className="flex items-center gap-1.5 border-b border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
-                <Lock className="size-3 shrink-0 text-amber-800" />
+              <div className="flex items-center gap-1.5 border-b border-warning/40 bg-warning-soft px-2.5 py-1.5 text-[11px] text-warning">
+                <Lock className="size-3 shrink-0 text-warning" />
                 <span>
                   {browserInfo.authBarrier.reason || "Для входа кликните по полю логина/пароля прямо на экране справа."}
                 </span>
@@ -399,7 +399,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
                   <button
                     type="button"
                     onClick={() => setTab("browser")}
-                    className="ml-auto shrink-0 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-50"
+                    className="ml-auto shrink-0 rounded-md bg-warning-soft px-2 py-0.5 text-[10px] font-semibold text-warning hover:bg-warning-soft"
                   >
                     Ввести данные
                   </button>
@@ -431,7 +431,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
     return <p className="whitespace-pre-wrap rounded bg-danger-soft px-2 py-1 text-danger">✗ {ev.message}</p>;
   }
   if (ev.type === "WARNING") {
-    return <p className="whitespace-pre-wrap rounded bg-amber-50 px-2 py-1 text-amber-800">⚠ {ev.message}</p>;
+    return <p className="whitespace-pre-wrap rounded bg-warning-soft px-2 py-1 text-warning">⚠ {ev.message}</p>;
   }
   return <p className="text-muted-foreground">{ev.message}</p>;
 }
@@ -476,7 +476,7 @@ function extractResult(ev: AgentEvent): string | null {
 }
 
 export function StatusDot({ status }: { status: Status }) {
-  const color = status === "running" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-violet-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-border-strong";
+  const color = status === "running" ? "bg-warning animate-pulse" : status === "queued" ? "bg-violet-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-border-strong";
   return <span className={`inline-block size-2 rounded-full ${color}`} aria-hidden />;
 }
 

@@ -481,7 +481,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           </span>
         )}
         {pending.length > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
             <ShieldAlert className="size-3" /> ждёт решения: {pending.length}
           </span>
         )}
@@ -509,7 +509,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
             <button
               type="button"
               onClick={() => void toggleControl("user")}
-              className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-medium text-amber-200 hover:bg-amber-400/20"
+              className="inline-flex items-center gap-1 rounded-md border border-warning/40/30 bg-warning/10 px-2.5 py-1 text-[10px] font-medium text-warning hover:bg-warning/20"
             >
               <Hand className="size-3" /> Взять управление
             </button>
@@ -583,9 +583,9 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
         )}
 
         {(control === "user" || authBarrier?.requiresUserAction) && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-100">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40/30 bg-warning/10 p-2.5 text-xs text-white">
             <div className="flex items-center gap-2">
-              <Lock className="size-4 shrink-0 text-amber-300" />
+              <Lock className="size-4 shrink-0 text-warning" />
               <span>
                 {authBarrier?.reason || "Кликните прямо по полю логина или пароля на экране ниже и введите данные с клавиатуры."}
               </span>
@@ -643,7 +643,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                 style={fieldOverlayStyle}
                 className={`pointer-events-none absolute z-20 rounded border-2 transition-all flex items-center px-2 overflow-hidden ${
                   activeField?.isPassword
-                    ? "border-amber-400/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] bg-black/25 backdrop-blur-[1px]"
+                    ? "border-warning/40/90 shadow-[0_0_0_2px_rgba(251,191,36,0.3)] bg-black/25 backdrop-blur-[1px]"
                     : "border-violet-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] bg-black/25 backdrop-blur-[1px]"
                 }`}
               >
@@ -671,7 +671,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                   key={`${line.type}-${i}`}
                   className={`text-[11px] leading-snug ${
                     line.type === "WARNING" || line.type === "PAUSED"
-                      ? "text-amber-300"
+                      ? "text-warning"
                       : line.type === "END" || line.type === "RESUMED"
                         ? "text-emerald-300"
                         : line.type === "ERROR"
@@ -689,10 +689,10 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       </div>
 
       {pending.length > 0 && (
-        <div className="shrink-0 border-t border-amber-500/30 bg-amber-500/5 p-3">
+        <div className="shrink-0 border-t border-warning/40/30 bg-warning/5 p-3">
           {pending.map((p) => (
             <div key={p.id} className="mb-2 last:mb-0">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-warning">
                 <ShieldAlert className="size-3.5" />
                 Требуется ваше решение
               </p>
@@ -708,7 +708,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
               {p.action.intent && (
                 <p className="mt-0.5 text-[11px] text-muted-foreground italic">Зачем: {p.action.intent}</p>
               )}
-              <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-200/90">
+              <p className="mt-1 flex items-center gap-1 text-[11px] text-warning/90">
                 <ShieldCheck className="size-3" />
                 {RISK_LABEL[p.decision.policy ?? ""] ?? "Действие с последствиями"}
               </p>

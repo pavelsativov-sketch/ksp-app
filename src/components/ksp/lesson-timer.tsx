@@ -239,7 +239,7 @@ export function LessonTimer({
           type="button"
           size={compact ? "default" : "lg"}
           onClick={handleStartPause}
-          className={cn(isRunning && "bg-amber-600 hover:bg-amber-700")}
+          className={cn(isRunning && "bg-warning hover:bg-warning")}
         >
           {isRunning ? <Pause /> : <Play />}
           {isRunning ? "Пауза" : isCompleted ? "Заново" : "Старт"}

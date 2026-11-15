@@ -168,7 +168,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
           <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{open ? open.name : "нет открытого файла"}</span>
         )}
         <span className="flex-1" />
-        {open?.dirty && <span className="shrink-0 text-[10px] text-amber-800">не сохранено</span>}
+        {open?.dirty && <span className="shrink-0 text-[10px] text-warning">не сохранено</span>}
         <button
           type="button"
           onClick={createFile}

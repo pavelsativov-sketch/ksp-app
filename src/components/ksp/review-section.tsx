@@ -35,7 +35,7 @@ function getInitial(name: string): string {
 }
 
 const AVATAR_COLORS = [
-  "bg-violet-500", "bg-green-500", "bg-violet-500", "bg-orange-500",
+  "bg-violet-500", "bg-green-500", "bg-violet-500", "bg-warning",
   "bg-pink-500", "bg-violet-500", "bg-violet-500", "bg-rose-500",
 ];
 
@@ -71,7 +71,7 @@ function StarRating({ value, onChange, readonly = false }: { value: number; onCh
           <Star
             className={`size-5 ${
               (hover || value) >= star
-                ? "fill-yellow-400 text-yellow-400"
+                ? "fill-yellow-400 text-warning"
                 : "text-muted-foreground"
             }`}
           />
@@ -138,7 +138,7 @@ export function ReviewSection({ planId, initialReviews, initialAverage, initialC
           <span className="text-sm font-normal text-muted-foreground">({count})</span>
           {count > 0 && (
             <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Star className="size-4 fill-yellow-400 text-yellow-400" />
+              <Star className="size-4 fill-yellow-400 text-warning" />
               {average.toFixed(1)}
             </span>
           )}
