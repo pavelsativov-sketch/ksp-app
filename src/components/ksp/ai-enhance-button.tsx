@@ -110,14 +110,14 @@ export function AiEnhanceButton<T extends string | string[]>({
       {applied && rated === null && (
         <span className="flex items-center gap-0.5" title="Помог ли результат AI?">
           <Button type="button" variant="ghost" size="sm" onClick={() => void sendFeedback("up")} title="Хорошо">
-            <ThumbsUp className="size-3.5 text-[#2f5b4f]" />
+            <ThumbsUp className="size-3.5 text-success" />
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={() => void sendFeedback("down")} title="Плохо">
             <ThumbsDown className="size-3.5 text-muted-foreground" />
           </Button>
         </span>
       )}
-      {rated !== null && <span className="text-xs text-[#6b7480]">Спасибо за оценку!</span>}
+      {rated !== null && <span className="text-xs text-muted-foreground">Спасибо за оценку!</span>}
       {err && <span className="text-xs text-red-600">{err}</span>}
     </div>
   );

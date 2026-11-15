@@ -177,7 +177,7 @@ export function AssignHomeworkButton({
       </Button>
       {open && (
         <Dialog open onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-surface p-4 shadow-lg sm:max-h-[85vh]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-xl border border-border bg-surface p-4 shadow-lg sm:max-h-[85vh]">
           <DialogTitle className="sr-only">{a.dialogTitle}</DialogTitle>
           {!created ? (
             step === "configure" ? (
@@ -185,7 +185,7 @@ export function AssignHomeworkButton({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-sm font-bold">{a.dialogTitle}</h2>
-                    <p className="text-xs text-slate-500">{a.dialogHint}</p>
+                    <p className="text-xs text-muted-foreground">{a.dialogHint}</p>
                   </div>
                   <Button type="button" variant="ghost" className="min-h-11 min-w-11 shrink-0 p-2" aria-label={a.close} onClick={() => setOpen(false)}><X aria-hidden="true" /></Button>
                 </div>
@@ -202,7 +202,7 @@ export function AssignHomeworkButton({
                         type="button"
                         onClick={() => setDays(d)}
                         aria-pressed={days === d}
-                        className={`min-h-11 rounded-full px-3.5 py-2 text-sm font-medium ${days === d ? "bg-[#2B2D83] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                        className={`min-h-11 rounded-full px-3.5 py-2 text-sm font-medium ${days === d ? "bg-ink text-white" : "bg-muted text-foreground hover:bg-primary-soft"}`}
                       >
                         {d} {a.dayUnit}
                       </button>
@@ -231,12 +231,12 @@ export function AssignHomeworkButton({
                 <div>
                   <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">{a.fromLesson} ({planTasks.length})</p>
                   <div className="max-h-44 space-y-1.5 overflow-y-auto">
-                    {planTasks.length ? planTasks.map(taskRow) : <p className="text-xs text-slate-500">{a.noTasks}</p>}
+                    {planTasks.length ? planTasks.map(taskRow) : <p className="text-xs text-muted-foreground">{a.noTasks}</p>}
                   </div>
                 </div>
                 <div>
                   <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">{a.repeatH}</p>
-                  {loadingLib && <p className="text-xs text-slate-500">{a.loadingLib}</p>}
+                  {loadingLib && <p className="text-xs text-muted-foreground">{a.loadingLib}</p>}
                   {library && (
                     <div className="max-h-44 space-y-1.5 overflow-y-auto">
                       {[...library.fromAssignments, ...library.fromPlans]
@@ -248,7 +248,7 @@ export function AssignHomeworkButton({
                           </div>
                         ))}
                       {library.fromAssignments.length + library.fromPlans.length === 0 && (
-                        <p className="text-xs text-slate-500">{a.nothingRepeat}</p>
+                        <p className="text-xs text-muted-foreground">{a.nothingRepeat}</p>
                       )}
                     </div>
                   )}
@@ -294,7 +294,7 @@ export function AssignHomeworkButton({
             )
           ) : (
             <div className="space-y-3 text-center">
-              <p className="text-sm font-bold">{copy.readyTitle}: <span className="font-mono">{created.code}</span></p>
+              <p className="text-sm font-bold">{copy.readyTitle}: <span className="tabular-nums">{created.code}</span></p>
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-xs">
                 <span className="flex-1 truncate">{link}</span>
                 <button
@@ -312,7 +312,7 @@ export function AssignHomeworkButton({
                 </button>
               </div>
               {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-              <p className="text-xs text-slate-500">{a.sendHint}</p>
+              <p className="text-xs text-muted-foreground">{a.sendHint}</p>
               <div className="text-left">
                 <QrCard url={link} title={title.trim() || planTitle} heading={copy.qrTitle} description={copy.qrLead} locale={locale} />
               </div>

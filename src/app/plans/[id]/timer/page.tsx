@@ -54,11 +54,11 @@ export default async function LessonTimerPage({
   return (
     <div className="mx-auto max-w-[900px] space-y-8 px-4 py-10 md:px-6 md:py-14">
       {/* Header */}
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[#ddd5cb] pb-6">
+      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
         <div>
           <p className="editorial-kicker">Таймер урока</p>
           <h1 className="editorial-display mt-2 text-4xl">{plan.title}</h1>
-          <p className="mt-2 flex items-center gap-2 text-sm text-[#5f5751]">
+          <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" />
             {plan.grade} класс · ~{totalMinutes} мин
           </p>
@@ -72,7 +72,7 @@ export default async function LessonTimerPage({
 
       {/* Overall lesson timer */}
       <section className="space-y-4">
-        <h2 className="editorial-display border-b border-[#ddd5cb] pb-2 text-2xl">
+        <h2 className="editorial-display border-b border-border pb-2 text-2xl">
           Общий таймер урока
         </h2>
         <LessonTimer
@@ -83,7 +83,7 @@ export default async function LessonTimerPage({
 
       {/* Stage timers */}
       <section className="space-y-4">
-        <h2 className="editorial-display border-b border-[#ddd5cb] pb-2 text-2xl">
+        <h2 className="editorial-display border-b border-border pb-2 text-2xl">
           Таймеры по этапам
         </h2>
         <div className="grid gap-6 md:grid-cols-3">
@@ -119,7 +119,7 @@ export default async function LessonTimerPage({
 
       {/* Quick start */}
       <section className="space-y-4">
-        <h2 className="editorial-display border-b border-[#ddd5cb] pb-2 text-2xl">
+        <h2 className="editorial-display border-b border-border pb-2 text-2xl">
           Быстрый старт
         </h2>
         <div className="flex flex-wrap gap-2">

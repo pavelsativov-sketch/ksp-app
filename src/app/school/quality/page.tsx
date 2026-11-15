@@ -56,7 +56,7 @@ export default async function QualityPage() {
                     <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-primary/10">
                       <div className={`h-full rounded-full ${p < 60 ? "bg-amber-500" : "bg-primary"}`} style={{ width: `${p}%` }} />
                     </div>
-                    <span className="w-12 shrink-0 text-right font-mono text-xs">{p}%</span>
+                    <span className="w-12 shrink-0 text-right tabular-nums text-xs">{p}%</span>
                   </div>
                 );
               })}

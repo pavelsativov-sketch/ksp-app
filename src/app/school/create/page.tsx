@@ -92,7 +92,7 @@ export default function CreateSchoolPage() {
       ) : (
         <form action={onJoin} className="space-y-3 rounded-2xl border border-border bg-surface p-5">
           <Field label="Код школы">
-            <Input name="code" required minLength={3} placeholder="SCH-2026-25" className="text-center font-mono text-lg tracking-widest" />
+            <Input name="code" required minLength={3} placeholder="SCH-2026-25" className="text-center tabular-nums text-lg tracking-widest" />
           </Field>
           <Button type="submit" className="w-full" disabled={pending}>
             {pending && <Loader2 className="animate-spin" />} Присоединиться как учитель

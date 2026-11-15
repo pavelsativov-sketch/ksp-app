@@ -55,7 +55,7 @@ export function RedeemForm() {
           value={code}
           onChange={(event) => setCode(event.target.value)}
           placeholder="XXXX-XXXX-XXXX"
-          className="font-mono uppercase"
+          className="tabular-nums uppercase"
         />
         <p className="text-xs text-muted-foreground">
           Код выдаётся после оплаты (Kaspi / карта). Вводите без пробелов — регистр не важен.

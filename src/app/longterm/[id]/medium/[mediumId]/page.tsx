@@ -101,7 +101,7 @@ export default async function MediumTermDetailPage({ params }: PageProps) {
                   <CardTitle className="text-lg">{topic.title}</CardTitle>
                   <CardDescription>{topic.hours} ч.</CardDescription>
                 </div>
-                <span className="shrink-0 font-mono text-sm text-muted-foreground">
+                <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
                   {topic.kspIds.length} КСП
                 </span>
               </div>

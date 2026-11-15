@@ -1,7 +1,7 @@
 .header,
 .footer {
-  background: #f8fbff;
-  color: #172447;
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-manrope), sans-serif;
 }
 
@@ -9,7 +9,7 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  border-bottom: 1px solid #e9eff8;
+  border-bottom: 1px solid var(--border);
   background: rgba(248, 251, 255, 0.82);
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
@@ -44,7 +44,7 @@
   gap: 11px;
   border-radius: 12px;
   text-decoration: none;
-  color: #172447;
+  color: var(--foreground);
 }
 
 .brandIcon {
@@ -54,7 +54,7 @@
   height: 44px;
   flex-shrink: 0;
   border-radius: 14px;
-  background: linear-gradient(135deg, #6d3bea, #4a90f5);
+  background: linear-gradient(135deg, #6d3bea, #8fa6fb);
   color: #fff;
   box-shadow: 0 9px 22px rgba(109, 59, 234, 0.28);
   transform: rotate(-5deg);
@@ -84,7 +84,7 @@
 }
 
 .tagline {
-  color: #71809e;
+  color: var(--muted-foreground);
   font-size: 10px;
   font-weight: 600;
   line-height: 1.4;
@@ -107,7 +107,7 @@
   padding: 10px 14px;
   border: 1px solid transparent;
   border-radius: 12px;
-  color: #5b6884;
+  color: var(--muted-foreground);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.5;
@@ -118,7 +118,7 @@
 
 .navLink:hover {
   color: #6d3bea;
-  background: #edf1ff;
+  background: var(--primary-soft);
 }
 
 .signup {
@@ -138,15 +138,15 @@
 
 .logout {
   cursor: pointer;
-  border-color: #dde5f3;
+  border-color: var(--border);
   background: #fff;
   font-family: inherit;
 }
 
 .logout:hover {
   color: #6d3bea;
-  background: #edf1ff;
-  border-color: #c9d6f5;
+  background: var(--primary-soft);
+  border-color: var(--border);
 }
 
 .brand:focus-visible,
@@ -172,7 +172,7 @@
   cursor: pointer;
   border: 0;
   border-radius: 12px;
-  background: #edf1ff;
+  background: var(--primary-soft);
   color: #6d3bea;
   transition: background-color 0.2s ease;
 }
@@ -183,7 +183,7 @@
 
 .menuToggle:hover,
 .mobileMenu[open] .menuToggle {
-  background: #dfe6ff;
+  background: var(--primary-soft-hover);
 }
 
 .mobileNav {
@@ -196,7 +196,7 @@
   gap: 4px;
   width: min(280px, calc(100vw - 32px));
   padding: 12px;
-  border: 1px solid #e9eff8;
+  border: 1px solid var(--border);
   border-radius: 19px;
   background: #fff;
   box-shadow: 0 24px 70px rgba(48, 76, 145, 0.13);
@@ -231,7 +231,7 @@
 }
 
 .footer {
-  border-top: 1px solid #e9eff8;
+  border-top: 1px solid var(--border);
   padding-block: 40px;
   background: #fff;
 }
@@ -245,7 +245,7 @@
 
 .footerDescription {
   margin: 0;
-  color: #71809e;
+  color: var(--muted-foreground);
   font-size: 13px;
   line-height: 1.8;
 }

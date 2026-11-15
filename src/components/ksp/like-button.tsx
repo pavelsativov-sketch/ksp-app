@@ -42,7 +42,7 @@ export function LikeButton({ planId, initialLikes, initiallyLiked, canLike }: Pr
 
   if (!canLike) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-sm text-[#6b7480]">
+      <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
         <Heart className="size-4" /> {likes}
       </span>
     );

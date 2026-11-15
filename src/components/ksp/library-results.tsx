@@ -32,7 +32,7 @@ export function LibraryResults({ query, subjects, plans, total, page, pages }: P
         <div className="flex flex-wrap gap-2"><Button type="submit">Найти</Button><Button asChild variant="ghost"><Link href="/library">Сбросить</Link></Button></div>
       </div>
     </form>
-    <p role="status" aria-live="polite" className="font-mono text-xs text-muted-foreground">НАЙДЕНО {total} · ПОКАЗАНО {total ? (page - 1) * LIBRARY_PAGE_SIZE + 1 : 0}–{(page - 1) * LIBRARY_PAGE_SIZE + plans.length}</p>
+    <p role="status" aria-live="polite" className="tabular-nums text-xs text-muted-foreground">НАЙДЕНО {total} · ПОКАЗАНО {total ? (page - 1) * LIBRARY_PAGE_SIZE + 1 : 0}–{(page - 1) * LIBRARY_PAGE_SIZE + plans.length}</p>
     {plans.length === 0 ? <div className="rounded-3xl border border-dashed border-border-strong bg-surface px-6 py-14 text-center text-sm text-muted-foreground">{active ? "Ничего не найдено. Измените запрос или сбросьте фильтры." : "Пока нет публичных КСП. Опубликуйте свой первый план, чтобы поделиться с коллегами."}</div> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{plans.map((p) => <article key={p.id} className="flex min-h-60 flex-col rounded-3xl border border-border bg-surface p-6">
       <p className="text-xs font-semibold text-cyan-foreground">{p.subject_name ?? "Без предмета"} · {p.grade} класс{p.quarter ? ` · ${p.quarter} четверть` : ""}</p>
       <h2 className="mt-5 text-xl font-bold"><Link href={`/plans/${p.id}`} className="hover:text-primary hover:underline">{p.title}</Link></h2>

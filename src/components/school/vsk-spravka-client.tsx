@@ -195,7 +195,7 @@ export function VskSpravkaClient() {
             <div className="grid h-80 place-items-center text-center text-muted-foreground">
               <div className="space-y-3">
                 <Loader2 className="mx-auto size-8 animate-spin text-rose-400" />
-                <p className="text-sm font-medium text-slate-200">ИИ формирует официальную справку ВШК...</p>
+                <p className="text-sm font-medium text-white">ИИ формирует официальную справку ВШК...</p>
                 <p className="text-xs text-muted-foreground/70">Подбираются нормативные формулировки и проект управленческого решения</p>
               </div>
             </div>

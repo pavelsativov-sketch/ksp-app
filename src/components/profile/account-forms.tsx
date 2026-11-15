@@ -120,7 +120,7 @@ export function DeleteAccountForm() {
       }}
     >
       <p className="text-sm font-medium">Удалить аккаунт и все данные без возможности восстановления?</p>
-      <p className="text-xs text-slate-600">Удалятся профиль, планы, черновики, учебники и жалобы. Для подтверждения введите пароль и слово УДАЛИТЬ.</p>
+      <p className="text-xs text-muted-foreground">Удалятся профиль, планы, черновики, учебники и жалобы. Для подтверждения введите пароль и слово УДАЛИТЬ.</p>
       <div className="space-y-1.5">
         <Label htmlFor="del-pw">Пароль</Label>
         <Input id="del-pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={pending} autoComplete="current-password" />

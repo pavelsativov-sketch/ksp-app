@@ -743,7 +743,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
               в том числе когда этим занимается ИИ-агент. Данные хранятся зашифрованными, ИИ их не видит.
             </p>
             {credReason && <p className="text-[11px] text-amber-800" role="status">{credReason}</p>}
-            <div className="text-[11px] text-muted-foreground font-mono truncate">
+            <div className="text-[11px] text-muted-foreground tabular-nums truncate">
               {credDomain || domainOf(pageUrl)}
             </div>
             <input
@@ -932,7 +932,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
             }`}
           >
             {canvasFocused && (
-              <div className="flex items-center text-xs font-mono text-foreground select-none truncate">
+              <div className="flex items-center text-xs tabular-nums text-foreground select-none truncate">
                 <span>{activeField?.isPassword ? '•'.repeat((liveText || activeField?.value || '').length) : (liveText || activeField?.value || '')}</span>
                 <span className="inline-block w-0.5 h-3.5 bg-violet-400 animate-pulse ml-0.5 shrink-0" />
               </div>

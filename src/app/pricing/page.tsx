@@ -70,7 +70,7 @@ export default async function PricingPage() {
 
       <section aria-labelledby="faq-title" className="app-shell grid gap-8 py-16 md:grid-cols-[1fr_2fr] md:gap-12 md:py-20">
         <div><p className="editorial-kicker">{p.faqKicker}</p><h2 id="faq-title" className="editorial-display mt-3 text-4xl leading-tight">{p.faqTitle}</h2><p className="app-note mt-5 text-lg">{p.faqNote}</p></div>
-        <div className="app-card divide-y divide-line px-5 sm:px-7">{faqs.map((faq, index) => <details key={faq.question} className="group py-5"><summary className="cursor-pointer rounded-sm pr-2 text-base font-semibold leading-7 marker:text-primary"><span aria-hidden="true" className="mr-3 font-mono text-xs text-ink">0{index + 1}</span>{faq.question}</summary><p className="mt-3 text-sm leading-7 text-graphite">{faq.answer}</p></details>)}</div>
+        <div className="app-card divide-y divide-line px-5 sm:px-7">{faqs.map((faq, index) => <details key={faq.question} className="group py-5"><summary className="cursor-pointer rounded-sm pr-2 text-base font-semibold leading-7 marker:text-primary"><span aria-hidden="true" className="mr-3 tabular-nums text-xs text-ink">0{index + 1}</span>{faq.question}</summary><p className="mt-3 text-sm leading-7 text-graphite">{faq.answer}</p></details>)}</div>
       </section>
 
       <section aria-label="Начать работу" className="app-shell pb-16">

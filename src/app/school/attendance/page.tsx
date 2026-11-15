@@ -73,7 +73,7 @@ export default async function AttendancePage() {
                   <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-primary/10">
                     <div className={`h-full rounded-full ${c.rate < 0.85 ? "bg-red-400" : "bg-emerald-500"}`} style={{ width: `${Math.round(c.rate * 100)}%` }} />
                   </div>
-                  <span className={`w-12 shrink-0 text-right font-mono text-xs ${c.rate < 0.85 ? "text-red-600" : ""}`}>{Math.round(c.rate * 100)}%</span>
+                  <span className={`w-12 shrink-0 text-right tabular-nums text-xs ${c.rate < 0.85 ? "text-red-600" : ""}`}>{Math.round(c.rate * 100)}%</span>
                 </div>
               ))}
             </CardContent>

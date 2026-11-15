@@ -149,9 +149,9 @@ export function ObjectivesPicker({
   }
 
   return (
-    <div className="border border-slate-300 rounded-lg bg-surface shadow-sm">
-      <div className="flex items-center gap-2 p-3 border-b border-slate-200">
-        <Search className="w-4 h-4 text-slate-400" />
+    <div className="border border-border rounded-lg bg-surface shadow-sm">
+      <div className="flex items-center gap-2 p-3 border-b border-border">
+        <Search className="w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Поиск по коду, тексту или разделу"
           value={search}
@@ -178,7 +178,7 @@ export function ObjectivesPicker({
       )}
       <div className="max-h-96 overflow-y-auto">
         {loading && (
-          <div className="p-6 flex items-center justify-center text-slate-500">
+          <div className="p-6 flex items-center justify-center text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
             Загрузка целей обучения…
           </div>
@@ -189,14 +189,14 @@ export function ObjectivesPicker({
           </div>
         )}
         {!loading && !error && filtered.length === 0 && (
-          <div className="p-6 text-sm text-slate-500 text-center">
+          <div className="p-6 text-sm text-muted-foreground text-center">
             Цели для этого предмета и класса не найдены. Запустите{" "}
-            <code className="px-1 py-0.5 bg-slate-100 rounded">npm run seed:goso</code>.
+            <code className="px-1 py-0.5 bg-muted rounded">npm run seed:goso</code>.
           </div>
         )}
         {grouped.map(([section, list]) => (
           <div key={section} className="py-1">
-            <div className="px-3 py-1 text-xs font-semibold text-slate-500 bg-slate-50 sticky top-0">
+            <div className="px-3 py-1 text-xs font-semibold text-muted-foreground bg-muted sticky top-0">
               {section}
             </div>
             {list.map((o) => {
@@ -204,7 +204,7 @@ export function ObjectivesPicker({
               return (
                 <label
                   key={o.id}
-                  className={`flex items-start gap-2 px-3 py-2 border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${
+                  className={`flex items-start gap-2 px-3 py-2 border-b border-border hover:bg-muted cursor-pointer ${
                     already ? "opacity-50" : ""
                   }`}
                 >
@@ -216,10 +216,10 @@ export function ObjectivesPicker({
                     onChange={() => toggle(o.id)}
                   />
                   <div className="flex-1 text-sm">
-                    <span className="font-mono text-slate-700 mr-2">{o.code}</span>
+                    <span className="tabular-nums text-foreground mr-2">{o.code}</span>
                     <span>{language === "kz" && o.text_kz ? o.text_kz : o.text_ru}</span>
                     {already && (
-                      <span className="text-xs text-slate-400 ml-2">
+                      <span className="text-xs text-muted-foreground ml-2">
                         (уже добавлена)
                       </span>
                     )}
@@ -231,8 +231,8 @@ export function ObjectivesPicker({
         ))}
       </div>
 
-      <div className="flex items-center justify-between p-3 border-t border-slate-200 bg-slate-50">
-        <span className="text-sm text-slate-600">
+      <div className="flex items-center justify-between p-3 border-t border-border bg-muted">
+        <span className="text-sm text-muted-foreground">
           Выбрано: {checked.size}
         </span>
         <div className="flex gap-2">

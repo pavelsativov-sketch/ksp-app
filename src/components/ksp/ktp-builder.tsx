@@ -176,7 +176,7 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
         <div className="space-y-2">
           <Label htmlFor="ktp-topics">{copy.topicsLabel} ({topicLines.length}/{MAX_KTP_TOPICS})</Label>
           <textarea id="ktp-topics" value={topics} onChange={(e) => setTopics(e.target.value)} disabled={loading} rows={5} maxLength={12040}
-            className="w-full rounded-md border border-slate-300 bg-surface p-3 text-sm"
+            className="w-full rounded-md border border-border bg-surface p-3 text-sm"
             aria-invalid={tooManyTopics} aria-describedby={tooManyTopics ? "ktp-topics-error" : undefined} />
           {tooManyTopics && (
             <p id="ktp-topics-error" role="alert" className="text-sm text-red-700">
@@ -206,13 +206,13 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
               <caption className="sr-only">{copy.caption}</caption>
-              <thead><tr>{copy.columns.map((label) => <th key={label} scope="col" className="border border-slate-300 bg-slate-50 p-2">{label}</th>)}</tr></thead>
+              <thead><tr>{copy.columns.map((label) => <th key={label} scope="col" className="border border-border bg-muted p-2">{label}</th>)}</tr></thead>
               <tbody>{result.ktp.rows.map((row) => <tr key={row.number}>
-                <td className="border border-slate-300 p-2">{row.number}</td>
-                <td className="min-w-40 border border-slate-300 p-2">{row.topic}</td>
-                <td className="border border-slate-300 p-2">{row.hours}</td>
-                <td className="border border-slate-300 p-2">{row.date || "—"}</td>
-                <td className="min-w-40 whitespace-pre-line border border-slate-300 p-2">{row.objectives || copy.emptyObjectives}</td>
+                <td className="border border-border p-2">{row.number}</td>
+                <td className="min-w-40 border border-border p-2">{row.topic}</td>
+                <td className="border border-border p-2">{row.hours}</td>
+                <td className="border border-border p-2">{row.date || "—"}</td>
+                <td className="min-w-40 whitespace-pre-line border border-border p-2">{row.objectives || copy.emptyObjectives}</td>
               </tr>)}</tbody>
             </table>
           </div>
@@ -224,7 +224,7 @@ export function KtpBuilder({ planId, topic, isPro, grade, subjectId, language }:
             </Button>
           )}
           {drafts && !drafts.done && (
-            <p role="status" className="text-sm text-slate-600">
+            <p role="status" className="text-sm text-muted-foreground">
               {language === "kz" ? "Жобалар жасалуда…" : "Создаём черновики…"} {drafts.created}/{drafts.total}
             </p>
           )}

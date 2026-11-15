@@ -108,7 +108,7 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
     <div ref={rootRef} className="relative space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
-          <p className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <p className="flex items-center gap-2 tabular-nums text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             <span>
               {taskTypeLabel(task.type)} · {task.points}{" "}
               {pluralPoints(task.points)}
@@ -116,8 +116,8 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
             {timeLeft !== null && !result && (
               <span
                 className={
-                  "inline-flex items-center gap-1 font-mono " +
-                  (timeLeft <= 5 ? "text-red-600 animate-pulse" : "text-slate-500")
+                  "inline-flex items-center gap-1 tabular-nums " +
+                  (timeLeft <= 5 ? "text-red-600 animate-pulse" : "text-muted-foreground")
                 }
               >
                 <Timer className="w-3 h-3" /> {formatTime(timeLeft)}
@@ -246,7 +246,7 @@ function HintBlock({
     );
   }
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-[#dbc7a7] bg-[#f8eedc] px-3 py-2 text-xs text-[#745329]">
+    <div className="flex items-start gap-2 rounded-xl border border-border bg-primary-soft px-3 py-2 text-xs text-ink">
       <Lightbulb className="w-4 h-4 mt-0.5 shrink-0" />
       <span>{hint}</span>
     </div>
@@ -370,8 +370,8 @@ function McqInput({
           className={
             "flex cursor-pointer items-center gap-2 border p-3 transition-colors " +
               (answer.selectedIndex === i
-              ? "border-primary bg-[#f7e6e1]"
-              : "border-border bg-white hover:bg-[#f1ece4]")
+              ? "border-primary bg-danger-soft"
+              : "border-border bg-white hover:bg-muted")
           }
         >
           <input
@@ -381,7 +381,7 @@ function McqInput({
             onChange={() => onChange({ type: "MCQ", selectedIndex: i })}
           />
           <span className="text-sm">
-            {task.options[i] || <em className="text-slate-400">—</em>}
+            {task.options[i] || <em className="text-muted-foreground">—</em>}
           </span>
         </label>
       ))}
@@ -557,7 +557,7 @@ function MatchingInput({
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div className="grid grid-cols-[1fr_1fr] gap-4">
         <div className="space-y-1.5">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Слева</p>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Слева</p>
           {task.left.map((item, i) => (
             <LeftSlot key={i} index={i}>
               <div className="flex items-center gap-2">
@@ -577,12 +577,12 @@ function MatchingInput({
           ))}
         </div>
         <div className="space-y-1.5">
-          <p className="text-xs uppercase tracking-wider text-slate-500">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
             Перетащите справа
           </p>
           <Tray>
             {unplaced.length === 0 && (
-              <p className="text-xs text-slate-400 italic p-2">Все перенесены</p>
+              <p className="text-xs text-muted-foreground italic p-2">Все перенесены</p>
             )}
             {unplaced.map((ri) => (
               <DraggableRight
@@ -612,7 +612,7 @@ function LeftSlot({
       ref={setNodeRef}
       className={
         "min-h-[50px] p-2 rounded border-2 border-dashed transition-colors " +
-        (isOver ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-white")
+        (isOver ? "border-border-strong bg-muted" : "border-border bg-white")
       }
     >
       {children}
@@ -627,7 +627,7 @@ function Tray({ children }: { children: React.ReactNode }) {
       ref={setNodeRef}
       className={
         "min-h-[80px] p-2 rounded border-2 border-dashed space-y-1 transition-colors " +
-        (isOver ? "border-slate-900 bg-slate-100" : "border-slate-200 bg-slate-50")
+        (isOver ? "border-border-strong bg-muted" : "border-border bg-muted")
       }
     >
       {children}
@@ -662,10 +662,10 @@ function DraggableRight({
       className={
         "flex items-center gap-2 px-2 py-1.5 rounded border bg-white text-sm " +
         (disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing") +
-        " border-slate-300 shadow-sm"
+        " border-border shadow-sm"
       }
     >
-      <GripVertical className="w-4 h-4 text-slate-400 shrink-0" />
+      <GripVertical className="w-4 h-4 text-muted-foreground shrink-0" />
       <span>{label}</span>
     </div>
   );
@@ -747,7 +747,7 @@ function SortableItem({
       style={style}
       className={
         "flex items-center gap-2 p-2 rounded border bg-white touch-none " +
-        (disabled ? "border-slate-200" : "border-slate-300 shadow-sm")
+        (disabled ? "border-border" : "border-border shadow-sm")
       }
     >
       <button
@@ -757,12 +757,12 @@ function SortableItem({
         disabled={disabled}
         aria-label="Перетащить"
         className={
-          "text-slate-400 " + (disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing")
+          "text-muted-foreground " + (disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing")
         }
       >
         <GripVertical className="w-4 h-4" />
       </button>
-      <span className="text-xs text-slate-400 w-6">{position}.</span>
+      <span className="text-xs text-muted-foreground w-6">{position}.</span>
       <span className="flex-1 text-sm">{label}</span>
     </li>
   );

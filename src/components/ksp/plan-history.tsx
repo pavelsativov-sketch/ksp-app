@@ -210,18 +210,18 @@ export function PlanHistory({
   return (
     <div className="space-y-6">
       {error && (
-        <div role="alert" className="flex items-start gap-3 rounded-2xl border border-[#dbc7a7] bg-[#f8eedc] p-4 text-sm text-[#745329]">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-[#9b651f]" />
+        <div role="alert" className="flex items-start gap-3 rounded-2xl border border-border bg-primary-soft p-4 text-sm text-ink">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
           <p>{error}</p>
         </div>
       )}
       {restoredAt && !selected && (
-        <div role="status" className="rounded-2xl border border-[#b9d4c6] bg-[#eef6f1] p-4 text-sm text-[#2f5b4f]">
+        <div role="status" className="rounded-2xl border border-[#b9d4c6] bg-[#eef6f1] p-4 text-sm text-success">
           Изменения восстановлены; создан новый снимок истории. Текущая публикация и видимость сохранены.
         </div>
       )}
       {versions.length === 0 ? (
-        <p className="text-sm text-[#5f5751]">
+        <p className="text-sm text-muted-foreground">
           Пока нет сохранённых версий. История появляется после первого сохранения или черновика.
         </p>
       ) : (
@@ -234,7 +234,7 @@ export function PlanHistory({
                     {formatDate(version.plan.updated_at)} · перед действием «{REASON_LABEL[version.reason]}»
                     {version.is_draft ? " · черновик" : ""}
                   </p>
-                  <p className="mt-1 text-sm text-[#5f5751]">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     Тема: {version.plan.content?.topic || "—"} · {version.plan.title} · {version.plan.grade} класс
                   </p>
                 </div>
@@ -244,13 +244,13 @@ export function PlanHistory({
               </div>
 
               {selected?.id === version.id && (
-                <div className="mt-4 space-y-4 rounded-xl border border-border bg-[#faf7f2] p-4 text-sm">
+                <div className="mt-4 space-y-4 rounded-xl border border-border bg-muted p-4 text-sm">
                   <div>
                     <p className="font-medium">Сравнение с текущим КСП</p>
-                    <p className="mt-1 text-xs text-[#5f5751]">Отмеченные разделы будут восстановлены. Ничего не меняется до нажатия кнопки.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Отмеченные разделы будут восстановлены. Ничего не меняется до нажатия кнопки.</p>
                   </div>
                   {diffs.length === 0 ? (
-                    <p className="rounded-lg bg-white p-3 text-[#5f5751]">В этих разделах отличий не найдено.</p>
+                    <p className="rounded-lg bg-white p-3 text-muted-foreground">В этих разделах отличий не найдено.</p>
                   ) : (
                     <fieldset className="space-y-3">
                       <legend className="sr-only">Выберите разделы для восстановления</legend>
@@ -264,12 +264,12 @@ export function PlanHistory({
                             />
                             {diff.label}
                           </span>
-                          <span className="mt-2 grid gap-2 pl-6 text-xs text-[#5f5751] md:grid-cols-2">
+                          <span className="mt-2 grid gap-2 pl-6 text-xs text-muted-foreground md:grid-cols-2">
                             <span><strong>Сейчас:</strong> {diff.current}</span>
                             <span><strong>В выбранной версии:</strong> {diff.previous}</span>
                           </span>
                           {diff.fields.length > 0 && (
-                            <ul className="mt-2 list-disc pl-10 text-xs text-[#5f5751]">
+                            <ul className="mt-2 list-disc pl-10 text-xs text-muted-foreground">
                               {diff.fields.slice(0, 8).map((change) => (
                                 <li key={change.path}>
                                   {change.kind === "added" ? "Добавлено поле" : change.kind === "removed" ? "Удалено поле" : "Изменено поле"}: <code>{change.path}</code>
@@ -286,7 +286,7 @@ export function PlanHistory({
                     <summary className="cursor-pointer font-medium">Полное содержимое выбранной версии</summary>
                     <div className="mt-3"><PlanView plan={version.plan} /></div>
                   </details>
-                  <p className="text-xs text-[#745329]">
+                  <p className="text-xs text-ink">
                     Восстановление создаёт новый снимок. Текущая видимость, публикация и статус черновика не меняются.
                   </p>
                   <div className="flex flex-wrap gap-2">

@@ -81,7 +81,7 @@ export function WelcomeWizard({
                   type="button"
                   onClick={() => toggle(pickedSubjects, s.name, setPickedSubjects)}
                   aria-pressed={pickedSubjects.includes(s.name)}
-                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${pickedSubjects.includes(s.name) ? "bg-[#2B2D83] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${pickedSubjects.includes(s.name) ? "bg-ink text-white" : "bg-muted text-foreground hover:bg-primary-soft"}`}
                 >
                   {s.name}
                 </button>
@@ -97,7 +97,7 @@ export function WelcomeWizard({
                   type="button"
                   onClick={() => setPickedGrades(pickedGrades.includes(g) ? pickedGrades.filter((x) => x !== g) : [...pickedGrades, g])}
                   aria-pressed={pickedGrades.includes(g)}
-                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${pickedGrades.includes(g) ? "bg-[#2B2D83] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${pickedGrades.includes(g) ? "bg-ink text-white" : "bg-muted text-foreground hover:bg-primary-soft"}`}
                 >
                   {g}
                 </button>

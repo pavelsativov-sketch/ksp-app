@@ -63,7 +63,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const authed = user ? <><Link className={navClass} href="/profile">{t.nav.profile}</Link><Link className={navClass} href="/school">{t.school.nav.school}</Link><Link className={navClass} href="/dashboard">{t.nav.plans}</Link><Link className={navClass} href="/kits">{t.nav.kits}</Link><Link className={navClass} href="/templates">{t.nav.templates}</Link><Link className={navClass} href="/textbooks">{t.nav.materials}</Link><form action={logoutAction}><button className={logoutClass} type="submit">{t.nav.logout}</button></form></> : <><Link className={navClass} href="/login">{t.nav.login}</Link><Link className={accountClass} href="/register">{t.nav.register}</Link></>;
 
   const setupNotice = !configured && (
-    <div className="border-b border-[#dbc7a7] bg-[#f8eedc] px-4 py-2 text-center text-sm text-[#745329] no-print">
+    <div className="border-b border-border bg-primary-soft px-4 py-2 text-center text-sm text-ink no-print">
       {t.setupNoticeStart} <code className="font-mono">MONGODB_URI</code> {t.setupNoticeIn} <code className="font-mono">.env.local</code>.
     </div>
   );

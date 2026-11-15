@@ -26,7 +26,7 @@ export default async function ResetPasswordPage({
             </p>
           )}
           <ResetPasswordForm token={token} />
-          <p className="mt-6 text-sm text-[#5f5751]">
+          <p className="mt-6 text-sm text-muted-foreground">
             <Link className="editorial-link font-semibold" href="/login">
               Вернуться ко входу
             </Link>

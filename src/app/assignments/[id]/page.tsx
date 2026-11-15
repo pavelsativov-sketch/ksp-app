@@ -50,7 +50,7 @@ export default async function AssignmentResultsPage({ params }: { params: Promis
       <AssignmentAnalytics analytics={data.analytics} locale={locale} />
       {data.rows.length === 0 ? (
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
-          {r.empty} {r.emptyHint} <span className="font-mono">/a/{data.code}</span>.
+          {r.empty} {r.emptyHint} <span className="tabular-nums">/a/{data.code}</span>.
         </CardContent></Card>
       ) : (
         <>

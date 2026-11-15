@@ -34,7 +34,7 @@ export function ReportPlanButton({ planId }: { planId: string }) {
   }
 
   // hooks выше — ранний return после них
-  if (message?.ok) return <p role="status" className="text-xs text-slate-600">{message.text}</p>;
+  if (message?.ok) return <p role="status" className="text-xs text-muted-foreground">{message.text}</p>;
 
   return (
     <div className="relative">
@@ -42,7 +42,7 @@ export function ReportPlanButton({ planId }: { planId: string }) {
         <Flag /> Пожаловаться
       </Button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 space-y-3 rounded-lg border border-slate-200 bg-surface p-4 shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 w-72 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-lg">
           <p className="text-sm font-medium">Что не так с планом?</p>
           <div className="space-y-1.5">
             {REASON_OPTIONS.map((opt) => (
@@ -63,7 +63,7 @@ export function ReportPlanButton({ planId }: { planId: string }) {
             maxLength={500}
             rows={2}
             placeholder="Подробности (необязательно)"
-            className="w-full rounded-md border border-slate-300 p-2 text-sm"
+            className="w-full rounded-md border border-border p-2 text-sm"
           />
           {message && !message.ok && (
             <p role="alert" className="text-xs text-red-600">{message.text}</p>

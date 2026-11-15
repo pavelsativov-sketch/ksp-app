@@ -119,7 +119,7 @@ export default async function LongTermDetailPage({ params }: PageProps) {
                         <p className="mt-1 text-sm text-muted-foreground">{topic.objectives}</p>
                       )}
                     </div>
-                    <span className="shrink-0 font-mono text-sm text-muted-foreground">
+                    <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
                       {topic.hours} ч.
                     </span>
                   </div>

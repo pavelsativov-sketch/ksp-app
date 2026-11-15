@@ -65,7 +65,7 @@ function tileClass(active: boolean): string {
   return `relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-2.5 text-[10.5px] font-semibold tracking-wide transition-all duration-200 ${
     active
       ? "bg-gradient-to-b from-white/[0.16] to-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-[#a98bff]/45"
-      : "text-slate-400 hover:-translate-y-0.5 hover:bg-white/[0.07] hover:text-slate-100"
+      : "text-muted-foreground hover:-translate-y-0.5 hover:bg-white/[0.07] hover:text-white"
   }`;
 }
 
@@ -125,7 +125,7 @@ export function MoreSections() {
           className="flex size-9 items-center justify-center rounded-xl border border-white/20 bg-white/[0.07]"
           style={activeHere || open ? { boxShadow: "0 0 18px rgba(203,213,225,0.35)" } : undefined}
         >
-          <MoreHorizontal className="size-[18px] text-slate-200" />
+          <MoreHorizontal className="size-[18px] text-white" />
         </span>
         {t.school.nav.more ?? "Ещё"}
       </button>
@@ -146,7 +146,7 @@ export function MoreSections() {
                 aria-current={current ? "page" : undefined}
                 onClick={() => setOpen(false)}
                 className={`group flex items-center gap-3 rounded-xl px-2.5 py-2 text-[13px] font-medium transition-all ${
-                  current ? "bg-white/[0.12] text-white" : "text-slate-300 hover:bg-white/[0.08] hover:text-white"
+                  current ? "bg-white/[0.12] text-white" : "text-muted-foreground hover:bg-white/[0.08] hover:text-white"
                 }`}
               >
                 <span

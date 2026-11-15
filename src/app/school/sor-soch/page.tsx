@@ -160,7 +160,7 @@ export default function SorSochPage() {
                 onChange={(e) => setScores(e.target.value)}
                 rows={4}
                 placeholder="18, 15, 20, 14, 12, 19, 16..."
-                className="mt-1 w-full rounded-lg border bg-background p-3 font-mono text-xs outline-none focus:border-violet-500"
+                className="mt-1 w-full rounded-lg border bg-background p-3 tabular-nums text-xs outline-none focus:border-violet-500"
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Просто скопируйте столбец баллов из Excel или введите через запятую/пробел.
@@ -180,7 +180,7 @@ export default function SorSochPage() {
                 </div>
                 <div>
                   <p className="text-[10px] uppercase text-muted-foreground">Средний балл</p>
-                  <p className="text-base font-bold text-slate-200">{avg} / {max}</p>
+                  <p className="text-base font-bold text-white">{avg} / {max}</p>
                 </div>
               </div>
             )}
@@ -233,7 +233,7 @@ export default function SorSochPage() {
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
                 <div className="space-y-3">
                   <Loader2 className="mx-auto size-8 animate-spin text-violet-400" />
-                  <p className="text-sm font-medium text-slate-200">ИИ анализирует результаты и дескрипторы...</p>
+                  <p className="text-sm font-medium text-white">ИИ анализирует результаты и дескрипторы...</p>
                   <p className="text-xs text-muted-foreground/70">Рассчитываются проценты, пробелы и рекомендации для завуча</p>
                 </div>
               </div>

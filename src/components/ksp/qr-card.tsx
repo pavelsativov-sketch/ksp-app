@@ -143,7 +143,7 @@ export function QrCard({ url, title, heading, description, locale }: {
       <div className="flex justify-center">
         <QrCodeSvg key={url} text={url} label={qrLabel} failedMessage={qrFailedMessage} />
       </div>
-      <p className="break-all text-center font-mono text-[10px] text-muted-foreground">{url}</p>
+      <p className="break-all text-center tabular-nums text-[10px] text-muted-foreground">{url}</p>
       {copyFailed && <p role="alert" className="text-center text-xs text-destructive">{copyFailedMessage}</p>}
       {printFailed && <p role="alert" className="text-center text-xs text-destructive">{printFailedMessage}</p>}
       <div className="flex flex-col gap-2 sm:flex-row">

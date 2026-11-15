@@ -173,7 +173,7 @@ export default function HomeroomPage() {
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
                 <div className="space-y-3">
                   <Loader2 className="mx-auto size-8 animate-spin text-emerald-400" />
-                  <p className="text-sm font-medium text-slate-200">ИИ составляет материалы собрания...</p>
+                  <p className="text-sm font-medium text-white">ИИ составляет материалы собрания...</p>
                   <p className="text-xs text-muted-foreground/70">Генерируются повестка, доклад учителя, памятка и протокол</p>
                 </div>
               </div>

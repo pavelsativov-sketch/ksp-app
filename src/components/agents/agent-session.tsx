@@ -240,7 +240,7 @@ function AgentSessionStream({
                 type="button"
                 onClick={() => openInEditor(name)}
                 title={`Открыть «${name}» в редакторе`}
-                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted px-2 py-1 font-mono text-[11px] text-foreground hover:bg-muted"
+                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted px-2 py-1 tabular-nums text-[11px] text-foreground hover:bg-muted"
               >
                 <FileText className="size-3 shrink-0 text-primary" /> <span className="truncate">{name}</span>
               </button>
@@ -476,7 +476,7 @@ function extractResult(ev: AgentEvent): string | null {
 }
 
 export function StatusDot({ status }: { status: Status }) {
-  const color = status === "running" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-violet-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-slate-400";
+  const color = status === "running" ? "bg-amber-400 animate-pulse" : status === "queued" ? "bg-violet-400" : status === "completed" ? "bg-emerald-400" : status === "failed" ? "bg-red-400" : "bg-border-strong";
   return <span className={`inline-block size-2 rounded-full ${color}`} aria-hidden />;
 }
 

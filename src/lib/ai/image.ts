@@ -175,12 +175,11 @@ export async function generateImage(
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const openaiKey = process.env.OPENAI_API_KEY;
-  const kreaKey = process.env.KREA_API_KEY;
 
-  const configured = Boolean(kreaKey || geminiKey || (accountId && token) || openaiKey);
+  const configured = Boolean(geminiKey || (accountId && token) || openaiKey);
   if (!configured) {
     throw new Error(
-      "Не настроены ключи для генерации изображений (KREA_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY или CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN)",
+      "Не настроены ключи для генерации изображений (GEMINI_API_KEY, OPENAI_API_KEY или CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN)",
     );
   }
 
@@ -210,12 +209,6 @@ export async function generateImage(
     }
   };
 
-  // 0. Krea — платный API владельца, поэтому первым: бесплатные модели упираются в лимиты.
-  if (kreaKey) {
-    const result = await attempt("Krea", () => generateWithKrea(input, kreaKey));
-    if (result) return result;
-  }
-
   // 1. Gemini — основная модель, лучшее качество и яркие цвета.
   if (geminiKey) {
     const result = await attempt("Gemini", () => generateWithGemini(input, geminiKey));
@@ -244,47 +237,6 @@ export async function generateImage(
   throw new Error(
     `Не удалось создать изображение: ни один провайдер не сработал. ${failures.join("; ")}`,
   );
-}
-
-// ── Krea (FLUX.1 dev через задание и опрос) ─────────────────────
-
-const KREA_API = "https://api.krea.ai";
-const KREA_MODEL = "bfl/flux-1-dev";
-const KREA_POLL_MS = 2_000;
-const KREA_WAIT_MS = 90_000;
-
-async function generateWithKrea(input: GenerateImageInput, apiKey: string): Promise<GenerateImageResult> {
-  const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
-  const created = await fetch(`${KREA_API}/generate/image/${KREA_MODEL}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ prompt: buildImagePrompt(input), width: 1024, height: 768 }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  // 402 значит пуст баланс API: он у Krea отдельный от баланса рабочего пространства.
-  if (!created.ok) throw new Error(`Krea API error ${created.status}: ${(await created.text()).slice(0, 200)}`);
-  const { job_id: jobId } = (await created.json()) as { job_id?: string };
-  if (!jobId) throw new Error("Krea не вернул номер задания");
-
-  const deadline = Date.now() + KREA_WAIT_MS;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, KREA_POLL_MS));
-    const poll = await fetch(`${KREA_API}/jobs/${jobId}`, { headers, signal: AbortSignal.timeout(15_000) });
-    const job = (await poll.json()) as { status?: string; result?: { urls?: string[] }; error?: { message?: string } };
-    if (job.status === "failed" || job.status === "cancelled") throw new Error(`Krea: ${job.error?.message ?? job.status}`);
-    if (job.status !== "completed") continue;
-    const url = job.result?.urls?.[0];
-    if (!url) throw new Error("Krea завершил задание без картинки");
-    const image = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-    if (!image.ok) throw new Error(`Krea: картинка не скачалась (${image.status})`);
-    return {
-      base64: Buffer.from(await image.arrayBuffer()).toString("base64"),
-      mimeType: image.headers.get("content-type") ?? "image/png",
-      provider: "Krea",
-      model: "FLUX.1 dev",
-    };
-  }
-  throw new Error("Krea не успел создать изображение");
 }
 
 // ── Gemini 2.5 Flash (лучшее качество) ──────────────────────────

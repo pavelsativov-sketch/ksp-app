@@ -72,7 +72,7 @@ function StarRating({ value, onChange, readonly = false }: { value: number; onCh
             className={`size-5 ${
               (hover || value) >= star
                 ? "fill-yellow-400 text-yellow-400"
-                : "text-gray-300"
+                : "text-muted-foreground"
             }`}
           />
         </button>

@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
         </CardHeader>
         <CardContent>
           <ForgotPasswordForm />
-          <p className="mt-6 text-sm text-[#5f5751]">
+          <p className="mt-6 text-sm text-muted-foreground">
             Вспомнили пароль?{" "}
             <Link className="editorial-link font-semibold" href="/login">
               Войти

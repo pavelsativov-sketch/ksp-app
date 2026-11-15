@@ -66,7 +66,7 @@ export default async function ConnectorsPage() {
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between space-y-3 text-sm">
                 <p className="text-muted-foreground">{service.description}</p>
-                <p className="font-mono text-xs text-muted-foreground/70">{service.url}</p>
+                <p className="tabular-nums text-xs text-muted-foreground/70">{service.url}</p>
                 <div className="flex gap-2 pt-1">
                   {/* Открыть в рабочей области — браузер сразу переходит на нужный URL */}
                   <Link

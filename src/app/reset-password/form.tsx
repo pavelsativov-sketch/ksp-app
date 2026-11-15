@@ -24,7 +24,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       <div className="space-y-1.5">
         <Label htmlFor="password">Новый пароль</Label>
         <Input id="password" name="password" type="password" required minLength={10} autoComplete="new-password" />
-        <p className="text-xs text-[#8a817a]">Минимум 10 символов.</p>
+        <p className="text-xs text-muted-foreground">Минимум 10 символов.</p>
         {state.fieldErrors?.password && (
           <p className="text-sm text-red-600">{state.fieldErrors.password}</p>
         )}

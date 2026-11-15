@@ -104,22 +104,22 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0f0b26] px-3">
       <Link href="/school" className="flex shrink-0 items-center gap-2">
         <span className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 text-sm font-black text-white">M</span>
-        <span className="hidden items-baseline gap-1 text-sm font-semibold text-slate-100 sm:flex">
+        <span className="hidden items-baseline gap-1 text-sm font-semibold text-white sm:flex">
           Mekty <span className="text-violet-400">AI</span>
-          <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">Beta</span>
+          <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Beta</span>
         </span>
       </Link>
 
-      <nav aria-label="Хлебные крошки" className="flex min-w-0 items-center gap-1 text-xs text-slate-400">
+      <nav aria-label="Хлебные крошки" className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
         <span className="hidden shrink-0 sm:inline">Школа</span>
         <ChevronRight className="hidden size-3.5 shrink-0 sm:inline" aria-hidden />
-        <span className="truncate font-medium text-slate-200">{title}</span>
+        <span className="truncate font-medium text-white">{title}</span>
       </nav>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {/* Переключатель между школами — показывается при наличии хотя бы одной */}
         {schools.length > 0 && (
-          <label className="flex max-w-48 items-center gap-1 rounded-lg border border-white/15 px-2 text-xs text-slate-300">
+          <label className="flex max-w-48 items-center gap-1 rounded-lg border border-white/15 px-2 text-xs text-muted-foreground">
             <ChevronsUpDown className="size-3 shrink-0" />
             <span className="sr-only">Активная школа</span>
             <select
@@ -129,9 +129,9 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
               onChange={(event) => void selectSchool(event.target.value)}
               className="min-w-0 max-w-[120px] bg-transparent py-1.5 outline-none"
             >
-              <option className="bg-slate-900" value="">Школа</option>
+              <option className="bg-foreground" value="">Школа</option>
               {schools.map((school) => (
-                <option className="bg-slate-900" key={school.id} value={school.id}>
+                <option className="bg-foreground" key={school.id} value={school.id}>
                   {school.name}
                 </option>
               ))}
@@ -143,7 +143,7 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
         <Link
           href="/"
           title="На главную страницу"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
         >
           <Home className="size-3.5" />
           <span className="hidden sm:inline">Главная</span>
@@ -152,7 +152,7 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
         <button
           type="button"
           onClick={() => void share()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
         >
           <Share2 className="size-3.5" /> <span className="hidden sm:inline">Поделиться</span>
         </button>

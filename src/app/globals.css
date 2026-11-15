@@ -4,9 +4,9 @@
   /* Mekty application palette, shared by controls and internal pages. */
   --ink: #6d3bea;
   --ink-hover: #5a2cd0;
-  --cyan: #4a90f5;
-  --cyan-soft: #e3f0ff;
-  --cyan-foreground: #1f5fa8;
+  --cyan: #8fa6fb;
+  --cyan-soft: #e8ecff;
+  --cyan-foreground: #4b3bc4;
   --yellow: #ffb81c;
   --yellow-soft: #fff4d5;
   --yellow-foreground: #795516;
@@ -334,27 +334,8 @@ body {
 @layer base {
   h1, h2, h3, h4 { font-family: var(--mekty-font-heading); }
 }
-.print-plan {
-  --ink: #1d4ed8;
-  --ink-hover: #1e40af;
-  --accent: #c0512f;
-  --accent-hover: #a84023;
-  color: #211c17;
-  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-.print-plan h3 { font-family: inherit; }
-.print-plan .editorial-display {
-  font-family: var(--font-lora), Georgia, "Times New Roman", serif;
-  font-weight: 400;
-  line-height: 1.05;
-}
-.print-plan .no-print {
-  --ink: #4263eb;
-  --ink-hover: #2847c7;
-  font-family: var(--font-body);
-}
 @media print {
-  body { color: #211c17; font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  body { color: var(--foreground); font-family: var(--font-body); }
 }
 
 

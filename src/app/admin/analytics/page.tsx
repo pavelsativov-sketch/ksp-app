@@ -121,7 +121,7 @@ export default async function AdminAnalyticsPage() {
             <tbody>
               {summary.topPages.map((page) => (
                 <tr key={page._id} className="border-b border-border">
-                  <td className="p-3 font-mono text-xs">{page._id}</td>
+                  <td className="p-3 tabular-nums text-xs">{page._id}</td>
                   <td className="p-3">{page.count.toLocaleString("ru-RU")}</td>
                   <td className="p-3">
                     {summary.pageViews > 0
@@ -151,7 +151,7 @@ export default async function AdminAnalyticsPage() {
             <tbody>
               {summary.topEvents.map((event) => (
                 <tr key={event._id} className="border-b border-border">
-                  <td className="p-3 font-mono text-xs">{event._id}</td>
+                  <td className="p-3 tabular-nums text-xs">{event._id}</td>
                   <td className="p-3">{event.count.toLocaleString("ru-RU")}</td>
                   <td className="p-3">
                     {summary.totalEvents > 0

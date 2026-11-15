@@ -34,7 +34,7 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
             type="button"
             size="lg"
             onClick={() => setQuizOpen(true)}
-            className="bg-[#17202b] hover:bg-[#17202b]"
+            className="bg-foreground hover:bg-foreground"
           >
             <Sparkles className="w-5 h-5" />
             Пройти урок как квиз ({totalTasks} заданий)
@@ -68,7 +68,7 @@ export function PlanView({ plan }: { plan: LessonPlanRow }) {
           <ul className="list-disc pl-6 space-y-1">
             {c.learningObjectives.map((o, i) => (
               <li key={o.code || i}>
-                {o.code && <span className="font-mono text-slate-600">{o.code} — </span>}
+                {o.code && <span className="tabular-nums text-muted-foreground">{o.code} — </span>}
                 {o.text}
               </li>
             ))}
@@ -157,7 +157,7 @@ function Section({
 function TableRow({ label, value }: { label: string; value: string }) {
   return (
     <tr className="border-b border-[#eee7de]">
-      <td className="w-1/3 py-2.5 pr-3 font-medium text-[#5f5751] align-top">{label}</td>
+      <td className="w-1/3 py-2.5 pr-3 font-medium text-muted-foreground align-top">{label}</td>
       <td className="py-1.5 align-top">{value || "—"}</td>
     </tr>
   );
@@ -175,7 +175,7 @@ function BulletList({ items }: { items: string[] }) {
 }
 
 function Empty() {
-  return <p className="text-slate-400 italic">—</p>;
+  return <p className="text-muted-foreground italic">—</p>;
 }
 
 function StageTable({
@@ -188,17 +188,17 @@ function StageTable({
   const tasks = stage.tasks ?? [];
   return (
     <div className="space-y-2">
-      <h3 className="mt-5 border-l-2 border-[#1e4f91] pl-3 font-bold">{title}</h3>
+      <h3 className="mt-5 border-l-2 border-ink pl-3 font-bold">{title}</h3>
       <StageBody stage={stage} />
       {tasks.length > 0 && (
         <div className="mt-3 space-y-2 no-print">
-          <p className="text-xs uppercase tracking-wider text-slate-500">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
             Интерактивные задания этапа ({tasks.length})
           </p>
           {tasks.map((task) => (
             <div
               key={task.id}
-              className="border border-[#d9d1c3] bg-[#f8f4eb] p-4"
+              className="border border-border bg-muted p-4"
             >
               <TaskPlayer task={task} />
             </div>
@@ -211,7 +211,7 @@ function StageTable({
           <ol className="list-decimal pl-5 space-y-1">
             {tasks.map((t) => (
               <li key={t.id}>
-                <span className="text-slate-600">[{taskTypeLabel(t.type)}]</span>{" "}
+                <span className="text-muted-foreground">[{taskTypeLabel(t.type)}]</span>{" "}
                 {t.question}
               </li>
             ))}
@@ -231,26 +231,26 @@ function StageBody({ stage }: { stage: LessonStage }) {
   ];
   return (
     <>
-    <div className="hidden overflow-x-auto sm:block"><table className="w-full min-w-[620px] text-sm border border-[#cfc5b5]">
+    <div className="hidden overflow-x-auto sm:block"><table className="w-full min-w-[620px] text-sm border border-border">
       <thead>
         <tr className="bg-[#ebe3d4]">
-          <th className="w-[15%] border border-[#cfc5b5] p-2 text-left">Время</th>
-          <th className="w-[40%] border border-[#cfc5b5] p-2 text-left">Действия учителя</th>
-          <th className="w-[30%] border border-[#cfc5b5] p-2 text-left">Действия учеников</th>
-          <th className="w-[15%] border border-[#cfc5b5] p-2 text-left">Ресурсы</th>
+          <th className="w-[15%] border border-border p-2 text-left">Время</th>
+          <th className="w-[40%] border border-border p-2 text-left">Действия учителя</th>
+          <th className="w-[30%] border border-border p-2 text-left">Действия учеников</th>
+          <th className="w-[15%] border border-border p-2 text-left">Ресурсы</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.time || "—"}</td>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.teacherActions || "—"}</td>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.studentActions || "—"}</td>
-          <td className="border border-slate-300 p-2 align-top whitespace-pre-wrap">{stage.resources || "—"}</td>
+          <td className="border border-border p-2 align-top whitespace-pre-wrap">{stage.time || "—"}</td>
+          <td className="border border-border p-2 align-top whitespace-pre-wrap">{stage.teacherActions || "—"}</td>
+          <td className="border border-border p-2 align-top whitespace-pre-wrap">{stage.studentActions || "—"}</td>
+          <td className="border border-border p-2 align-top whitespace-pre-wrap">{stage.resources || "—"}</td>
         </tr>
       </tbody>
     </table></div>
     <dl className="grid gap-2 sm:hidden">
-      {rows.map(([label, value]) => <div key={label} className="rounded-lg border border-[#d9d1c3] bg-surface p-3">
+      {rows.map(([label, value]) => <div key={label} className="rounded-lg border border-border bg-surface p-3">
         <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
         <dd className="mt-1 whitespace-pre-wrap break-words text-sm">{value || "—"}</dd>
       </div>)}

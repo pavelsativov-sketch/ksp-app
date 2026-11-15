@@ -190,7 +190,7 @@ export default function IomPage() {
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
                 <div className="space-y-3">
                   <Loader2 className="mx-auto size-8 animate-spin text-amber-400" />
-                  <p className="text-sm font-medium text-slate-200">ИИ проектирует образовательный маршрут...</p>
+                  <p className="text-sm font-medium text-white">ИИ проектирует образовательный маршрут...</p>
                   <p className="text-xs text-muted-foreground/70">Формируется понедельный план повторения и консультаций</p>
                 </div>
               </div>

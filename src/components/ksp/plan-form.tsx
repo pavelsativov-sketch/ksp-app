@@ -758,9 +758,9 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
 
       <div className="min-w-0 flex-1 space-y-6">
         {showValidation && warnings.length > 0 && (
-          <div className="flex items-start gap-3 rounded-2xl border border-[#dbc7a7] bg-[#f8eedc] p-4">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-[#9b651f]" />
-            <div className="text-sm text-[#745329]">
+          <div className="flex items-start gap-3 rounded-2xl border border-border bg-primary-soft p-4">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
+            <div className="text-sm text-ink">
               <p className="font-medium mb-1">
                 Проверьте незаполненные важные разделы ({warnings.length}):
               </p>
@@ -776,7 +776,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
         <div className="sticky top-3 z-10 rounded-2xl border border-border bg-surface/95 p-4 backdrop-blur">
           <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
             <span>{fill(pe.progress, { percent: progress.percent, done: progress.done, total: progress.total })}</span>
-            <span className="flex items-center gap-1 text-[#2f5b4f]">
+            <span className="flex items-center gap-1 text-success">
               {draftSaved && (
                 <>
                   <Check className="w-3 h-3" /> {pe.draftSavedBadge}
@@ -1016,7 +1016,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
                 type="button"
                 onClick={() => void refundGeneration()}
                 disabled={refundState === "pending"}
-                className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
+                className="text-xs text-muted-foreground underline hover:text-foreground disabled:opacity-50"
               >
                 {refundState === "pending" ? pe.goals.refunding : pe.goals.refundPrompt}
               </button>
@@ -1027,7 +1027,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
               </div>
             )}
             {aiLoading && (
-              <div className="text-xs text-slate-600" role="status" aria-live="polite">
+              <div className="text-xs text-muted-foreground" role="status" aria-live="polite">
                 {/* Подпись и процент берутся с сервера: экранный диктор
                     читает реальный этап, а не текст из таймера. */}
                 {currentStageLabel}
@@ -1058,9 +1058,9 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
           {showValidation && !content.topic.trim() && (
             <p className="text-xs text-red-600">{pe.errors.topicRequired}</p>
           )}
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-2">
+          <div className="rounded-xl border border-border/80 bg-muted/70 p-3 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label className="text-xs font-medium text-slate-700">
+              <Label className="text-xs font-medium text-foreground">
                 Преемственность КТП: тема предыдущего урока (для актуализации знаний и проверки ДЗ)
               </Label>
               <Button
@@ -1081,13 +1081,13 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
               className="h-8 text-xs bg-white"
             />
             {recentPlansOpen && (
-              <div className="rounded-lg border border-slate-200 bg-white p-2 text-xs space-y-1">
+              <div className="rounded-lg border border-border bg-white p-2 text-xs space-y-1">
                 {recentPlansLoading ? (
-                  <p className="text-slate-500 flex items-center gap-1.5">
+                  <p className="text-muted-foreground flex items-center gap-1.5">
                     <Loader2 className="w-3 h-3 animate-spin" /> Загружаем прошлые уроки…
                   </p>
                 ) : recentPlans.length === 0 ? (
-                  <p className="text-slate-500">
+                  <p className="text-muted-foreground">
                     Сохранённые уроки по {grade} классу не найдены. Вы можете ввести тему предыдущего урока вручную выше.
                   </p>
                 ) : (
@@ -1101,11 +1101,11 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
                         if (rp.section && !section) setSection(rp.section);
                         setRecentPlansOpen(false);
                       }}
-                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-slate-100"
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-muted"
                     >
-                      <span className="font-medium text-slate-800 truncate">{rp.topic}</span>
+                      <span className="font-medium text-foreground truncate">{rp.topic}</span>
                       {rp.section && (
-                        <span className="ml-2 shrink-0 text-[11px] text-slate-500">{rp.section}</span>
+                        <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{rp.section}</span>
                       )}
                     </button>
                   ))
@@ -1208,7 +1208,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
             onUse={reuseCriterion}
           />
           {(content.assessmentCriterionSources ?? []).map((source) => (
-            <p key={`${source.criterion}:${source.provenance.sourcePlanId}`} className="mt-2 text-xs text-[#756b63]">
+            <p key={`${source.criterion}:${source.provenance.sourcePlanId}`} className="mt-2 text-xs text-muted-foreground">
               {pe.goals.criteriaTitle}: «{source.criterion}» — {locale === "kk" ? "дереккөз жоспар" : "источник: план"} «{source.provenance.sourcePlanTitle}»
             </p>
           ))}
@@ -1378,7 +1378,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <section aria-labelledby="quality-targets-title" className="rounded-xl border border-border bg-[#f8f4ed] p-4">
+          <section aria-labelledby="quality-targets-title" className="rounded-xl border border-border bg-muted p-4">
             <h3 id="quality-targets-title" className="font-semibold">{locale === "kk" ? "Сабақтың жоспарлау бағдарлары" : "Ориентиры планирования урока"}</h3>
             <p className="mb-3 mt-1 text-xs text-muted-foreground">{locale === "kk" ? "Мұғалім өз сабағына нысаналы мәндерді белгілейді. Бұл мемлекеттік норма емес." : "Задайте значения для своего урока. Это подсказки quality gate, не нормативы."}</p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1560,7 +1560,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
       </Tabs>
 
         {recoveredDraft && (
-          <section role="alert" className="space-y-3 rounded-2xl border border-[#dbc7a7] bg-[#f8eedc] p-4 text-sm text-[#745329]">
+          <section role="alert" className="space-y-3 rounded-2xl border border-border bg-primary-soft p-4 text-sm text-ink">
             <h2 className="font-semibold">{pe.save.staleDraftTitle}</h2>
             <p>{fill(pe.save.staleDraftDescription, {
               localAt: formatSavedAt(recoveredDraft.savedAt),
@@ -1580,7 +1580,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
         )}
 
         {(conflictLoading || conflictLoadError || conflictSnapshot) && (
-          <section role="alert" className="space-y-3 rounded-2xl border border-[#dbc7a7] bg-[#f8eedc] p-4 text-sm text-[#745329]">
+          <section role="alert" className="space-y-3 rounded-2xl border border-border bg-primary-soft p-4 text-sm text-ink">
             <h2 className="font-semibold">{pe.save.conflictTitle}</h2>
             <p>{pe.save.conflictDescription}</p>
             {conflictLoading && <p role="status" className="flex items-center gap-2"><Loader2 className="size-4 animate-spin" />{pe.save.saving}</p>}
@@ -1595,11 +1595,11 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
             {conflictSnapshot && (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-[#dbc7a7] bg-white/70 p-3">
+                  <div className="rounded-xl border border-border bg-white/70 p-3">
                     <p className="font-semibold">{pe.save.localVersionLabel}</p>
                     <p>{title || "—"} · {content.topic || "—"}</p>
                   </div>
-                  <div className="rounded-xl border border-[#dbc7a7] bg-white/70 p-3">
+                  <div className="rounded-xl border border-border bg-white/70 p-3">
                     <p className="font-semibold">{pe.save.serverVersionLabel}</p>
                     <p>{conflictSnapshot.title || "—"} · {conflictSnapshot.content.topic || "—"}</p>
                     <p className="mt-1 text-xs">{formatSavedAt(conflictSnapshot.updated_at)}</p>
@@ -1621,7 +1621,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
           </section>
         )}
 
-        {saveNotice && <p role="status" className="rounded-xl border border-[#b9d4c6] bg-[#eef6f1] p-3 text-sm text-[#2f5b4f]">{saveNotice}</p>}
+        {saveNotice && <p role="status" className="rounded-xl border border-[#b9d4c6] bg-[#eef6f1] p-3 text-sm text-success">{saveNotice}</p>}
 
         {saveError && (
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
@@ -1639,9 +1639,9 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
         )}
 
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-xs text-muted-foreground" aria-live="polite">
-          {!isOnline && <span className="text-[#9b651f]">{pe.save.offline}</span>}
+          {!isOnline && <span className="text-warning">{pe.save.offline}</span>}
           {localDraftStatus === "saving" && <span className="flex items-center gap-1"><Loader2 className="size-3 animate-spin" />{pe.save.localSaving}</span>}
-          {localDraftStatus === "saved" && <span className="flex items-center gap-1 text-[#2f5b4f]"><Check className="size-3" />{pe.save.localSaved}</span>}
+          {localDraftStatus === "saved" && <span className="flex items-center gap-1 text-success"><Check className="size-3" />{pe.save.localSaved}</span>}
           {localDraftStatus === "error" && <span className="text-red-600">{pe.save.localFailed}</span>}
           {localDraftStatus === "error" && !recoveredDraft && (
             <button type="button" className="text-primary underline underline-offset-2" onClick={() => saveDraftNow()}>
@@ -1657,7 +1657,7 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
             </span>
           )}
           {draftStatus === "saved" && (
-            <span className="flex items-center gap-1 text-[#2f5b4f]">
+            <span className="flex items-center gap-1 text-success">
               <Check className="size-3" />
               {pe.save.allSaved}
             </span>
@@ -1665,9 +1665,9 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
         </div>
 
         <div className="sticky bottom-3 flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-border bg-surface p-3 shadow-card">
-          {draftStatus === "saved" && <span className="mr-auto text-xs text-[#2f5b4f]">{pe.save.draftServer}</span>}
+          {draftStatus === "saved" && <span className="mr-auto text-xs text-success">{pe.save.draftServer}</span>}
           {draftStatus === "saved" && planId && (
-            <Link href={`/plans/${planId}`} className="ml-3 text-xs text-[#1e4f91] underline-offset-2 hover:underline">
+            <Link href={`/plans/${planId}`} className="ml-3 text-xs text-ink underline-offset-2 hover:underline">
               {pe.save.viewPlan}
             </Link>
           )}
@@ -1700,24 +1700,24 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
               aria-label={pe.aiDialog.aria}
             >
               <DialogTitle className="text-lg font-bold">AI подготовил изменения ({pendingAi.diff.length})</DialogTitle>
-              <DialogDescription className="mt-1 text-sm text-slate-600">
+              <DialogDescription className="mt-1 text-sm text-muted-foreground">
                 {pe.aiDialog.desc}
               </DialogDescription>
               <ul className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto">
                 {pendingAi.diff.slice(0, 20).map((d) => (
-                  <li key={d.label} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+                  <li key={d.label} className="rounded-md border border-border px-3 py-2 text-sm">
                     <p className="font-medium">
                       {d.label}{" "}
                       <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] ${d.filled ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                         {d.filled ? pe.aiDialog.tagNew : pe.aiDialog.tagOverwrite}
                       </span>
                     </p>
-                    <p className="mt-1 text-slate-600">{d.preview}</p>
+                    <p className="mt-1 text-muted-foreground">{d.preview}</p>
                   </li>
                 ))}
               </ul>
               {pendingAi.diff.length > 20 && (
-                <p className="mt-2 text-xs text-slate-500">…и ещё {pendingAi.diff.length - 20}</p>
+                <p className="mt-2 text-xs text-muted-foreground">…и ещё {pendingAi.diff.length - 20}</p>
               )}
               <div className="mt-4 flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setPendingAi(null)} type="button">

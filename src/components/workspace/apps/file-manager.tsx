@@ -182,7 +182,7 @@ export function FileManagerApp() {
     <div className="flex h-full flex-col bg-surface text-foreground">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Terminal className="size-3.5 text-emerald-700" />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate tabular-nums text-[11px] text-muted-foreground">
           Файлы рабочей области
         </span>
         {(busyOp || notice) && (
@@ -252,7 +252,7 @@ export function FileManagerApp() {
                     className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left hover:bg-muted"
                   >
                     <FileIcon name={f.name} />
-                    <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.name}</span>
+                    <span className="min-w-0 flex-1 truncate tabular-nums text-xs">{f.name}</span>
                     <span className="shrink-0 text-[10px] text-muted-foreground">{ago(f.modified) ? `${ago(f.modified)} · ` : ''}{f.sizeLabel}</span>
                   </button>
                 </li>
@@ -284,7 +284,7 @@ export function FileManagerApp() {
         <div className="flex max-h-[55%] shrink-0 flex-col border-t border-border bg-muted">
           <div className="flex shrink-0 items-center gap-2 px-3 py-1.5">
             <FileText className="size-3.5 text-primary" />
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{selected.name}</span>
+            <span className="min-w-0 flex-1 truncate tabular-nums text-[11px]">{selected.name}</span>
             <button
               type="button"
               onClick={() => openInEditor(selected.name)}
@@ -328,7 +328,7 @@ export function FileManagerApp() {
           {loadingFile ? (
             <p className="flex items-center gap-2 px-3 pb-3 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Читаю…</p>
           ) : (
-            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 pb-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-3 pb-3 tabular-nums text-[11px] leading-relaxed text-muted-foreground">
               {selected.content}
               {selected.truncated && '\n… (файл показан частично)'}
             </pre>
@@ -359,5 +359,5 @@ function FileIcon({ name }: { name: string }) {
   if (['zip', 'rar', '7z'].includes(ext ?? '')) return <Archive className="size-4 text-yellow-500" />;
   if (['js', 'ts', 'py', 'json', 'sh', 'bat', 'cmd'].includes(ext ?? '')) return <Code className="size-4 text-emerald-700" />;
   if (['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'].includes(ext ?? '')) return <FileText className="size-4 text-primary" />;
-  return <File className="size-4 text-gray-400" />;
+  return <File className="size-4 text-muted-foreground" />;
 }

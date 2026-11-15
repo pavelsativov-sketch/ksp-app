@@ -210,7 +210,7 @@ export function LessonTimer({
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
             className={cn(
-              "font-mono font-bold tabular-nums",
+              "tabular-nums font-bold tabular-nums",
               compact ? "text-2xl" : "text-4xl",
               isOvertime && "text-danger",
               isCompleted && "text-green-600",

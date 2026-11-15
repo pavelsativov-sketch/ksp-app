@@ -221,13 +221,13 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
   }, [remainingMs, phase]);
 
   return (
-    <div className="min-h-screen bg-[#1c1a17] text-[#faf7f2]">
+    <div className="min-h-screen bg-foreground text-foreground">
       <div className="mx-auto max-w-5xl space-y-8 px-4 py-10">
         <div className="flex items-baseline justify-between flex-wrap gap-2">
           <div>
-            <p className="editorial-kicker text-[#d6ded1]">Классный режим · ведущий</p><h1 className="editorial-display mt-3 text-4xl text-[#faf7f2]">{planTitle}</h1>
+            <p className="editorial-kicker text-[#d6ded1]">Классный режим · ведущий</p><h1 className="editorial-display mt-3 text-4xl text-foreground">{planTitle}</h1>
           </div>
-          <div className="text-right"><p className="font-mono text-xs font-bold uppercase tracking-[0.1em] text-[#b9cce8]">Код для входа</p><p className="mt-1 font-mono text-4xl font-bold tracking-[0.16em] text-[#fffdf8]">{code}</p></div>
+          <div className="text-right"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-[#b9cce8]">Код для входа</p><p className="mt-1 tabular-nums text-4xl font-bold tracking-[0.16em] text-[#fffdf8]">{code}</p></div>
         </div>
 
         {phase === "lobby" && (
@@ -296,9 +296,9 @@ function Lobby({
   }
   return (
       <div className="grid gap-5 md:grid-cols-2">
-      <div className="space-y-4 rounded-2xl border border-[#3a3631] bg-[#faf7f2] p-6 text-[#1c1a17]">
+      <div className="space-y-4 rounded-2xl border border-[#3a3631] bg-muted p-6 text-foreground">
         <h2 className="text-lg font-semibold">Как присоединиться</h2>
-        <ol className="text-sm space-y-2 text-slate-700 list-decimal list-inside">
+        <ol className="text-sm space-y-2 text-foreground list-decimal list-inside">
           <li>
             Откройте на телефоне{" "}
             <a href={joinUrl} className="editorial-link break-all">
@@ -306,11 +306,11 @@ function Lobby({
             </a>
           </li>
           <li>
-            Или зайдите на <span className="font-mono">/quiz/join</span> и введите код:
+            Или зайдите на <span className="tabular-nums">/quiz/join</span> и введите код:
           </li>
         </ol>
-        <div className="border-y border-border bg-[#f1ece4] p-6 text-center">
-          <p className="font-mono text-5xl font-bold tracking-widest text-primary">{code}</p>
+        <div className="border-y border-border bg-muted p-6 text-center">
+          <p className="tabular-nums text-5xl font-bold tracking-widest text-primary">{code}</p>
         </div>
         <Button variant="outline" onClick={copy} className="w-full">
           <Copy className="w-4 h-4" />
@@ -318,15 +318,15 @@ function Lobby({
         </Button>
       </div>
 
-      <div className="bg-surface rounded-xl border border-slate-200 p-6 space-y-3">
+      <div className="bg-surface rounded-xl border border-border p-6 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Users className="w-5 h-5" /> Участники: {students.length}
           </h2>
-          <p className="text-xs text-slate-500">{tasksCount} заданий</p>
+          <p className="text-xs text-muted-foreground">{tasksCount} заданий</p>
         </div>
         {students.length === 0 ? (
-          <div className="text-sm text-slate-400 py-8 text-center flex flex-col items-center gap-2">
+          <div className="text-sm text-muted-foreground py-8 text-center flex flex-col items-center gap-2">
             <Loader2 className="w-5 h-5 animate-spin" />
             Ждём учеников…
           </div>
@@ -335,9 +335,9 @@ function Lobby({
             {students.map((s) => (
               <li
                 key={s.studentId}
-                className="flex items-center gap-2 rounded-xl bg-[#f1ece4] px-3 py-2 text-sm"
+                className="flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-sm"
               >
-                <span className="size-2 rounded-full bg-[#2f5b4f]"></span>
+                <span className="size-2 rounded-full bg-success"></span>
                 {s.name}
               </li>
             ))}
@@ -376,16 +376,16 @@ function QuestionView({
 }) {
   const seconds = remainingMs !== null ? Math.ceil(remainingMs / 1000) : null;
   return (
-    <div className="space-y-5 rounded-2xl border border-[#3a3631] bg-[#faf7f2] p-6 text-[#1c1a17]">
-      <div className="flex items-center justify-between text-sm text-slate-500">
+    <div className="space-y-5 rounded-2xl border border-[#3a3631] bg-muted p-6 text-foreground">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           Вопрос {index + 1} из {total}
         </span>
         {seconds !== null && (
           <span
             className={
-              "font-mono text-3xl font-bold " +
-              (seconds <= 5 ? "text-primary animate-pulse" : "text-[#2f5b4f]")
+              "tabular-nums text-3xl font-bold " +
+              (seconds <= 5 ? "text-primary animate-pulse" : "text-success")
             }
           >
             {seconds}
@@ -420,12 +420,12 @@ function QuestionView({
         </div>
       )}
       {task.type === "FILL_BLANK" && (
-        <p className="text-xl text-slate-600 italic">{task.template}</p>
+        <p className="text-xl text-muted-foreground italic">{task.template}</p>
       )}
 
       <div className="flex items-center justify-between border-t border-border pt-4">
-        <p className="text-sm text-slate-500">
-          Ответили: <span className="font-bold text-slate-900">{answered}</span> из {connected}
+        <p className="text-sm text-muted-foreground">
+          Ответили: <span className="font-bold text-foreground">{answered}</span> из {connected}
         </p>
         <Button variant="outline" onClick={onReveal}>
           <Eye className="w-4 h-4" />
@@ -459,8 +459,8 @@ function RevealView({
 }) {
   return (
     <div className="space-y-4">
-      <div className="bg-surface rounded-xl border border-slate-200 p-6 space-y-3">
-        <p className="text-xs uppercase tracking-wider text-slate-400">
+      <div className="bg-surface rounded-xl border border-border p-6 space-y-3">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">
           Вопрос {index + 1} из {total}
         </p>
         <h2 className="text-2xl font-semibold">{task.question}</h2>
@@ -481,7 +481,7 @@ function RevealView({
 function EndView({ code, leaderboard }: { code: string; leaderboard: LiveLeaderboardEntry[] }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-primary p-8 text-center text-[#faf7f2]">
+      <div className="rounded-2xl bg-primary p-8 text-center text-foreground">
         <Trophy className="w-12 h-12 mx-auto mb-2" />
         <h2 className="text-3xl font-bold mb-1">Квиз завершён!</h2>
         <p className="text-violet-100">Поздравляем участников</p>
@@ -502,14 +502,14 @@ function EndView({ code, leaderboard }: { code: string; leaderboard: LiveLeaderb
 function Leaderboard({ entries }: { entries: LiveLeaderboardEntry[] }) {
   if (entries.length === 0) {
     return (
-      <div className="bg-surface rounded-xl border border-slate-200 p-6 text-center text-sm text-slate-400">
+      <div className="bg-surface rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">
         Пока нет ответов
       </div>
     );
   }
   return (
-    <div className="bg-surface rounded-xl border border-slate-200 overflow-hidden">
-      <div className="px-4 py-2 text-sm font-semibold border-b border-slate-100 bg-slate-50">
+    <div className="bg-surface rounded-xl border border-border overflow-hidden">
+      <div className="px-4 py-2 text-sm font-semibold border-b border-border bg-muted">
         Лидерборд
       </div>
       <ul>
@@ -521,16 +521,16 @@ function Leaderboard({ entries }: { entries: LiveLeaderboardEntry[] }) {
               (i === 0
                 ? "bg-amber-50"
                 : i === 1
-                  ? "bg-slate-50"
+                  ? "bg-muted"
                   : i === 2
                     ? "bg-orange-50"
                     : "")
             }
           >
-            <span className="w-6 text-right font-bold text-slate-500">{i + 1}.</span>
+            <span className="w-6 text-right font-bold text-muted-foreground">{i + 1}.</span>
             <span className="flex-1 truncate">{s.name}</span>
-            <span className="text-xs text-slate-400">{s.answered} отв.</span>
-            <span className="font-mono font-bold text-lg w-16 text-right">{s.score}</span>
+            <span className="text-xs text-muted-foreground">{s.answered} отв.</span>
+            <span className="tabular-nums font-bold text-lg w-16 text-right">{s.score}</span>
           </li>
         ))}
       </ul>

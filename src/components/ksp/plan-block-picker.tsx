@@ -111,16 +111,16 @@ export function PlanBlockPicker({
         {labels.trigger}
       </Button>
       {open && (
-        <section className="space-y-3 rounded-xl border border-[#cfc3b5] bg-[#f8f4ed] p-4" aria-label={`${labels.panel}: ${kindName}`}>
+        <section className="space-y-3 rounded-xl border border-border bg-muted p-4" aria-label={`${labels.panel}: ${kindName}`}>
           <div>
             <h4 className="text-sm font-semibold">{labels.panel}: {kindName}</h4>
-            <p className="mt-1 text-xs text-[#756b63]">{labels.own}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{labels.own}</p>
           </div>
           <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); void loadBlocks(); }}>
             <label className="sr-only" htmlFor={`reuse-search-${kind}`}>{labels.search}</label>
             <input
               id={`reuse-search-${kind}`}
-              className="min-w-0 flex-1 rounded-lg border border-[#cfc3b5] bg-white px-3 py-2 text-sm"
+              className="min-w-0 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={labels.search}
@@ -129,7 +129,7 @@ export function PlanBlockPicker({
             <Button type="submit" size="sm" variant="outline" disabled={loading}>{loading ? labels.loading : labels.searchButton}</Button>
           </form>
           {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
-          {searched && !loading && blocks.length === 0 && !error && <p className="text-xs text-[#756b63]">{labels.empty}</p>}
+          {searched && !loading && blocks.length === 0 && !error && <p className="text-xs text-muted-foreground">{labels.empty}</p>}
           <div className="max-h-[30rem] space-y-3 overflow-y-auto">
             {blocks.map((block) => {
               const mismatch = warnings(block);
@@ -138,14 +138,14 @@ export function PlanBlockPicker({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h5 className="text-sm font-semibold">{block.source.title}</h5>
-                      <p className="text-xs text-[#756b63]">{block.source.topic || (isKk ? "Тақырып көрсетілмеген" : "Тема не указана")} · {block.source.grade} {isKk ? "сынып" : "класс"} · {block.source.language.toUpperCase()}{block.source.stageKey ? ` · ${block.source.stageKey}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">{block.source.topic || (isKk ? "Тақырып көрсетілмеген" : "Тема не указана")} · {block.source.grade} {isKk ? "сынып" : "класс"} · {block.source.language.toUpperCase()}{block.source.stageKey ? ` · ${block.source.stageKey}` : ""}</p>
                     </div>
                   </div>
                   <details>
                     <summary className="cursor-pointer text-xs font-medium">{labels.preview}</summary>
-                    <p className="mt-2 whitespace-pre-wrap text-xs text-[#453d36]">{block.preview}</p>
-                    {block.kind === "stage" && <p className="mt-1 text-xs text-[#756b63]">{isKk ? `Тапсырмалар: ${block.payload.tasks?.length ?? 0}` : `Заданий: ${block.payload.tasks?.length ?? 0}`}</p>}
-                    {block.kind === "task" && block.payload.objectiveCode && <p className="mt-1 text-xs text-[#756b63]">{isKk ? "Оқу мақсаты" : "Цель обучения"}: {block.payload.objectiveCode}</p>}
+                    <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">{block.preview}</p>
+                    {block.kind === "stage" && <p className="mt-1 text-xs text-muted-foreground">{isKk ? `Тапсырмалар: ${block.payload.tasks?.length ?? 0}` : `Заданий: ${block.payload.tasks?.length ?? 0}`}</p>}
+                    {block.kind === "task" && block.payload.objectiveCode && <p className="mt-1 text-xs text-muted-foreground">{isKk ? "Оқу мақсаты" : "Цель обучения"}: {block.payload.objectiveCode}</p>}
                   </details>
                   {mismatch.length > 0 && <ul className="list-disc space-y-1 pl-5 text-xs text-amber-800" aria-label={isKk ? "Сәйкессіздік ескертулері" : "Предупреждения о несовпадении"}>{mismatch.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
                   <Button type="button" size="sm" onClick={() => { onUse(block); setOpen(false); }}>{labels.use}</Button>

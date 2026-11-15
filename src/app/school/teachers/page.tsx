@@ -33,7 +33,7 @@ export default async function TeachersPage() {
       <header className="mb-6">
         <p className="editorial-kicker">{labels.collective}</p>
         <h1 className="editorial-display mt-1 text-3xl">{labels.teachersTitle}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{members.length} {labels.membersCount}{member.role === "director" ? <> · {labels.schoolJoinCode}: <span className="font-mono">{school.code}</span></> : null}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{members.length} {labels.membersCount}{member.role === "director" ? <> · {labels.schoolJoinCode}: <span className="tabular-nums">{school.code}</span></> : null}</p>
       </header>
 
       {canManage && <section className="mb-6 rounded-xl border border-border bg-surface p-4"><h2 className="font-semibold">{labels.membersTitle}</h2><p className="mb-4 mt-1 text-sm text-muted-foreground">{labels.membersDescription}</p><SchoolMemberManager schoolId={schoolId} initialMembers={managerMembers} labels={labels} /></section>}

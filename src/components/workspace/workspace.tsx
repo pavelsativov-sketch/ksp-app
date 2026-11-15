@@ -110,7 +110,7 @@ function WindowTray() {
         onClick={minimizeAll}
         title="Свернуть все окна и показать рабочий стол"
         aria-label="Показать рабочий стол"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-300 hover:bg-white/10"
+        className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-white/10"
       >
         <LayoutGrid className="size-4" />
       </button>
@@ -121,7 +121,7 @@ function WindowTray() {
           return (
             <div
               key={w.id}
-              className={`group flex h-7 max-w-[170px] shrink-0 items-center rounded-md border text-xs ${active ? 'border-white/20 bg-white/10 text-white' : 'border-transparent text-slate-400 hover:bg-white/5'}`}
+              className={`group flex h-7 max-w-[170px] shrink-0 items-center rounded-md border text-xs ${active ? 'border-white/20 bg-white/10 text-white' : 'border-transparent text-muted-foreground hover:bg-white/5'}`}
             >
               <button
                 type="button"
@@ -139,7 +139,7 @@ function WindowTray() {
                 onClick={() => closeWindow(w.id)}
                 aria-label={`Закрыть «${w.title}» в панели окон`}
                 title="Закрыть"
-                className="mr-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-red-500/30 hover:text-white"
+                className="mr-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-red-500/30 hover:text-white"
               >
                 <X className="size-3" />
               </button>
@@ -153,7 +153,7 @@ function WindowTray() {
           onClick={closeAll}
           title="Закрыть все окна"
           aria-label="Закрыть все окна в панели окон"
-          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] text-slate-400 hover:bg-white/10 hover:text-white"
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] text-muted-foreground hover:bg-white/10 hover:text-white"
         >
           <Minus className="size-3 rotate-90" aria-hidden="true" /> Закрыть все
         </button>

@@ -43,7 +43,7 @@ export function CreateCodeForm() {
       <p className="font-medium">Сохраните код сейчас. Повторный просмотр недоступен.</p>
       <p className="text-xs">ID: {secret.id}</p>
       <label className="grid gap-2 text-sm">Новый код
-        <textarea readOnly value={secret.plaintext} autoComplete="off" spellCheck={false} className="w-full break-all rounded border border-border bg-background p-3 font-mono" onFocus={(event) => event.currentTarget.select()} />
+        <textarea readOnly value={secret.plaintext} autoComplete="off" spellCheck={false} className="w-full break-all rounded border border-border bg-background p-3 tabular-nums" onFocus={(event) => event.currentTarget.select()} />
       </label>
       <Button type="button" variant="outline" onClick={() => setSecret(null)}>Я сохранил код — скрыть</Button>
     </div>}
@@ -117,7 +117,7 @@ export function BulkCodesForm() {
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {secrets && <div className="space-y-3 rounded-md border border-border bg-muted p-4">
       <p className="font-medium">Сохраните коды сейчас. Повторный просмотр недоступен.</p>
-      <textarea readOnly value={secrets.map((s) => s.plaintext).join("\n")} rows={Math.min(20, secrets.length + 1)} autoComplete="off" spellCheck={false} className="w-full break-all rounded border border-border bg-background p-3 font-mono text-xs" onFocus={(event) => event.currentTarget.select()} />
+      <textarea readOnly value={secrets.map((s) => s.plaintext).join("\n")} rows={Math.min(20, secrets.length + 1)} autoComplete="off" spellCheck={false} className="w-full break-all rounded border border-border bg-background p-3 tabular-nums text-xs" onFocus={(event) => event.currentTarget.select()} />
       <Button type="button" variant="outline" onClick={() => setSecrets(null)}>Я сохранил коды — скрыть</Button>
     </div>}
   </div>;

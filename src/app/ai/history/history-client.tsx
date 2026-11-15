@@ -104,7 +104,7 @@ export function AiHistoryClient() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     {new Date(it.createdAt).toLocaleString(locale === "kk" ? "kk-KZ" : "ru-RU")} · {it.params.subject} · {it.params.grade} кл · {it.model} · v{it.schema_version}
                   </p>
-                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">paramsHash {it.paramsHash.slice(0, 12)} · source_ids {it.source_ids.length} · {it.rag.method ?? "—"} · {it.rag.chunkCount} фрагм.</p>
+                  <p className="mt-1 tabular-nums text-[11px] text-muted-foreground">paramsHash {it.paramsHash.slice(0, 12)} · source_ids {it.source_ids.length} · {it.rag.method ?? "—"} · {it.rag.chunkCount} фрагм.</p>
                   {it.rag.textbookTitle && <p className="mt-1 text-xs text-muted-foreground">{it.rag.textbookTitle}</p>}
                 </div>
                 <Button size="sm" variant="outline" onClick={() => void replay(it)} disabled={ai.aiLoading || replaying === it.id}>
@@ -120,16 +120,16 @@ export function AiHistoryClient() {
         <Dialog open onOpenChange={(open) => { if (!open) setPreview(null); }}>
           <DialogContent className="max-w-2xl rounded-xl bg-surface p-5 shadow-2xl" overlayClassName="overflow-y-auto p-4" aria-label={pe.aiDialog.aria}>
             <DialogTitle className="text-lg font-bold">Предпросмотр повтора — план не перезаписан</DialogTitle>
-            <DialogDescription className="mt-1 text-sm text-slate-600">{pe.aiDialog.desc} Закройте окно, чтобы отбросить — изменения не применяются автоматически.</DialogDescription>
+            <DialogDescription className="mt-1 text-sm text-muted-foreground">{pe.aiDialog.desc} Закройте окно, чтобы отбросить — изменения не применяются автоматически.</DialogDescription>
             <ul className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto">
               {preview.diff.slice(0, 20).map((d) => (
-                <li key={d.label} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+                <li key={d.label} className="rounded-md border border-border px-3 py-2 text-sm">
                   <p className="font-medium">{d.label} <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] ${d.filled ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{d.filled ? pe.aiDialog.tagNew : pe.aiDialog.tagOverwrite}</span></p>
-                  <p className="mt-1 text-slate-600">{d.preview}</p>
+                  <p className="mt-1 text-muted-foreground">{d.preview}</p>
                 </li>
               ))}
             </ul>
-            {preview.diff.length > 20 && <p className="mt-2 text-xs text-slate-500">…и ещё {preview.diff.length - 20}</p>}
+            {preview.diff.length > 20 && <p className="mt-2 text-xs text-muted-foreground">…и ещё {preview.diff.length - 20}</p>}
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setPreview(null)} type="button">{pe.aiDialog.reject}</Button>
               <Button onClick={() => setPreview(null)} type="button">Закрыть (без применения)</Button>

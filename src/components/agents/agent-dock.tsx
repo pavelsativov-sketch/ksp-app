@@ -120,12 +120,12 @@ export function AgentDock() {
         <header className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
           <Bot className="size-4 text-emerald-400" />
           <StatusDot status={status} />
-          <p className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-200">{task.title}</p>
+          <p className="min-w-0 flex-1 truncate text-xs font-semibold text-white">{task.title}</p>
           <RuntimeModeBadge mode={mode} />
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+            className="rounded p-1 text-muted-foreground hover:bg-white/10 hover:text-white"
             aria-label={expanded ? "Свернуть окно" : "Развернуть окно"}
           >
             {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -133,7 +133,7 @@ export function AgentDock() {
           <button
             type="button"
             onClick={() => { clearActiveAgentTask(); setExpanded(false); }}
-            className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+            className="rounded p-1 text-muted-foreground hover:bg-white/10 hover:text-white"
             aria-label="Закрыть окно"
           >
             <X className="size-4" />

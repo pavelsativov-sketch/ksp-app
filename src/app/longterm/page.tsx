@@ -83,10 +83,10 @@ function LongTermCard({ plan }: { plan: LongTermPlan }) {
       className="group flex min-h-[12rem] flex-col rounded-3xl border border-border bg-surface p-6 transition-[box-shadow,border-color] hover:shadow-card"
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-xs font-semibold uppercase tracking-[0.08em] text-cyan-foreground">
+        <p className="tabular-nums text-xs font-semibold uppercase tracking-[0.08em] text-cyan-foreground">
           {plan.subject}
         </p>
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="tabular-nums text-xs text-muted-foreground">
           {plan.grade} кл. · {plan.year}
         </span>
       </div>

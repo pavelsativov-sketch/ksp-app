@@ -71,7 +71,7 @@ export default function AgentHistoryPage() {
               {t.status === "running" && <Loader2 className="size-4 animate-spin text-amber-500" aria-label="выполняется" />}
               {t.status === "completed" && <CircleCheck className="size-4 text-emerald-500" aria-label="готово" />}
               {t.status === "failed" && <CircleX className="size-4 text-red-500" aria-label="ошибка" />}
-              {t.status === "stopped" && <CircleX className="size-4 text-slate-500" aria-label="остановлена" />}
+              {t.status === "stopped" && <CircleX className="size-4 text-muted-foreground" aria-label="остановлена" />}
               <Button variant="outline" size="sm" onClick={() => setActiveAgentTask(t.id, t.title)}>
                 Открыть сессию
               </Button>

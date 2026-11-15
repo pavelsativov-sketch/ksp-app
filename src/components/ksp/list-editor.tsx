@@ -19,13 +19,13 @@ export function ListEditor({ items, onChange, placeholder }: ListEditorProps) {
         {items.map((item, idx) => (
           <li
             key={idx}
-            className="flex items-start gap-2 bg-slate-50 rounded px-2 py-1"
+            className="flex items-start gap-2 bg-muted rounded px-2 py-1"
           >
-            <span className="text-slate-400 text-xs mt-1">•</span>
+            <span className="text-muted-foreground text-xs mt-1">•</span>
             <span className="flex-1 text-sm whitespace-pre-wrap">{item}</span>
             <button
               type="button"
-              className="text-slate-400 hover:text-red-600"
+              className="text-muted-foreground hover:text-red-600"
               onClick={() => onChange(items.filter((_, i) => i !== idx))}
               aria-label="Удалить"
             >

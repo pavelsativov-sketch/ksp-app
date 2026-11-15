@@ -15,7 +15,7 @@ import { downloadSheetImages } from "@/lib/handouts/sheet-export";
 import { docTitle, docTopic, SaveKitButton } from "@/components/kits/save-kit-button";
 
 /** Цветовая схема эталона РК (как в docx.ts): синие баннеры, персиковое облако, золото. */
-const NAVY = "text-[#2B2D83]";
+const NAVY = "text-ink";
 
 
 /**
@@ -89,7 +89,7 @@ function SettingsPanel({
       type="button"
       onClick={() => onChange({ ...settings, [settingKey]: !settings[settingKey] } as PreviewSettings)}
       className={`print:hidden rounded px-2 py-1 text-xs ${
-        settings[settingKey] ? "bg-[#2B2D83] text-white" : "bg-slate-200 text-slate-700"
+        settings[settingKey] ? "bg-ink text-white" : "bg-primary-soft text-foreground"
       }`}
     >
       {settings[settingKey] ? copy.show : copy.hide}
@@ -101,10 +101,10 @@ function SettingsPanel({
     <ToggleButton settingKey={key} label={label} />
   );
   return (
-    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 print:hidden">
+    <div className="border-b border-border bg-muted px-4 py-3 print:hidden">
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
         <div>
-          <label className="mb-1 block text-xs text-slate-600" htmlFor="preview-font-size">{copy.fontSize}</label>
+          <label className="mb-1 block text-xs text-muted-foreground" htmlFor="preview-font-size">{copy.fontSize}</label>
           <input
             id="preview-font-size"
             type="range"
@@ -114,10 +114,10 @@ function SettingsPanel({
             onChange={(e) => onChange({ ...settings, fontSize: Number(e.target.value) })}
             className="w-full"
           />
-          <span className="text-xs text-slate-500">{settings.fontSize}px</span>
+          <span className="text-xs text-muted-foreground">{settings.fontSize}px</span>
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-600" htmlFor="preview-spacing">{copy.spacing}</label>
+          <label className="mb-1 block text-xs text-muted-foreground" htmlFor="preview-spacing">{copy.spacing}</label>
           <input
             id="preview-spacing"
             type="range"
@@ -128,22 +128,22 @@ function SettingsPanel({
             onChange={(e) => onChange({ ...settings, spacing: Number(e.target.value) })}
             className="w-full"
           />
-          <span className="text-xs text-slate-500">{settings.spacing}×</span>
+          <span className="text-xs text-muted-foreground">{settings.spacing}×</span>
         </div>
         <div>
-          <span className="mb-1 block text-xs text-slate-600">{copy.answers}</span>
+          <span className="mb-1 block text-xs text-muted-foreground">{copy.answers}</span>
           {toggle("showAnswers", copy.answers)}
         </div>
         <div>
-          <span className="mb-1 block text-xs text-slate-600">{copy.descriptors}</span>
+          <span className="mb-1 block text-xs text-muted-foreground">{copy.descriptors}</span>
           {toggle("showDescriptors", copy.descriptors)}
         </div>
         <div>
-          <span className="mb-1 block text-xs text-slate-600">{copy.images}</span>
+          <span className="mb-1 block text-xs text-muted-foreground">{copy.images}</span>
           {toggle("showImages", copy.images)}
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-500">{copy.hint}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{copy.hint}</p>
     </div>
   );
 }
@@ -184,7 +184,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
       return (
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
           {(task.options ?? []).map((opt, i) => (
-            <div key={i} className="flex items-center gap-2 border border-slate-300 rounded px-2 py-1 text-sm bg-white">
+            <div key={i} className="flex items-center gap-2 border border-border rounded px-2 py-1 text-sm bg-white">
               <span className={`font-bold ${NAVY}`}>{optionLetter(i)})</span>
               <span>{opt}</span>
             </div>
@@ -194,8 +194,8 @@ function TaskBodyContent({ task, language, onLinkChange }: {
     case "true_false":
       return (
         <div className="mt-2 flex gap-4 text-sm">
-          <span className="border border-slate-300 rounded px-3 py-1">☐ {label.trueLabel}</span>
-          <span className="border border-slate-300 rounded px-3 py-1">☐ {label.falseLabel}</span>
+          <span className="border border-border rounded px-3 py-1">☐ {label.trueLabel}</span>
+          <span className="border border-border rounded px-3 py-1">☐ {label.falseLabel}</span>
         </div>
       );
     case "match": {
@@ -205,10 +205,10 @@ function TaskBodyContent({ task, language, onLinkChange }: {
         <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           {options.map((opt, i) => (
             <div key={i} className="contents">
-              <div className="border border-slate-300 rounded px-2 py-1 bg-white">
+              <div className="border border-border rounded px-2 py-1 bg-white">
                 <b className={NAVY}>{i + 1}.</b> {opt}
               </div>
-              <div className="border border-slate-300 rounded px-2 py-1 bg-white">
+              <div className="border border-border rounded px-2 py-1 bg-white">
                 <b className={NAVY}>{optionLetter(i)})</b> {pairs[i] ?? ""}
               </div>
             </div>
@@ -219,13 +219,13 @@ function TaskBodyContent({ task, language, onLinkChange }: {
     case "fill_bank":
       return (
         <>
-          <div className="mt-2 rounded border border-[#C77F42] bg-[#FFF2CC] px-3 py-2 text-sm">
+          <div className="mt-2 rounded border border-border bg-primary-soft px-3 py-2 text-sm">
             <b className={NAVY}>{label.wordBank}</b>
             {(task.wordBank ?? []).join("  ·  ")}
           </div>
           <div className="mt-2 space-y-2">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="border-b-2 border-dashed border-slate-400 h-6" />
+              <div key={i} className="border-b-2 border-dashed border-border h-6" />
             ))}
           </div>
         </>
@@ -235,22 +235,22 @@ function TaskBodyContent({ task, language, onLinkChange }: {
       const groups = task.groups ?? (language === "kz" ? ["1-топ", "2-топ"] : ["Группа 1", "Группа 2"]);
       return (
         <>
-          <div className="mt-2 rounded border border-[#C77F42] bg-[#FFF2CC] px-3 py-2 text-sm">
+          <div className="mt-2 rounded border border-border bg-primary-soft px-3 py-2 text-sm">
             <b className={NAVY}>{label.sortWords}</b>
             {items.map((w, i) => `${i + 1}. ${w}`).join("  •  ")}
           </div>
           <table className="mt-2 w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th className="border-2 border-[#2B2D83] bg-[#3D6DB5] text-white px-2 py-1 text-left">{groups[0]}</th>
-                <th className="border-2 border-[#2B2D83] bg-[#3D6DB5] text-white px-2 py-1 text-left">{groups[1]}</th>
+                <th className="border-2 border-ink bg-ink text-white px-2 py-1 text-left">{groups[0]}</th>
+                <th className="border-2 border-ink bg-ink text-white px-2 py-1 text-left">{groups[1]}</th>
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: Math.max(3, Math.ceil(items.length / 2)) }).map((_, i) => (
                 <tr key={i}>
-                  <td className="border-2 border-[#2B2D83] px-2 py-1 h-7 text-slate-400 text-xs">&nbsp;</td>
-                  <td className="border-2 border-[#2B2D83] px-2 py-1 h-7 text-slate-400 text-xs">&nbsp;</td>
+                  <td className="border-2 border-ink px-2 py-1 h-7 text-muted-foreground text-xs">&nbsp;</td>
+                  <td className="border-2 border-ink px-2 py-1 h-7 text-muted-foreground text-xs">&nbsp;</td>
                 </tr>
               ))}
             </tbody>
@@ -263,26 +263,26 @@ function TaskBodyContent({ task, language, onLinkChange }: {
         <>
           <div className="mt-2 space-y-1.5">
             {(task.options ?? []).map((opt, i) => (
-              <div key={i} className="flex items-center gap-2 border border-slate-300 rounded px-2 py-1 text-sm bg-white">
+              <div key={i} className="flex items-center gap-2 border border-border rounded px-2 py-1 text-sm bg-white">
                 <span className={`font-bold ${NAVY}`}>☐</span>
                 <span>{opt}</span>
               </div>
             ))}
           </div>
-          <div className="mt-2 border-b-2 border-dashed border-slate-400 h-6 text-xs text-slate-500">{label.ownExample}</div>
+          <div className="mt-2 border-b-2 border-dashed border-border h-6 text-xs text-muted-foreground">{label.ownExample}</div>
         </>
       );
     case "case_study":
       return (
         <>
-          <div className="mt-2 rounded-2xl border-2 border-[#C77F42] bg-[#F6C89F] px-4 py-3 text-sm leading-relaxed">
+          <div className="mt-2 rounded-2xl border-2 border-border bg-[#F6C89F] px-4 py-3 text-sm leading-relaxed">
           <b className="text-[#7A3E12]">{label.caseLabel}</b>
             {task.situation}
           </div>
           <div className="mt-2 space-y-2 text-sm">
-            <div className="border-b-2 border-dashed border-slate-400 h-6 text-xs text-slate-500">{label.problem}</div>
-            <div className="border-b-2 border-dashed border-slate-400 h-6 text-xs text-slate-500">{label.solution}</div>
-            <div className="border-b-2 border-dashed border-slate-400 h-6 text-xs text-slate-500">{label.why}</div>
+            <div className="border-b-2 border-dashed border-border h-6 text-xs text-muted-foreground">{label.problem}</div>
+            <div className="border-b-2 border-dashed border-border h-6 text-xs text-muted-foreground">{label.solution}</div>
+            <div className="border-b-2 border-dashed border-border h-6 text-xs text-muted-foreground">{label.why}</div>
           </div>
         </>
       );
@@ -293,15 +293,15 @@ function TaskBodyContent({ task, language, onLinkChange }: {
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
             <tr>
-              <th className="border-2 border-[#2B2D83] bg-[#D9D9D9] px-2 py-1 text-left">{task.tableHeaders?.[0] ?? (language === "kz" ? "Қате" : "Что сделано неправильно?")}</th>
-              <th className="border-2 border-[#2B2D83] bg-[#D9D9D9] px-2 py-1 text-left">{task.tableHeaders?.[1] ?? (language === "kz" ? "Түзету" : "Как исправить?")}</th>
+              <th className="border-2 border-ink bg-muted px-2 py-1 text-left">{task.tableHeaders?.[0] ?? (language === "kz" ? "Қате" : "Что сделано неправильно?")}</th>
+              <th className="border-2 border-ink bg-muted px-2 py-1 text-left">{task.tableHeaders?.[1] ?? (language === "kz" ? "Түзету" : "Как исправить?")}</th>
             </tr>
           </thead>
           <tbody>
             {Array.from({ length: resolveTableRows(task.tableRows) }).map((_, i) => (
               <tr key={i}>
-                <td className="border-2 border-[#2B2D83] px-2 py-1 h-7">&nbsp;</td>
-                <td className="border-2 border-[#2B2D83] px-2 py-1 h-7">&nbsp;</td>
+                <td className="border-2 border-ink px-2 py-1 h-7">&nbsp;</td>
+                <td className="border-2 border-ink px-2 py-1 h-7">&nbsp;</td>
               </tr>
             ))}
           </tbody>
@@ -310,22 +310,22 @@ function TaskBodyContent({ task, language, onLinkChange }: {
     case "scenario_fix":
       return (
         <>
-          <div className="mt-2 rounded-2xl border-2 border-[#C77F42] bg-[#F6C89F] px-4 py-3 text-sm leading-relaxed">
+          <div className="mt-2 rounded-2xl border-2 border-border bg-[#F6C89F] px-4 py-3 text-sm leading-relaxed">
             {task.situation}
           </div>
-          <p className="mt-2 text-xs text-slate-600">{language === "kz" ? `${resolveErrorsCount(task.errorsCount)} қатені тауып, «Қате → Түзету» жолдарын толтыр.` : `Ошибок найти: ${resolveErrorsCount(task.errorsCount)} — заполни строки «Ошибка → Исправление».`}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{language === "kz" ? `${resolveErrorsCount(task.errorsCount)} қатені тауып, «Қате → Түзету» жолдарын толтыр.` : `Ошибок найти: ${resolveErrorsCount(task.errorsCount)} — заполни строки «Ошибка → Исправление».`}</p>
           <table className="mt-1 w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th className="border-2 border-[#2B2D83] bg-[#D9D9D9] px-2 py-1 text-left">{language === "kz" ? "Қате" : "Ошибка"}</th>
-                <th className="border-2 border-[#2B2D83] bg-[#D9D9D9] px-2 py-1 text-left">{language === "kz" ? "Түзету" : "Исправление"}</th>
+                <th className="border-2 border-ink bg-muted px-2 py-1 text-left">{language === "kz" ? "Қате" : "Ошибка"}</th>
+                <th className="border-2 border-ink bg-muted px-2 py-1 text-left">{language === "kz" ? "Түзету" : "Исправление"}</th>
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: resolveErrorsCount(task.errorsCount) }).map((_, i) => (
                 <tr key={i}>
-                  <td className="border-2 border-[#2B2D83] px-2 py-1 h-7">&nbsp;</td>
-                  <td className="border-2 border-[#2B2D83] px-2 py-1 h-7">&nbsp;</td>
+                  <td className="border-2 border-ink px-2 py-1 h-7">&nbsp;</td>
+                  <td className="border-2 border-ink px-2 py-1 h-7">&nbsp;</td>
                 </tr>
               ))}
             </tbody>
@@ -336,7 +336,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
       return (
         <div className="mt-2 flex flex-wrap gap-2">
           {(task.choices ?? []).map((c, i) => (
-            <span key={i} className="px-3 py-1 rounded-lg bg-[#3D6DB5] text-white text-sm font-medium shadow-sm">
+            <span key={i} className="px-3 py-1 rounded-lg bg-ink text-white text-sm font-medium shadow-sm">
               ☐ {c}
             </span>
           ))}
@@ -348,7 +348,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
           {["😊", "😐", "🙁"].map((smile, i) => (
             <div key={i} className="text-center">
               <div className="text-3xl">{smile}</div>
-              <div className="text-xs mt-1 border border-slate-300 rounded px-2 py-0.5 bg-white">
+              <div className="text-xs mt-1 border border-border rounded px-2 py-0.5 bg-white">
                 ☐ {task.reflectionOptions?.[i] ?? (language === "kz" ? ["Барлығын түсіндім", "Сұрағым бар", "Көмек керек"][i] : ["Всё понял(а)", "Есть сомнения", "Нужна помощь"][i])}
               </div>
             </div>
@@ -359,7 +359,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
       return (
         <div className="mt-2 flex items-start gap-3">
           {/* Рамка под QR-код: печатается, ученик сканирует с листа */}
-          <div className="w-20 h-20 shrink-0 border-2 border-dashed border-[#2B2D83] rounded flex items-center justify-center text-[10px] text-center text-slate-500 bg-white">
+          <div className="w-20 h-20 shrink-0 border-2 border-dashed border-ink rounded flex items-center justify-center text-[10px] text-center text-muted-foreground bg-white">
             QR-код{task.link ? "" : ` ${label.qrSuffix}`}
           </div>
           <div className="text-sm flex-1">
@@ -371,7 +371,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
                   value={task.link ?? ""}
                   onChange={(e) => onLinkChange(e.target.value)}
                   placeholder={label.linkPlaceholder}
-                  className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs print:hidden"
+                  className="mt-1 w-full rounded border border-border px-2 py-1 text-xs print:hidden"
                 />
                 <span className="mt-1 hidden break-all print:block">
                   {task.link || label.linkEmpty}
@@ -382,13 +382,13 @@ function TaskBodyContent({ task, language, onLinkChange }: {
                 <b className={NAVY}>{label.link}</b> {task.link ?? label.linkEmpty}
               </p>
             )}
-            <div className="mt-1 border-b-2 border-dashed border-slate-400 h-6 text-xs text-slate-500">{label.result}</div>
+            <div className="mt-1 border-b-2 border-dashed border-border h-6 text-xs text-muted-foreground">{label.result}</div>
           </div>
         </div>
       );
     case "creative":
       return (
-        <div className="mt-2 h-36 rounded border-2 border-dashed border-[#2B2D83] bg-white flex items-center justify-center text-xs text-slate-400">
+        <div className="mt-2 h-36 rounded border-2 border-dashed border-ink bg-white flex items-center justify-center text-xs text-muted-foreground">
           {label.workField}
         </div>
       );
@@ -400,7 +400,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
       const grid = buildWordSearchGrid(task.searchWords ?? []);
       return (
         <>
-          <div className="mt-2 inline-block border border-[#2B2D83]">
+          <div className="mt-2 inline-block border border-ink">
             <table className="border-collapse">
               <tbody>
                 {grid.cells.map((row, r) => (
@@ -408,7 +408,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
                     {row.map((letter, c) => (
                       <td
                         key={c}
-                        className="w-7 h-7 border border-slate-400 text-center align-middle text-sm font-medium"
+                        className="w-7 h-7 border border-border text-center align-middle text-sm font-medium"
                       >
                         {letter}
                       </td>
@@ -418,7 +418,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-xs text-slate-600">
+          <p className="mt-2 text-xs text-muted-foreground">
             {language === "kz" ? "Табылатын сөздер:" : "Найдите слова:"}{" "}
             {grid.placed.join(" · ")}
           </p>
@@ -436,10 +436,10 @@ function TaskBodyContent({ task, language, onLinkChange }: {
       const items = task.orderItems ?? [];
       return (
         <>
-          <div className="mt-2 rounded border border-[#C77F42] bg-[#FFF2CC] px-3 py-2 text-sm">
+          <div className="mt-2 rounded border border-border bg-primary-soft px-3 py-2 text-sm">
             {items.map((item, i) => (
               <div key={i} className="flex gap-2 py-0.5">
-                <span className="w-6 shrink-0 rounded border border-slate-400 bg-white text-center text-xs leading-5">
+                <span className="w-6 shrink-0 rounded border border-border bg-white text-center text-xs leading-5">
                   {i + 1}
                 </span>
                 <span>{item}</span>
@@ -448,7 +448,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
           </div>
           <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(0,1fr))] gap-1">
             {Array.from({ length: Math.max(4, items.length) }).map((_, i) => (
-              <div key={i} className="border-b-2 border-dashed border-slate-400 h-6 text-xs text-slate-500">
+              <div key={i} className="border-b-2 border-dashed border-border h-6 text-xs text-muted-foreground">
                 {i + 1}.
               </div>
             ))}
@@ -462,16 +462,16 @@ function TaskBodyContent({ task, language, onLinkChange }: {
         <>
           <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-sm">
             {items.map((item, i) => (
-              <div key={i} className="flex items-center gap-2 border border-slate-300 rounded px-2 py-1 bg-white">
+              <div key={i} className="flex items-center gap-2 border border-border rounded px-2 py-1 bg-white">
                 <span className={`font-bold ${NAVY}`}>☐</span>
                 <span>{item}</span>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs text-slate-600">
+          <p className="mt-2 text-xs text-muted-foreground">
             {language === "kz" ? "Қай элемент артық? Неліктен?" : "Какой элемент лишний? Почему?"}
           </p>
-          <div className="border-b-2 border-dashed border-slate-400 h-6" />
+          <div className="border-b-2 border-dashed border-border h-6" />
         </>
       );
     }
@@ -480,7 +480,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
       const items = task.categoryItems ?? [];
       return (
         <>
-          <div className="mt-2 rounded border border-[#C77F42] bg-[#FFF2CC] px-3 py-2 text-sm">
+          <div className="mt-2 rounded border border-border bg-primary-soft px-3 py-2 text-sm">
             <b className={NAVY}>{language === "kz" ? "Сипаттамалар:" : "Элементы:"}</b>{" "}
             {items.join("  ·  ")}
           </div>
@@ -488,12 +488,12 @@ function TaskBodyContent({ task, language, onLinkChange }: {
             <thead>
               <tr>
                 {categories.map((category) => (
-                  <th key={category} className="border-2 border-[#2B2D83] bg-[#3D6DB5] text-white px-2 py-1 text-left">
+                  <th key={category} className="border-2 border-ink bg-ink text-white px-2 py-1 text-left">
                     {category}
                   </th>
                 ))}
                 {categories.length === 0 && (
-                  <th className="border-2 border-[#2B2D83] bg-[#3D6DB5] text-white px-2 py-1 text-left">
+                  <th className="border-2 border-ink bg-ink text-white px-2 py-1 text-left">
                     {language === "kz" ? "Категория" : "Категория"}
                   </th>
                 )}
@@ -503,7 +503,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
               {Array.from({ length: Math.max(3, Math.ceil(items.length / Math.max(1, categories.length))) }).map((_, i) => (
                 <tr key={i}>
                   {(categories.length > 0 ? categories : [""]).map((category, c) => (
-                    <td key={`${category}-${c}`} className="border-2 border-[#2B2D83] px-2 py-1 h-7">&nbsp;</td>
+                    <td key={`${category}-${c}`} className="border-2 border-ink px-2 py-1 h-7">&nbsp;</td>
                   ))}
                 </tr>
               ))}
@@ -565,14 +565,14 @@ function WorksheetView({
       />
 
       {(settings.showAnswers || settings.showDescriptors) && (
-      <details className="mt-8 border border-slate-300 rounded-lg overflow-hidden group print:hidden">
-        <summary className="bg-slate-50 text-slate-800 px-4 py-2 font-bold text-sm cursor-pointer hover:bg-slate-100">
+      <details className="mt-8 border border-border rounded-lg overflow-hidden group print:hidden">
+        <summary className="bg-muted text-foreground px-4 py-2 font-bold text-sm cursor-pointer hover:bg-muted">
           {copy.answerDetails}
         </summary>
         <div className="p-4 bg-white space-y-4">
           {settings.showAnswers && (
           <div>
-          <h4 className="font-bold text-sm mb-2 text-[#2B2D83]">{copy.answers}</h4>
+          <h4 className="font-bold text-sm mb-2 text-ink">{copy.answers}</h4>
             <div className="text-sm space-y-1">
               {worksheetAnswerLines(sheet.tasks, contentLanguage).map((line, i) => (
                 <div key={i}>{line}</div>
@@ -582,20 +582,20 @@ function WorksheetView({
           )}
           {settings.showDescriptors && (
           <div>
-            <h4 className="font-bold text-sm mb-2 text-[#2B2D83]">{copy.descriptors}</h4>
+            <h4 className="font-bold text-sm mb-2 text-ink">{copy.descriptors}</h4>
             <table className="w-full text-xs text-left border-collapse">
               <thead>
-                <tr className="bg-slate-100 border-b border-slate-300">
-                  <th className="p-2 font-bold border-r border-slate-300">{kazakh ? "Тапсырма" : h.thTask}</th>
-                  <th className="p-2 font-bold border-r border-slate-300">{kazakh ? "Критерий" : h.thCriterion}</th>
+                <tr className="bg-muted border-b border-border">
+                  <th className="p-2 font-bold border-r border-border">{kazakh ? "Тапсырма" : h.thTask}</th>
+                  <th className="p-2 font-bold border-r border-border">{kazakh ? "Критерий" : h.thCriterion}</th>
                   <th className="p-2 font-bold">{kazakh ? "Дескриптор" : h.thDescriptor}</th>
                 </tr>
               </thead>
               <tbody>
                 {sheet.tasks.map((task, i) => (
-                  <tr key={i} className="border-b border-slate-200">
-                    <td className="p-2 border-r border-slate-300">{copy.taskN}{i + 1} ({task.points}б)</td>
-                    <td className="p-2 border-r border-slate-300">{task.criterion}</td>
+                  <tr key={i} className="border-b border-border">
+                    <td className="p-2 border-r border-border">{copy.taskN}{i + 1} ({task.points}б)</td>
+                    <td className="p-2 border-r border-border">{task.criterion}</td>
                     <td className="p-2">{task.descriptor}</td>
                   </tr>
                 ))}
@@ -657,7 +657,7 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
           : "ИИ сейчас недоступен, поэтому слова взяты из темы урока. Замените их на термины из учебника, если это нужно."} />
       )}
       <h3 className="text-lg font-bold text-center">{puzzle.title}</h3>
-      {puzzle.intro && <p className="mt-1 text-sm text-center text-slate-600">{puzzle.intro}</p>}
+      {puzzle.intro && <p className="mt-1 text-sm text-center text-muted-foreground">{puzzle.intro}</p>}
       <div className="mt-4 overflow-x-auto">
         <table className="border-collapse mx-auto">
           <tbody>
@@ -666,10 +666,10 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
                 {row.map((cell, c) => (
                   <td
                     key={c}
-                    className={`w-7 h-7 border text-center text-sm font-bold ${cell ? "border-[#2B2D83] bg-white" : "border-transparent"}`}
+                    className={`w-7 h-7 border text-center text-sm font-bold ${cell ? "border-ink bg-white" : "border-transparent"}`}
                   >
                     {cell && filled.has(`${r},${c}`) ? (
-                      <span className="text-[10px] text-slate-500">{puzzle.numbers.find((n) => n.row === r && n.col === c)?.number}</span>
+                      <span className="text-[10px] text-muted-foreground">{puzzle.numbers.find((n) => n.row === r && n.col === c)?.number}</span>
                     ) : (
                       ""
                     )}
@@ -682,7 +682,7 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
       </div>
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <div>
-          <div className="font-bold mb-1 text-[#2B2D83]">{label.across}</div>
+          <div className="font-bold mb-1 text-ink">{label.across}</div>
           <ol className="list-decimal list-inside space-y-1">
             {puzzle.placed.filter((w) => w.direction === "across").map((w) => (
               <li key={`a${w.number}`}>
@@ -692,7 +692,7 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
           </ol>
         </div>
         <div>
-          <div className="font-bold mb-1 text-[#2B2D83]">{label.down}</div>
+          <div className="font-bold mb-1 text-ink">{label.down}</div>
           <ol className="list-decimal list-inside space-y-1">
             {puzzle.placed.filter((w) => w.direction === "down").map((w) => (
               <li key={`d${w.number}`}>
@@ -703,12 +703,12 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
         </div>
       </div>
       {puzzle.unplaced.length > 0 && (
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-muted-foreground">
           {label.unplaced} {puzzle.unplaced.map((w) => w.word).join(", ")}
         </p>
       )}
-      <details className="mt-4 border border-slate-300 rounded-lg overflow-hidden print:hidden">
-        <summary className="bg-slate-50 text-slate-800 px-4 py-2 font-bold text-sm cursor-pointer hover:bg-slate-100">
+      <details className="mt-4 border border-border rounded-lg overflow-hidden print:hidden">
+        <summary className="bg-muted text-foreground px-4 py-2 font-bold text-sm cursor-pointer hover:bg-muted">
           {label.answers}
         </summary>
         <div className="p-4 bg-white text-sm space-y-1">
@@ -888,7 +888,7 @@ export function HandoutPreview({
         overlayClassName="overflow-y-auto p-4"
         aria-label={h.previewTitle}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-200 bg-[#6d3bea] text-white rounded-t-xl print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border bg-[#6d3bea] text-white rounded-t-xl print:hidden">
           <DialogTitle className="font-bold text-sm sm:text-base">{title ?? h.previewTitle}</DialogTitle>
           <div className="flex flex-wrap items-center justify-end gap-2 [&>*]:whitespace-nowrap">
             <button
@@ -923,7 +923,7 @@ export function HandoutPreview({
               type="button"
               onClick={() => downloadDoc(true)}
               disabled={printing}
-              className="inline-flex items-center gap-1.5 rounded-md bg-white text-[#2B2D83] px-3 py-1.5 text-sm font-medium hover:bg-violet-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md bg-white text-ink px-3 py-1.5 text-sm font-medium hover:bg-violet-100 disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
               {printing ? h.building : h.teacherBtn}
@@ -999,7 +999,7 @@ export function HandoutPreview({
           {doc.kind === "flashcards" && <FlashcardsView set={doc} />}
           {doc.kind === "crossword" && <CrosswordView puzzle={doc} />}
           {extraDoc && (
-            <div className="mt-8 border-t-2 border-dashed border-slate-300 pt-6">
+            <div className="mt-8 border-t-2 border-dashed border-border pt-6">
               {extraDoc.kind === "worksheet" && (
                 <WorksheetView
                   sheet={extraDoc}

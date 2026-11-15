@@ -64,7 +64,7 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 id="quality-title" className="text-xl font-semibold">{isKk ? `Мазмұн тексерістері: ${score}%` : `Автоматические проверки содержания: ${score}%`}</h2>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             {fails === 0
               ? (isKk ? "Байланыстарда айқын қате табылған жоқ. Сары ұсыныстарды нақты сабаққа сай қарап шығыңыз." : "Явных ошибок связей нет. Просмотрите предупреждения с учётом своего урока.")
               : isKk ? `Түзетуге болатын байланыс қатесі: ${fails}. Қажетті өріске өтіп, шешімді мұғалім қабылдайды.` : `Найдены ошибки связей: ${fails}. Перейдите к полю; решение по содержанию остаётся за учителем.`}
@@ -93,7 +93,7 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
           const href = `/plans/${planId}/edit?tab=${item.whereTab}${item.whereAnchor ? `#${item.whereAnchor}` : ""}`;
           const hasDetails = Boolean(item.details);
           return (
-            <li key={item.id} data-testid={`quality-item-${item.id}`} data-status={item.status} className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm">
+            <li key={item.id} data-testid={`quality-item-${item.id}`} data-status={item.status} className="flex items-start gap-2.5 rounded-lg border border-border px-3 py-2.5 text-sm">
               <Icon className={`mt-0.5 size-4 shrink-0 ${color[item.status]}`} aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="font-medium leading-tight">
@@ -104,16 +104,16 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
                     </span>
                   )}
                 </p>
-                <p className="text-slate-600">{hint}</p>
+                <p className="text-muted-foreground">{hint}</p>
                 {hasDetails && (
                   <details className="mt-1 group">
-                    <summary className="cursor-pointer list-none text-xs font-medium text-slate-700 underline decoration-dotted underline-offset-2 marker:hidden hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2B2D83]">
+                    <summary className="cursor-pointer list-none text-xs font-medium text-foreground underline decoration-dotted underline-offset-2 marker:hidden hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
                       <span className="inline-flex items-center gap-1">
                         {isKk ? "Қалай түзетуге болады" : "Как исправить"}
                         <span aria-hidden className="transition group-open:rotate-180">▾</span>
                       </span>
                     </summary>
-                    <p className="mt-1.5 rounded-md bg-slate-50 px-2.5 py-2 text-xs leading-relaxed text-slate-700">{item.details}</p>
+                    <p className="mt-1.5 rounded-md bg-muted px-2.5 py-2 text-xs leading-relaxed text-foreground">{item.details}</p>
                     {item.nonNormative && (
                       <p className="mt-1 text-[11px] italic text-amber-800">{isKk ? "Бұл тексеріс ресми норма емес — шешімді мұғалім қабылдайды." : "Эта проверка — не норматив: решение принимает учитель."}</p>
                     )}
@@ -124,7 +124,7 @@ export function QualityGate({ content, planId, language = "ru" }: { content: Par
                     href={href}
                     aria-label={`${isKk ? "Түзету" : "Перейти к исправлению"}: ${label}`}
                     data-testid={`quality-link-${item.id}`}
-                    className="mt-1 inline-flex rounded-sm text-xs font-medium text-[#2B2D83] underline underline-offset-2 hover:text-[#1a1c6b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2B2D83]"
+                    className="mt-1 inline-flex rounded-sm text-xs font-medium text-ink underline underline-offset-2 hover:text-[#1a1c6b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                   >
                     {whereText} →
                   </Link>

@@ -228,7 +228,7 @@ export function TextbookPicker({
 
   if (loading && items.length === 0 && armanCatalog.length === 0) {
     return (
-      <div className="text-xs text-slate-500 flex items-center gap-1">
+      <div className="text-xs text-muted-foreground flex items-center gap-1">
         <Loader2 className="w-3 h-3 animate-spin" />
         Загрузка учебников и каталога Арман-ПВ…
       </div>
@@ -237,7 +237,7 @@ export function TextbookPicker({
 
   if (readyTextbooks.length === 0 && availableArmanCatalog.length === 0) {
     return (
-      <div className="text-xs text-slate-500">
+      <div className="text-xs text-muted-foreground">
         Нет загруженных учебников.{" "}
         <Link href="/textbooks" className="text-violet-600 hover:underline">
           Каталог Арман-ПВ и загрузка PDF
@@ -250,7 +250,7 @@ export function TextbookPicker({
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <BookOpen className="w-4 h-4 text-slate-400 shrink-0" />
+        <BookOpen className="w-4 h-4 text-muted-foreground shrink-0" />
         <Select
           value={selectValue}
           onValueChange={(v) => {

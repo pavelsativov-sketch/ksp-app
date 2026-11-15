@@ -76,22 +76,22 @@ export function GlossaryButton({
       </Button>
       {err && <span className="text-xs text-red-600">{err}</span>}
       {open && !loading && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-slate-200 bg-surface p-3 shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-border bg-surface p-3 shadow-lg">
           <p className="text-sm font-medium">Глоссарий по теме</p>
           {pairs.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500">Переводы не получены. Проверьте термины и попробуйте ещё раз.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Переводы не получены. Проверьте термины и попробуйте ещё раз.</p>
           ) : (
             <>
               <table className="mt-2 w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left text-slate-500">
+                  <tr className="text-left text-muted-foreground">
                     <th className="border-b p-1">RU</th>
                     <th className="border-b p-1">KK</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pairs.map((p, i) => (
-                    <tr key={i} className="border-b border-slate-100">
+                    <tr key={i} className="border-b border-border">
                       <td className="p-1">{p.ru}</td>
                       <td className="p-1">{p.kk}</td>
                     </tr>

@@ -170,7 +170,7 @@ export function SchoolApprovalPanel({ schoolId, planId, currentUpdatedAt, locale
             {mode === "reviewer" && (
               <>
                 <p className="rounded-md border border-border bg-muted/50 p-3 text-sm">{copy.snapshotNotice}</p>
-                <p className="break-all font-mono text-xs text-muted-foreground">{copy.snapshotHash}: {currentCycle.snapshot_hash}</p>
+                <p className="break-all tabular-nums text-xs text-muted-foreground">{copy.snapshotHash}: {currentCycle.snapshot_hash}</p>
                 <section aria-labelledby="approval-snapshot-title" className="space-y-4 rounded-xl border border-border p-4">
                   <h3 id="approval-snapshot-title" className="text-lg font-semibold">{currentCycle.snapshot.title}</h3>
                   <p className="text-sm">{copy.topic}: {currentCycle.snapshot.content.topic}</p>
@@ -178,7 +178,7 @@ export function SchoolApprovalPanel({ schoolId, planId, currentUpdatedAt, locale
                   <div>
                     <h4 className="font-semibold">{copy.objectives}</h4>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                      {(currentCycle.snapshot.content.learningObjectives ?? []).map((item, index) => <li key={`${item.code}-${index}`}><span className="font-mono">{item.code}</span> — {item.text}</li>)}
+                      {(currentCycle.snapshot.content.learningObjectives ?? []).map((item, index) => <li key={`${item.code}-${index}`}><span className="tabular-nums">{item.code}</span> — {item.text}</li>)}
                     </ul>
                   </div>
                   {!!currentCycle.snapshot.content.lessonObjectives?.length && <div>

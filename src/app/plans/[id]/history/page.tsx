@@ -25,13 +25,13 @@ export default async function PlanHistoryPage({
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-10 px-4 py-12 md:px-6 md:py-16">
-      <header className="border-b border-[#ddd5cb] pb-7">
+      <header className="border-b border-border pb-7">
         <p className="editorial-kicker">История изменений</p>
         <h1 className="editorial-display mt-3 text-5xl">{history.current.title}</h1>
-        <p className="mt-3 text-sm text-[#5f5751]">
+        <p className="mt-3 text-sm text-muted-foreground">
           Последние 30 снимков плана. Восстановленная версия не меняет видимость плана.
         </p>
-        <p className="mt-1 text-xs text-[#745329]">Время снимков отображается в часовом поясе устройства.</p>
+        <p className="mt-1 text-xs text-ink">Время снимков отображается в часовом поясе устройства.</p>
         <p className="mt-3">
           <Link href={`/plans/${history.current.id}`} className="text-sm underline underline-offset-4">
             ← Вернуться к плану

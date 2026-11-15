@@ -83,7 +83,7 @@ export function ModerationQueue({ items }: { items: ModerationQueue }) {
             <tr key={item.id} className="border-b border-border">
               <td className="p-3">
                 <p className="font-medium">{item.planTitle}</p>
-                <p className="font-mono text-xs text-muted-foreground">{item.planId}</p>
+                <p className="tabular-nums text-xs text-muted-foreground">{item.planId}</p>
                 {item.hidden ? (
                   <p className="text-xs font-medium text-amber-700">Скрыт</p>
                 ) : (
@@ -94,7 +94,7 @@ export function ModerationQueue({ items }: { items: ModerationQueue }) {
                 <p>{item.reason}</p>
                 {item.details && <p className="text-xs text-muted-foreground">{item.details}</p>}
               </td>
-              <td className="p-3 font-mono text-xs">{item.reporterEmail ?? "—"}</td>
+              <td className="p-3 tabular-nums text-xs">{item.reporterEmail ?? "—"}</td>
               <td className="p-3">{date(item.createdAt)}</td>
               <td className="p-3">
                 <div className="flex flex-wrap gap-2">

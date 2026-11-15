@@ -129,7 +129,7 @@ export default async function ProfilePage() {
         </dl>
 
         {billingError && (
-          <p className="mt-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-xs text-[#a84023]">
+          <p className="mt-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-xs text-danger">
             Не удалось загрузить данные тарифа. Попробуйте обновить страницу позже.
           </p>
         )}

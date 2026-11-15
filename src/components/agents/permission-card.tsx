@@ -61,7 +61,7 @@ export function PermissionCard({ active }: { active: boolean }) {
           <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800">
             <ShieldAlert className="size-3.5" /> ИИ хочет выполнить команду, которой нужно ваше разрешение
           </p>
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted px-2 py-1 font-mono text-[11px] text-foreground">{r.command}</pre>
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted px-2 py-1 tabular-nums text-[11px] text-foreground">{r.command}</pre>
           <div className="mt-2 flex gap-1.5">
             <button type="button" onClick={() => void decide(r.id, true, false)} className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-emerald-300 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-primary/20">
               <Check className="size-3" /> Разрешить

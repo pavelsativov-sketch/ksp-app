@@ -44,7 +44,7 @@ export default async function SettingsPage() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">{school.name}</CardTitle><CardDescription>{formatSchoolSubtitle(school)}</CardDescription></CardHeader>
           <CardContent className="grid gap-2 text-sm">
-            <Row label="Код для подключения учителей"><span className="font-mono font-semibold">{school.code}</span></Row>
+            <Row label="Код для подключения учителей"><span className="tabular-nums font-semibold">{school.code}</span></Row>
             <Row label="Ваша роль"><span className="font-semibold">{member ? ROLE_LABEL[member.role] ?? member.role : "—"}</span></Row>
             <Row label="Язык обучения">{school.settings.language === "kk" ? "Қазақша" : "Русский"}</Row>
             <Row label="Система оценивания">{school.settings.grading_system === "5-point" ? "5-балльная" : "10-балльная"}</Row>

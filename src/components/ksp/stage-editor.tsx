@@ -63,12 +63,12 @@ export function StageEditor({ title, stageKey, stage, onChange, context, availab
         <div>
           <p className="editorial-kicker">{st.kicker}</p>
           <h3 className="editorial-display mt-2 text-2xl">{title}</h3>
-          {stage.copiedFrom && <p className="mt-2 text-xs text-[#756b63]">{isKk ? "Дереккөз жоспар" : "Источник: план"} «{stage.copiedFrom.sourcePlanTitle}» · {stage.copiedFrom.sourceGrade} {isKk ? "сынып" : "класс"}</p>}
+          {stage.copiedFrom && <p className="mt-2 text-xs text-muted-foreground">{isKk ? "Дереккөз жоспар" : "Источник: план"} «{stage.copiedFrom.sourcePlanTitle}» · {stage.copiedFrom.sourceGrade} {isKk ? "сынып" : "класс"}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <PlanBlockPicker kind="stage" target={{ grade: context.grade, language: context.language }} onUse={reuseStage} />
           <Input
-            className="w-36 font-mono text-xs"
+            className="w-36 tabular-nums text-xs"
             value={stage.time}
             onChange={(e) => onChange({ ...stage, time: e.target.value })}
             placeholder={timeHint}
@@ -139,7 +139,7 @@ export function StageEditor({ title, stageKey, stage, onChange, context, availab
           <div className="flex items-center justify-between">
             <Label>
               {st.questions}{" "}
-              <span className="text-xs text-slate-500">{st.questionsHint}</span>
+              <span className="text-xs text-muted-foreground">{st.questionsHint}</span>
             </Label>
             <AiEnhanceButton
               section="keyQuestions"
@@ -166,7 +166,7 @@ export function StageEditor({ title, stageKey, stage, onChange, context, availab
           <div className="flex items-center justify-between">
             <Label>
               {st.descriptors}{" "}
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-muted-foreground">
                 {st.descriptorsHint}
               </span>
             </Label>
@@ -230,7 +230,7 @@ export function StageEditor({ title, stageKey, stage, onChange, context, availab
               <div className="flex items-center justify-between">
                 <Label>
                   {st.reflectionQuestions}{" "}
-                  <span className="text-xs text-slate-500">{st.reflectionHint}</span>
+                  <span className="text-xs text-muted-foreground">{st.reflectionHint}</span>
                 </Label>
                 <AiEnhanceButton
                   section="reflectionQuestions"

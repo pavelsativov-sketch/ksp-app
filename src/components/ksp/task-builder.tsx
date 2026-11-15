@@ -204,19 +204,19 @@ export function TaskBuilder({ tasks, onChange, context, availableObjectives = []
           </Button>
         </div>
       </div>
-      <p className="text-xs text-[#756b63]">
+      <p className="text-xs text-muted-foreground">
         {isKk ? "Ұсыныстар КСП-ға тек сіз таңдағаннан кейін қосылады." : "Предложения не меняют КСП, пока вы явно не добавите выбранный вариант."}
       </p>
       {aiError && (
-        <p role="alert" className="rounded-xl border border-[#e8c8bf] bg-[#f7e6e1] p-3 text-xs text-[#a84023]">
+        <p role="alert" className="rounded-xl border border-border bg-danger-soft p-3 text-xs text-danger">
           {aiError}
         </p>
       )}
       {alternatives.length > 0 && (
-        <section aria-label={isKk ? "AI тапсырма нұсқалары" : "Предлагаемые AI варианты"} className="space-y-3 rounded-2xl border border-[#cfc3b5] bg-[#f8f4ed] p-4">
+        <section aria-label={isKk ? "AI тапсырма нұсқалары" : "Предлагаемые AI варианты"} className="space-y-3 rounded-2xl border border-border bg-muted p-4">
           <div>
             <h3 className="text-sm font-semibold text-[#302820]">{isKk ? "Таңдау үшін ұсыныстар" : "Варианты для выбора"}</h3>
-            <p className="mt-1 text-xs text-[#756b63]">{isKk ? "Әрқайсысын қарап шығыңыз. Таңдалған нұсқа ғана КСП-ға қосылады." : "Просмотрите варианты; в КСП попадёт только тот, который вы примете."}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{isKk ? "Әрқайсысын қарап шығыңыз. Таңдалған нұсқа ғана КСП-ға қосылады." : "Просмотрите варианты; в КСП попадёт только тот, который вы примете."}</p>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             {alternatives.map((candidate, index) => (
@@ -278,12 +278,12 @@ function TaskCandidate({
     <article className="space-y-3 rounded-xl border border-border bg-white p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold">{isKk ? `Ұсыныс ${index + 1}` : `Вариант ${index + 1}`}</h4>
-        <span className="flex items-center gap-1 text-xs text-[#756b63]">{taskTypeLabel(task.type)} · {task.points} {isKk ? "ұпай" : "балл"}{task.differentiationLevel && <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${differentiationLevelBadgeClass(task.differentiationLevel)}`}>{task.differentiationLevel}</span>}</span>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">{taskTypeLabel(task.type)} · {task.points} {isKk ? "ұпай" : "балл"}{task.differentiationLevel && <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${differentiationLevelBadgeClass(task.differentiationLevel)}`}>{task.differentiationLevel}</span>}</span>
       </div>
       <p className="text-sm text-[#302820]">{task.question}</p>
       <details>
         <summary className="cursor-pointer text-xs font-medium text-[#655b53]">{isKk ? "Оқушы көрінісін алдын ала қарау" : "Предпросмотр для ученика"}</summary>
-        <div className="mt-2 rounded-lg bg-[#f8f4ed] p-3"><TaskPlayer task={task} /></div>
+        <div className="mt-2 rounded-lg bg-muted p-3"><TaskPlayer task={task} /></div>
       </details>
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" onClick={onAccept}>{acceptLabel}</Button>
@@ -346,12 +346,12 @@ function TaskCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-[#f1ece4]">
-      <div className="flex items-center justify-between border-b border-border bg-[#f1ece4] px-4 py-3">
+    <div className="overflow-hidden rounded-2xl border border-border bg-muted">
+      <div className="flex items-center justify-between border-b border-border bg-muted px-4 py-3">
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-2 text-sm font-medium text-[#5f5751] hover:text-[#1c1a17]"
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
           {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           <span className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -362,8 +362,8 @@ function TaskCard({
               {task.differentiationLevel}
             </span>
           )}
-          <span className="text-[#1c1a17]">
-            {task.question || <em className="text-slate-400">без вопроса</em>}
+          <span className="text-foreground">
+            {task.question || <em className="text-muted-foreground">без вопроса</em>}
           </span>
         </button>
         <div className="flex flex-wrap items-center justify-end gap-1">
@@ -372,7 +372,7 @@ function TaskCard({
             id={`variation-style-${task.id}`}
             value={variationStyle}
             onChange={(event) => setVariationStyle(event.target.value as TaskVariationStyle)}
-            className="max-w-32 rounded-lg border border-[#cfc3b5] bg-white px-2 py-1.5 text-xs"
+            className="max-w-32 rounded-lg border border-border bg-white px-2 py-1.5 text-xs"
           >
             {(Object.keys(VARIATION_LABELS) as TaskVariationStyle[]).map((style) => (
               <option key={style} value={style}>{VARIATION_LABELS[style][isKk ? "kk" : "ru"]}</option>
@@ -383,7 +383,7 @@ function TaskCard({
             id={`gen-level-${task.id}`}
             value={genLevel}
             onChange={(e) => setGenLevel(e.target.value as DifferentiationLevel | "")}
-            className="max-w-28 rounded-lg border border-[#cfc3b5] bg-white px-2 py-1.5 text-xs"
+            className="max-w-28 rounded-lg border border-border bg-white px-2 py-1.5 text-xs"
             title={isKk ? "Генерация деңгейі" : "Уровень генерации"}
           >
             <option value="">{isKk ? "Деңгей — ағымдағы" : "Уровень — как у задания"}</option>
@@ -419,7 +419,7 @@ function TaskCard({
         <aside className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-[#fff9e8] px-4 py-3 text-xs" aria-label={isKk ? "AI мазмұнының тексерілу күйі" : "Проверка AI-содержимого"}>
           <div>
             <p className="font-semibold text-[#594715]">{task.aiReviewed ? (isKk ? "Мұғалім тексерді" : "Учитель проверил") : (isKk ? "Мұғалім тексеруі қажет" : "Нужно проверить учителю")}</p>
-            <p className="mt-0.5 text-[#756b63]">{isKk ? "Дереккөз тіркелмеген — қолмен тексеру бөлек белгіленеді." : "Источники не указаны; ручная проверка — отдельная отметка."}</p>
+            <p className="mt-0.5 text-muted-foreground">{isKk ? "Дереккөз тіркелмеген — қолмен тексеру бөлек белгіленеді." : "Источники не указаны; ручная проверка — отдельная отметка."}</p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 font-medium text-[#45370f]">
             <input type="checkbox" checked={task.aiReviewed === true} onChange={(event) => onReviewChange(event.target.checked)} />
@@ -428,17 +428,17 @@ function TaskCard({
         </aside>
       )}
       {task.copiedFrom && (
-        <p className="border-b border-border bg-white px-4 py-2 text-xs text-[#756b63]">
+        <p className="border-b border-border bg-white px-4 py-2 text-xs text-muted-foreground">
           {isKk ? "Дереккөз жоспар" : "Скопировано из плана"} «{task.copiedFrom.sourcePlanTitle}» · {task.copiedFrom.sourceGrade} {isKk ? "сынып" : "класс"}
         </p>
       )}
 
-      {variantError && <p role="alert" className="mx-3 mt-3 rounded-lg border border-[#e8c8bf] bg-[#f7e6e1] p-2 text-xs text-[#a84023]">{variantError}</p>}
+      {variantError && <p role="alert" className="mx-3 mt-3 rounded-lg border border-border bg-danger-soft p-2 text-xs text-danger">{variantError}</p>}
       {variants.length > 0 && (
-        <section className="space-y-3 border-b border-border bg-[#f8f4ed] p-3" aria-label={isKk ? "Тапсырма баламалары" : "Альтернативы текущего задания"}>
+        <section className="space-y-3 border-b border-border bg-muted p-3" aria-label={isKk ? "Тапсырма баламалары" : "Альтернативы текущего задания"}>
           <div>
             <h3 className="text-sm font-semibold">{isKk ? "Бастапқы тапсырманың баламалары" : "Варианты исходного задания"}</h3>
-            <p className="mt-1 text-xs text-[#756b63]">{isKk ? "Бастапқы нұсқа өзгермейді. Таңдасаңыз ғана мәтін жаңарады; ұпайлар мен мақсаттар сақталады." : "Исходная задача не меняется до принятия; при замене баллы, цель и критерии сохраняются."}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{isKk ? "Бастапқы нұсқа өзгермейді. Таңдасаңыз ғана мәтін жаңарады; ұпайлар мен мақсаттар сақталады." : "Исходная задача не меняется до принятия; при замене баллы, цель и критерии сохраняются."}</p>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             {variants.map((variant, index) => (
@@ -473,7 +473,7 @@ function TaskCard({
 
       {preview && (
         <div className="border-t border-border bg-surface p-4">
-          <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
             Превью для ученика
           </p>
           <TaskPlayer task={task} />
@@ -554,7 +554,7 @@ function TaskOptions({
   const isKk = locale === "kk";
   return (
     <details className="group">
-      <summary className="text-xs text-slate-500 cursor-pointer select-none">
+      <summary className="text-xs text-muted-foreground cursor-pointer select-none">
         {isKk ? "Қосымша баптаулар — ишара, таймер, мақсаттар мен критерийлер" : "Доп. настройки — подсказка, таймер, цели и критерии"}
       </summary>
       <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -609,7 +609,7 @@ function TaskOptions({
                   .filter((o) => o.code)
                   .map((o) => (
                     <SelectItem key={o.code} value={o.code}>
-                      <span className="font-mono text-xs mr-2">{o.code}</span>
+                      <span className="tabular-nums text-xs mr-2">{o.code}</span>
                       {o.text.length > 60 ? o.text.slice(0, 60) + "…" : o.text}
                     </SelectItem>
                   ))}
@@ -626,7 +626,7 @@ function TaskOptions({
         <fieldset className="md:col-span-3 space-y-2">
           <legend className="text-sm font-medium">{isKk ? "Байланысты бағалау критерийлері" : "Связанные критерии оценивания"}</legend>
           {criteria.length === 0 ? (
-            <p className="text-xs text-slate-500">{isKk ? "Алдымен «Мақсаттар» бөлімінде бағалау критерийлерін қосыңыз." : "Добавьте критерии оценивания во вкладке «Цели», затем свяжите их с заданием."}</p>
+            <p className="text-xs text-muted-foreground">{isKk ? "Алдымен «Мақсаттар» бөлімінде бағалау критерийлерін қосыңыз." : "Добавьте критерии оценивания во вкладке «Цели», затем свяжите их с заданием."}</p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               {criteria.map((criterion, index) => {
@@ -940,7 +940,7 @@ function MatchingEditor({
             onChange={(e) => setLeft(i, e.target.value)}
             placeholder="Левое"
           />
-          <span className="text-slate-400">↔</span>
+          <span className="text-muted-foreground">↔</span>
           <Input
             value={task.right[i] ?? ""}
             onChange={(e) => setRight(i, e.target.value)}
@@ -961,7 +961,7 @@ function MatchingEditor({
       <Button type="button" variant="outline" size="sm" onClick={addRow}>
         <Plus className="w-4 h-4" /> Пара
       </Button>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         Перемешивание для ученика происходит при отображении; конструктор задаёт
         «правильные» пары по строкам.
       </p>
@@ -982,7 +982,7 @@ function OrderingEditor({
       <div className="space-y-1">
         {task.items.map((item, i) => (
           <div key={i} className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 w-6">{i + 1}.</span>
+            <span className="text-xs text-muted-foreground w-6">{i + 1}.</span>
             <Input
               value={item}
               onChange={(e) =>
@@ -1005,7 +1005,7 @@ function OrderingEditor({
                     correctOrder: items.map((_, idx) => idx),
                   });
                 }}
-                className="text-xs text-slate-500 hover:text-slate-900"
+                className="text-xs text-muted-foreground hover:text-foreground"
                 aria-label="Вверх"
               >
                 ▲
@@ -1022,7 +1022,7 @@ function OrderingEditor({
                     correctOrder: items.map((_, idx) => idx),
                   });
                 }}
-                className="text-xs text-slate-500 hover:text-slate-900"
+                className="text-xs text-muted-foreground hover:text-foreground"
                 aria-label="Вниз"
               >
                 ▼

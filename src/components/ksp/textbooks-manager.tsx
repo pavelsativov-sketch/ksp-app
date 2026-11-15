@@ -460,7 +460,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
             <div>
               <Label>Поиск</Label>
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                <Search className="w-4 h-4 text-muted-foreground absolute left-2.5 top-2.5" />
                 <Input
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
@@ -477,7 +477,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
               className={`rounded-xl border p-3 text-sm ${
                 catalogMessage.type === "ok"
                   ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                  : "border-[#e8c8bf] bg-[#f7e6e1] text-[#a84023]"
+                  : "border-border bg-danger-soft text-danger"
               }`}
             >
               {catalogMessage.text}
@@ -517,11 +517,11 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                       <img
                         src={item.coverUrl}
                         alt={item.title}
-                        className="h-24 w-18 shrink-0 rounded border border-slate-200 object-cover bg-slate-100"
+                        className="h-24 w-18 shrink-0 rounded border border-border object-cover bg-muted"
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex h-24 w-18 shrink-0 items-center justify-center rounded border border-slate-200 bg-slate-100 text-slate-400">
+                      <div className="flex h-24 w-18 shrink-0 items-center justify-center rounded border border-border bg-muted text-muted-foreground">
                         <BookOpen className="w-6 h-6" />
                       </div>
                     )}
@@ -529,10 +529,10 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                     <div className="flex min-w-0 flex-1 flex-col justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-semibold text-sm text-slate-900">
+                          <span className="font-semibold text-sm text-foreground">
                             {item.title}
                           </span>
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground">
                             {item.grade} кл.
                           </span>
                           <span className="rounded bg-emerald-100/80 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">
@@ -545,7 +545,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                           )}
                         </div>
                         {item.description && (
-                          <p className="mt-1 line-clamp-2 text-xs text-slate-600">
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                             {item.description}
                           </p>
                         )}
@@ -567,7 +567,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                               href={item.epubUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-slate-500 hover:underline"
+                              className="inline-flex items-center gap-1 text-muted-foreground hover:underline"
                             >
                               EPUB
                             </a>
@@ -671,7 +671,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
               </div>
             </div>
             {uploadError && (
-              <p className="rounded-xl border border-[#e8c8bf] bg-[#f7e6e1] p-3 text-sm text-[#a84023]">
+              <p className="rounded-xl border border-border bg-danger-soft p-3 text-sm text-danger">
                 {uploadError}
               </p>
             )}
@@ -688,7 +688,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                 </>
               )}
             </Button>
-            <p className="text-xs text-[#6b7480]">
+            <p className="text-xs text-muted-foreground">
               Индексация большой PDF может занять до 1–3 минут.
             </p>
           </form>
@@ -716,7 +716,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                   t.owner_id === currentUserId || t.owner_id === "system:armanpv";
                 return (
                   <li key={t.id} className="py-3 flex items-center gap-3">
-                    <BookOpen className="w-5 h-5 text-slate-400 shrink-0" />
+                    <BookOpen className="w-5 h-5 text-muted-foreground shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium truncate">{t.title}</span>
@@ -737,7 +737,7 @@ export function TextbooksManager({ subjects }: { subjects: SubjectRow[] }) {
                           </a>
                         )}
                       </div>
-                      <div className="text-xs text-slate-500 flex items-center gap-3 flex-wrap">
+                      <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
                         {t.grade && <span>{t.grade} класс</span>}
                         {t.page_count && <span>{t.page_count} стр.</span>}
                         {t.chunk_count > 0 && <span>{t.chunk_count} фрагментов</span>}

@@ -161,7 +161,7 @@ export function EditedReissueForm({
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="font-semibold">{copy.readyTitle}: <span className="font-mono">{created.code}</span></p>
+              <p className="font-semibold">{copy.readyTitle}: <span className="tabular-nums">{created.code}</span></p>
               <QrCard url={link} title={title} heading={copy.qrTitle} description={copy.qrLead} locale={locale} />
               <Button asChild variant="outline" className="w-full"><Link href={`/assignments/${created.id}`}>{copy.manageResults}</Link></Button>
               <Button type="button" variant="outline" className="w-full" onClick={() => setOpen(false)}>{locale === "kk" ? "Жабу" : "Закрыть"}</Button>

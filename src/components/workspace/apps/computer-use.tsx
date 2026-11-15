@@ -471,7 +471,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [activeField, imgLayout]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0f0b26] text-slate-200">
+    <div className="flex h-full min-h-0 flex-col bg-[#0f0b26] text-white">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
         <MonitorPlay className="size-4 shrink-0 text-violet-400" />
         <span className="min-w-0 truncate text-xs font-semibold">Агент браузера</span>
@@ -501,7 +501,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
             <button
               type="button"
               onClick={() => void toggleControl("ai")}
-              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/90 px-2.5 py-1 text-[10px] font-semibold text-slate-950 hover:bg-emerald-400"
+              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/90 px-2.5 py-1 text-[10px] font-semibold text-foreground hover:bg-emerald-400"
             >
               <Play className="size-3 fill-current" /> Продолжить с ИИ
             </button>
@@ -518,7 +518,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <label className="block text-[11px] font-medium text-slate-400" htmlFor="computer-goal">
+        <label className="block text-[11px] font-medium text-muted-foreground" htmlFor="computer-goal">
           Задача для агента
         </label>
         <textarea
@@ -529,10 +529,10 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           rows={2}
           disabled={running}
           placeholder="Например: найди на сайте материалы по теме «Дроби» и открой раздел с упражнениями"
-          className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-violet-500/60 disabled:opacity-60"
+          className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-muted-foreground focus:border-violet-500/60 disabled:opacity-60"
         />
 
-        <label className="mt-2 block text-[11px] font-medium text-slate-400" htmlFor="computer-url">
+        <label className="mt-2 block text-[11px] font-medium text-muted-foreground" htmlFor="computer-url">
           Начать с этой страницы (необязательно)
         </label>
         <input
@@ -541,7 +541,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           onChange={(e) => setStartUrl(e.target.value)}
           disabled={running}
           placeholder="https://www.bilimclass.kz"
-          className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-slate-600 focus:border-violet-500/60 disabled:opacity-60"
+          className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 p-2 text-xs outline-none placeholder:text-muted-foreground focus:border-violet-500/60 disabled:opacity-60"
         />
 
         {!running && goal.trim().length === 0 && (
@@ -551,7 +551,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                 key={example.label}
                 type="button"
                 onClick={() => { setGoal(example.goal); setStartUrl(example.url); }}
-                className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-400 hover:border-violet-400/40 hover:text-slate-200"
+                className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-muted-foreground hover:border-violet-400/40 hover:text-white"
               >
                 {example.label}
               </button>
@@ -569,7 +569,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
           Запустить агента
         </button>
-        <span className="ml-2 text-[10px] text-slate-500">Ctrl+Enter</span>
+        <span className="ml-2 text-[10px] text-muted-foreground">Ctrl+Enter</span>
 
         {error && (
           <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-300">
@@ -593,7 +593,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
             <button
               type="button"
               onClick={() => void toggleControl("ai")}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-slate-950 hover:bg-emerald-400"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-emerald-400"
             >
               <Play className="size-3 fill-current" /> Готово — передать ИИ
             </button>
@@ -619,7 +619,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
         />
 
         {!screenshot && hasFrame === false && (
-          <div className="mt-3 flex aspect-[8/5] items-center justify-center rounded-lg border border-dashed border-white/10 bg-black/20 p-4 text-center text-xs text-slate-500">
+          <div className="mt-3 flex aspect-[8/5] items-center justify-center rounded-lg border border-dashed border-white/10 bg-black/20 p-4 text-center text-xs text-muted-foreground">
             Браузер ещё не открыт. Запустите агента — экран появится здесь, и вы сможете кликать по нему и вводить данные.
           </div>
         )}
@@ -647,13 +647,13 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                     : "border-violet-400/90 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] bg-black/25 backdrop-blur-[1px]"
                 }`}
               >
-                <div className="flex items-center text-xs font-mono text-white/95 select-none truncate">
+                <div className="flex items-center text-xs tabular-nums text-white/95 select-none truncate">
                   <span>{activeField?.isPassword ? "•".repeat((liveText || activeField?.value || "").length) : (liveText || activeField?.value || "")}</span>
                   <span className="inline-block w-0.5 h-3.5 bg-violet-400 animate-pulse ml-0.5 shrink-0" />
                 </div>
               </div>
             )}
-            <figcaption className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+            <figcaption className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
               <span>Интерактивный экран ОС (кликните по полю логина/пароля и печатайте напрямую)</span>
               <span>Сессии сохраняются ✓</span>
             </figcaption>
@@ -662,7 +662,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
 
         {log.length > 0 && (
           <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Ход работы
             </p>
             <ul className="space-y-1">
@@ -676,7 +676,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                         ? "text-emerald-300"
                         : line.type === "ERROR"
                           ? "text-rose-300"
-                          : "text-slate-400"
+                          : "text-muted-foreground"
                   }`}
                 >
                   {line.message}
@@ -696,7 +696,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                 <ShieldAlert className="size-3.5" />
                 Требуется ваше решение
               </p>
-              <p className="mt-1 text-[11px] text-slate-300">
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 {p.action.name === "click"
                   ? `Нажать на «${p.probe.label.slice(0, 70) || "элемент без подписи"}»`
                   : p.action.name === "type"
@@ -706,7 +706,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                       : p.action.name}
               </p>
               {p.action.intent && (
-                <p className="mt-0.5 text-[11px] text-slate-500 italic">Зачем: {p.action.intent}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground italic">Зачем: {p.action.intent}</p>
               )}
               <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-200/90">
                 <ShieldCheck className="size-3" />
@@ -723,12 +723,12 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
                 <button
                   type="button"
                   onClick={() => void answer(p.id, false)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/20"
+                  className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20"
                 >
                   <X className="size-3.5" /> Отклонить
                 </button>
               </div>
-              <p className="mt-1 text-[10px] text-slate-500">
+              <p className="mt-1 text-[10px] text-muted-foreground">
                 Если не ответить за 2 минуты, действие будет отклонено.
               </p>
             </div>

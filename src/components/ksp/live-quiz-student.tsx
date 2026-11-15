@@ -135,11 +135,11 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
 
   if (phase === "name") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#1c1a17] p-4">
-        <div className="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-surface p-6 text-[#1c1a17]">
+      <div className="flex min-h-screen items-center justify-center bg-foreground p-4">
+        <div className="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-surface p-6 text-foreground">
           <div className="text-center">
             <p className="editorial-kicker">Классный режим</p><h1 className="editorial-display mt-2 text-4xl">Live-квиз</h1>
-            <p className="mt-2 text-sm text-[#5f5751]">Введите код от учителя</p>
+            <p className="mt-2 text-sm text-muted-foreground">Введите код от учителя</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="code">Код комнаты</Label>
@@ -147,7 +147,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
               id="code"
               inputMode="numeric"
               maxLength={6}
-              className="text-center font-mono text-2xl tracking-widest"
+              className="text-center tabular-nums text-2xl tracking-widest"
               value={code}
               onChange={(e) => {
                 const next = e.target.value.replace(/\D/g, "");
@@ -180,7 +180,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
       <CenterScreen>
         <Loader2 className="w-10 h-10 animate-spin text-violet-600 mb-3" />
         <p className="text-lg font-medium">Привет, {name}!</p>
-        <p className="text-sm text-slate-500">Ждём начала квиза…</p>
+        <p className="text-sm text-muted-foreground">Ждём начала квиза…</p>
       </CenterScreen>
     );
   }
@@ -190,7 +190,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
       <CenterScreen>
         <CheckCircle2 className="w-12 h-12 text-emerald-600 mb-3" />
         <p className="text-lg font-medium">Ответ отправлен</p>
-        <p className="text-sm text-slate-500">Ждём остальных…</p>
+        <p className="text-sm text-muted-foreground">Ждём остальных…</p>
       </CenterScreen>
     );
   }
@@ -198,7 +198,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   if (phase === "reveal") {
     return (
       <CenterScreen>
-        <p className="text-sm text-slate-500 mb-2">Ответ</p>
+        <p className="text-sm text-muted-foreground mb-2">Ответ</p>
         <p className="text-lg font-semibold text-center text-emerald-700 max-w-md">
           {revealText ?? "—"}
         </p>
@@ -218,13 +218,13 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
             <p className="text-lg">
               Ваше место: <span className="font-bold text-violet-700">#{myRank}</span>
             </p>
-            <p className="text-sm text-slate-500">Очки: {myEntry.score}</p>
+            <p className="text-sm text-muted-foreground">Очки: {myEntry.score}</p>
           </>
         ) : (
-          <p className="text-sm text-slate-500">Ваши результаты не нашлись</p>
+          <p className="text-sm text-muted-foreground">Ваши результаты не нашлись</p>
         )}
         <div className="mt-4 w-full max-w-sm">
-          <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">Топ-5</p>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Топ-5</p>
           <ul className="bg-surface border rounded-lg overflow-hidden">
             {leaderboard.slice(0, 5).map((e, i) => (
               <li
@@ -237,7 +237,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
                 <span>
                   {i + 1}. {e.name}
                 </span>
-                <span className="font-mono">{e.score}</span>
+                <span className="tabular-nums">{e.score}</span>
               </li>
             ))}
           </ul>
@@ -254,12 +254,12 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   return (
     <div className="flex min-h-screen flex-col bg-[#f5f0e6] p-4">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4">
-        <div className="flex items-center justify-between text-sm text-slate-500">
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{name}</span>
           {seconds !== null && (
             <span
               className={
-                "font-mono font-bold text-xl " +
+                "tabular-nums font-bold text-xl " +
                 (seconds <= 5 ? "text-red-600" : "text-violet-700")
               }
             >
@@ -267,7 +267,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
             </span>
           )}
         </div>
-        <div className="border-b border-[#d9d1c3] bg-[#fffdf8] p-5"><p className="font-mono text-xs font-bold uppercase tracking-[0.1em] text-[#1e4f91]">Вопрос в работе</p><p className="mt-2 text-xl font-bold leading-7">{currentQ.task.question}</p></div>
+        <div className="border-b border-border bg-[#fffdf8] p-5"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-ink">Вопрос в работе</p><p className="mt-2 text-xl font-bold leading-7">{currentQ.task.question}</p></div>
         <AnswerForm key={`${currentQ.index}-${currentQ.endsAt}`} task={currentQ.task} onSubmit={submit} />
       </div>
     </div>
@@ -276,7 +276,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
 
 function CenterScreen({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#f5f0e6] p-6 text-center text-[#17202b]">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#f5f0e6] p-6 text-center text-foreground">
       {children}
     </div>
   );
@@ -372,7 +372,7 @@ function AnswerForm({
               autoFocus
             />
             {task.unit && (
-              <span className="self-center text-slate-500 text-sm">{task.unit}</span>
+              <span className="self-center text-muted-foreground text-sm">{task.unit}</span>
             )}
           </div>
           <Button
@@ -389,7 +389,7 @@ function AnswerForm({
     case "FILL_BLANK":
       return (
         <div className="space-y-2">
-          <p className="text-sm text-slate-500 italic">{task.template}</p>
+          <p className="text-sm text-muted-foreground italic">{task.template}</p>
           {fillers.map((v, i) => (
             <Input
               key={i}
@@ -446,7 +446,7 @@ function AnswerForm({
         <div className="space-y-2">
           {order.map((idx, pos) => (
             <div key={pos} className="flex items-center gap-2 bg-surface p-2 rounded border">
-              <span className="text-sm font-bold text-slate-400 w-6">{pos + 1}.</span>
+              <span className="text-sm font-bold text-muted-foreground w-6">{pos + 1}.</span>
               <span className="flex-1 text-sm truncate">{task.items[idx]}</span>
               <Button
                 variant="ghost"

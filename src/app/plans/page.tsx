@@ -26,7 +26,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   const initialQuery = (await searchParams).q?.slice(0, 200) ?? "";
   const { t, locale } = await getDict();
   const d = t.dashboard;
-  if (!isMongoConfigured()) return <div className="mx-auto max-w-2xl px-4 py-16"><Card><CardHeader><CardTitle className="editorial-display text-3xl">{d.noMongoTitle}</CardTitle><CardDescription>{d.noMongoTextA} <code className="font-mono">MONGODB_URI</code> {d.noMongoTextB} <code className="font-mono">MONGODB_DB</code> {d.noMongoTextC} <code className="font-mono">.env.local</code>.</CardDescription></CardHeader></Card></div>;
+  if (!isMongoConfigured()) return <div className="mx-auto max-w-2xl px-4 py-16"><Card><CardHeader><CardTitle className="editorial-display text-3xl">{d.noMongoTitle}</CardTitle><CardDescription>{d.noMongoTextA} <code className="tabular-nums">MONGODB_URI</code> {d.noMongoTextB} <code className="tabular-nums">MONGODB_DB</code> {d.noMongoTextC} <code className="tabular-nums">.env.local</code>.</CardDescription></CardHeader></Card></div>;
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/plans");
   const db = await getDb();
@@ -110,7 +110,7 @@ function AssignmentsList({ rows, a }: { rows: Awaited<ReturnType<typeof listTeac
                 {row.status === "open" ? a.openB : a.closedB}
               </span>
             </div>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">/a/{row.code}</p>
+            <p className="mt-1 tabular-nums text-xs text-muted-foreground">/a/{row.code}</p>
             <p className="mt-2 text-xs text-muted-foreground">{a.tasksW}: {row.tasksCount} · {a.passedW}: {row.attemptsCount}</p>
           </Link>
         ))}

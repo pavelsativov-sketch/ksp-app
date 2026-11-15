@@ -65,7 +65,7 @@ export function QuizMode({ stages, onClose }: QuizModeProps) {
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
         <div className="bg-surface rounded-xl p-6 max-w-md w-full space-y-4">
           <h3 className="text-lg font-semibold">Нет заданий</h3>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             В этом КСП пока нет интерактивных заданий. Добавьте их в редакторе, чтобы пройти урок как квиз.
           </p>
           <Button onClick={onClose}>Закрыть</Button>
@@ -78,27 +78,27 @@ export function QuizMode({ stages, onClose }: QuizModeProps) {
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
         className="flex w-full max-h-full max-w-none flex-col rounded-none border-0 bg-surface p-0 md:max-w-2xl md:rounded-2xl md:border md:border-border md:shadow-[0_2px_16px_rgba(28,26,23,0.16)]"
-        overlayClassName="bg-[#17202b]/80 p-0 md:p-4"
+        overlayClassName="bg-foreground/80 p-0 md:p-4"
         aria-labelledby="quiz-mode-title"
       >
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-border px-5 py-4">
             <Sparkles className="size-5 text-primary" />
           <div className="flex-1">
-            <DialogTitle id="quiz-mode-title" className="editorial-kicker text-[#2f5b4f]">Режим квиза</DialogTitle>
+            <DialogTitle id="quiz-mode-title" className="editorial-kicker text-success">Режим квиза</DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground">
               {finished
                 ? `Готово — ${results.length} из ${flat.length}`
                 : `Задание ${idx + 1} из ${flat.length} · ${flat[idx].stageTitle}`}
             </p>
           </div>
-          <div className="text-sm font-mono text-slate-700">
+          <div className="text-sm tabular-nums text-foreground">
             {totalScored} / {totalMax}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 p-1"
+            className="text-muted-foreground hover:text-foreground p-1"
             aria-label="Закрыть"
           >
             <X className="w-5 h-5" />
@@ -106,7 +106,7 @@ export function QuizMode({ stages, onClose }: QuizModeProps) {
         </div>
 
         {/* Progress bar */}
-        <div className="h-1 bg-[#f1ece4]">
+        <div className="h-1 bg-muted">
           <div
             className="h-full bg-primary transition-all duration-300"
             style={{ width: `${progress}%` }}
@@ -191,13 +191,13 @@ function FinalScreen({
         <div className="text-5xl mb-2">{emoji}</div>
         <Trophy className="w-10 h-10 text-amber-500 mx-auto mb-2" />
         <h3 className="text-2xl font-bold">{total} / {max}</h3>
-        <p className="text-slate-600">{tier} · {pct}%</p>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-muted-foreground">{tier} · {pct}%</p>
+        <p className="text-xs text-muted-foreground mt-1">
           Правильно: {correctCount} из {results.length}
         </p>
       </div>
 
-      <div className="border-t border-slate-200 pt-3 space-y-2 text-sm">
+      <div className="border-t border-border pt-3 space-y-2 text-sm">
         {results.map((r, i) => (
           <div
             key={i}
@@ -208,12 +208,12 @@ function FinalScreen({
                 : "bg-amber-50 border-amber-200")
             }
           >
-            <span className="text-xs text-slate-500 w-6">{i + 1}.</span>
+            <span className="text-xs text-muted-foreground w-6">{i + 1}.</span>
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{r.question || "—"}</p>
-              <p className="text-xs text-slate-500">{r.stageTitle}</p>
+              <p className="text-xs text-muted-foreground">{r.stageTitle}</p>
             </div>
-            <span className="font-mono text-sm shrink-0">
+            <span className="tabular-nums text-sm shrink-0">
               {r.score}/{r.maxScore}
             </span>
           </div>

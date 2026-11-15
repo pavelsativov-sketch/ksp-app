@@ -60,11 +60,11 @@ export default async function NewPlanPage({ searchParams }: { searchParams: Prom
         </p>
         <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">Ctrl+S</kbd>
+            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 tabular-nums text-[10px]">Ctrl+S</kbd>
             {np.saveShortcut}
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">Ctrl+Z</kbd>
+            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 tabular-nums text-[10px]">Ctrl+Z</kbd>
             {np.undoShortcut}
           </span>
         </div>
