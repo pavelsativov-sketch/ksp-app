@@ -268,7 +268,7 @@ async function reviewDraft(draft: AiKspPayload, input: GenerateKspOptions): Prom
       const raw = response.choices[0]?.message.content;
       if (!raw) throw new Error("Проверка вернула пустой ответ");
       return parseAndValidate(JSON.stringify(applyReview(draft, extractJson<Record<string, unknown>>(raw))), input.topic, input.language);
-    }, { budgetMs: REVIEW_BUDGET_MS, signal: input.signal });
+    }, { budgetMs: REVIEW_BUDGET_MS, timeoutMs: REVIEW_BUDGET_MS, signal: input.signal });
   } catch (err) {
     log.warn("Проверка заданий не удалась, отдаём черновик", { topic: input.topic, reason: err instanceof Error ? err.message : String(err) });
     return draft;

@@ -173,7 +173,7 @@ const EXACT_STRUCTURE = `2. ОБЯЗАТЕЛЬНАЯ СТРУКТУРА: на э
    ЗАПРЕЩЕНЫ задания «перечисли свойства», «распредели термины», «нарисуй инфографику». Первому заданию заполни imagePromptEn: красочная иллюстрация темы без текста и чисел. Каждый ответ получи вычислением и проверь.`;
 
 const GENERAL_STRUCTURE = `2. ОБЯЗАТЕЛЬНАЯ СТРУКТУРА (как на образце учителя, при count ≥ 5):
-   - Задание 1 "match": prompt «Соотнеси термин и его определение». options это 6–8 терминов темы, pairs их настоящие определения В ТОМ ЖЕ порядке (перемешивает программа). expectedAnswer перечисляет пары. Обязательно заполни imagePromptEn: широкая красочная иллюстрация темы без текста.
+   - Задание 1 "match": prompt «Соотнеси термин и его определение». options это 6–8 терминов темы, pairs их настоящие определения В ТОМ ЖЕ порядке и БЕЗ самого термина (перемешивает программа). expectedAnswer перечисляет пары. Обязательно заполни imagePromptEn: широкая красочная иллюстрация темы без текста.
    - Задание 2 "fill_bank": prompt это ТОЛЬКО 5 пронумерованных предложений с "_____" в начале или середине, каждое с новой строки. wordBank это нужные слова и 1 лишнее. expectedAnswer это предложения с ответами.
    - Задание 3 "open": prompt это 2 вопроса «Что такое …?», каждый с новой строки, с номером. expectedAnswer это определения.
    - Задание 4 "compare": prompt «Сравни …». compareColumns: ["Критерий сравнения", "что сравниваем 1", "что сравниваем 2"]. compareRows это 4–5 критериев. expectedAnswer заполняет таблицу строками «критерий: значение 1 / значение 2».
@@ -511,6 +511,14 @@ function optionalString(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v : undefined;
 }
 
+/** «Ядро — центр клетки» в правой колонке сразу выдаёт пару: ученик видит только определение. */
+export function withoutTerm(definition: string, term: string): string {
+  const trimmed = definition.trim();
+  if (!trimmed.toLowerCase().startsWith(term.trim().toLowerCase())) return trimmed;
+  const rest = trimmed.slice(term.trim().length).replace(/^\s*[—–:-]\s*/, "").trim();
+  return rest ? rest[0]!.toUpperCase() + rest.slice(1) : trimmed;
+}
+
 function validateWorksheet(input: HandoutInput, content: string): Omit<Worksheet, "kind"> {
   const raw: unknown = extractJson(content);
   if (!isRecord(raw)) throw new Error("AI: ответ не объект");
@@ -518,7 +526,7 @@ function validateWorksheet(input: HandoutInput, content: string): Omit<Worksheet
   if (!Array.isArray(tasksRaw) || tasksRaw.length === 0 || tasksRaw.length > 10) {
     throw new Error("AI: некорректное число заданий");
   }
-  const tasks: WorksheetTask[] = tasksRaw.map((t, i) => {
+  const parseTask = (t: unknown, i: number): WorksheetTask => {
     if (!isRecord(t)) throw new Error(`AI: задание ${i + 1} не объект`);
     const prompt = t.prompt, criterion = t.criterion, descriptor = t.descriptor;
     if (typeof prompt !== "string" || !prompt.trim()) throw new Error(`AI: задание ${i + 1} без prompt`);
@@ -562,7 +570,7 @@ function validateWorksheet(input: HandoutInput, content: string): Omit<Worksheet
       const expectedAnswer =
         optionalString(t.expectedAnswer) ??
         options.map((opt, idx) => `${idx + 1}) ${opt} — ${pairs[idx]}`).join("; ");
-      return { ...base, type: "match" as const, options, pairs, expectedAnswer };
+      return { ...base, type: "match" as const, options, pairs: pairs.map((pair, idx) => withoutTerm(pair, options[idx]!)), expectedAnswer };
     }
     if (t.type === "sort") {
       const groupsRaw = asStringArray(t.groups);
@@ -597,10 +605,21 @@ function validateWorksheet(input: HandoutInput, content: string): Omit<Worksheet
       return { ...base, type: "case_study" as const, situation, expectedAnswer };
     }
     return validateRichTaskType(base, t, i);
+  };
+  // Неполное задание не повод выбрасывать весь лист: недостающие добирает topUpWorksheetTasks.
+  // Иначе одна пропущенная подсказка уводила к следующему провайдеру, а затем к шаблону.
+  const tasks = tasksRaw.flatMap((t, i) => {
+    try {
+      return [parseTask(isRecord(t) && Array.isArray(t.expectedAnswer) ? { ...t, expectedAnswer: t.expectedAnswer.join("; ") } : t, i)];
+    } catch (err) {
+      log.warn("Задание листа отброшено", { topic: input.topic, reason: err instanceof Error ? err.message : String(err) });
+      return [];
+    }
   });
-  const title = raw.title, intro = raw.intro, metaLine = raw.metaLine;
-  if (typeof title !== "string" || !title.trim()) throw new Error("AI: нет title");
-  if (typeof intro !== "string" || !intro.trim()) throw new Error("AI: нет intro");
+  if (tasks.length === 0) throw new Error("AI: ни одно задание не прошло проверку");
+  const metaLine = raw.metaLine;
+  const title = typeof raw.title === "string" && raw.title.trim() ? raw.title : input.topic;
+  const intro = typeof raw.intro === "string" ? raw.intro : "";
   assertKazakhContent(raw, input.language, "жұмыс парағы");
   return {
     title, intro,
@@ -696,15 +715,12 @@ function validateRichTaskType(
     return { ...base, type: "reflection" as const, reflectionOptions };
   }
   if (t.type === "interactive") {
-    const link = optionalString(t.link);
-    if (link) throw new Error(`AI: interactive задание ${i + 1}: ссылка должна оставаться пустой, её добавит учитель`);
-    const expectedAnswer = optionalString(t.expectedAnswer);
-    if (!expectedAnswer) throw new Error(`AI: interactive задание ${i + 1} без инструкции, что записать в результат`);
+    // Ссылку модель могла выдумать, поэтому она не берётся: её добавит учитель.
+    const expectedAnswer = optionalString(t.expectedAnswer) ?? base.descriptor;
     return { ...base, type: "interactive" as const, link: undefined, expectedAnswer };
   }
   if (t.type === "creative") {
-    const expectedAnswer = optionalString(t.expectedAnswer);
-    if (!expectedAnswer) throw new Error(`AI: creative задание ${i + 1} без expectedAnswer (критерии)`);
+    const expectedAnswer = optionalString(t.expectedAnswer) ?? base.descriptor;
     assertConcrete(base.prompt, i, "prompt");
     return { ...base, type: "creative" as const, expectedAnswer };
   }
@@ -816,6 +832,9 @@ function assertKazakhContent(value: unknown, language: "ru" | "kz", item: string
   }
 }
 
+/** Лист на шесть заданий модель пишет десятки секунд: общий таймаут задач в 12 с его обрывал. */
+const HANDOUT_TIMEOUT_MS = 45_000;
+
 async function chatJson<T>(
   task: "tasks",
   name: string,
@@ -838,7 +857,7 @@ async function chatJson<T>(
       // Валидация здесь → ошибка структуры срывает попытку этого провайдера
       // и запускает следующий, а не доходит до рендера как «успех».
       return validate(response.choices[0]?.message.content ?? "");
-    });
+    }, { timeoutMs: HANDOUT_TIMEOUT_MS });
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

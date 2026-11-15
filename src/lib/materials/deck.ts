@@ -83,7 +83,9 @@ const RULES = `Составь 12–16 слайдов в порядке хода 
 Обязательные правила:
 - Минимум 5 слайдов типов flow, list, cards объясняют саму тему урока конкретным содержанием: определения, числа, примеры из плана. Это главная часть.
 - Текст крупный и короткий: заголовок до 12 слов, пункт до 10 слов. Абзацев на слайде нет.
-- Не выдумывай факты и ссылки. Проверь ответы в quiz.
+- Обязательно есть слайды reflection и homework.
+- Не делай слайдов про ход, план или этапы урока: схема показывает саму тему. В title не пиши слово «Тема:».
+- Не выдумывай факты и ссылки. Проверь ответы в quiz. Проверь орфографию.
 - notes: 1–3 предложения, что учитель говорит на этом слайде.
 - imagePrompt на английском, описывает сцену без текста и цифр. Заполняй у 3–5 слайдов, остальным пустая строка.
 Формат: {"slides":[{"kind":"…","title":"…","lead":"","steps":[],"points":[],"takeaway":"","options":[],"correctIndex":null,"notes":"","imagePrompt":""}]}`;
@@ -150,6 +152,13 @@ export function parseOutline(raw: unknown): DeckSlide[] {
   return inLessonOrder(slides.slice(0, 30));
 }
 
+/** Рефлексия и домашнее задание есть в каждом уроке, даже если модель про них забыла. */
+export function withRequiredSlides(slides: DeckSlide[], plan: LessonPlanRow): DeckSlide[] {
+  const present = new Set(slides.map((slide) => slide.kind));
+  const missing = outlineFromPlan(plan).filter((slide) => (slide.kind === "reflection" || slide.kind === "homework") && !present.has(slide.kind));
+  return inLessonOrder([...slides, ...missing]);
+}
+
 /** Конструктор начинается с анализа плана; при сбое ИИ учитель получает черновик из полей плана. */
 export async function generateDeckOutline(plan: LessonPlanRow): Promise<{ slides: DeckSlide[]; fromAi: boolean }> {
   if (!isAnyProviderConfigured()) return { slides: outlineFromPlan(plan), fromAi: false };
@@ -171,8 +180,8 @@ export async function generateDeckOutline(plan: LessonPlanRow): Promise<{ slides
       const content = response.choices[0]?.message.content;
       if (!content?.trim()) throw new Error("AI вернул пустой ответ");
       return parseOutline(extractJson<unknown>(content));
-    }, { budgetMs: 90_000 });
-    return { slides, fromAi: true };
+    }, { budgetMs: 90_000, timeoutMs: 60_000 });
+    return { slides: withRequiredSlides(slides, plan), fromAi: true };
   } catch (error) {
     console.warn("[deck] ИИ не составил презентацию, берём поля плана", error instanceof Error ? error.message : error);
     return { slides: outlineFromPlan(plan), fromAi: false };

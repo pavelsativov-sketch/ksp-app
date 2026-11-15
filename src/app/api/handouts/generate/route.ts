@@ -9,6 +9,7 @@ import { resolveWatermark } from "@/lib/billing/watermark";
 import { handoutQuota, quotaErrorResponse } from "@/lib/ai/quota-bridge";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 const bodySchema = z.object({
   kind: z.enum(["worksheet", "flashcards", "crossword"]),

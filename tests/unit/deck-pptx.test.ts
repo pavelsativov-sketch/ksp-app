@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { addAnimations, buildDeckPptx, timingXml } from "@/lib/export/deck-pptx";
-import { blankSlide, outlineFromPlan, parseOutline } from "@/lib/materials/deck";
+import { blankSlide, outlineFromPlan, parseOutline, withRequiredSlides } from "@/lib/materials/deck";
 import { emptyKsp, type LessonPlanRow } from "@/lib/types/ksp";
 
 const slides = [
@@ -96,6 +96,14 @@ describe("черновик презентации", () => {
     expect(parsed.map((slide) => slide.kind)).toEqual(["title", "activity", "list", "reflection", "homework"]);
     expect(parsed[1]!.points).toEqual(["Нарисуй", "Подпиши"]);
     expect(parsed[3]!.points).toEqual(["всё понятно", "нужна помощь"]);
+  });
+
+  it("рефлексия и домашнее задание добавляются, если модель их забыла", () => {
+    const content = emptyKsp();
+    content.stages.end.homework = "Составить таблицу";
+    const plan = { id: "1", title: "T", grade: 5, language: "ru", content } as unknown as LessonPlanRow;
+    const kinds = withRequiredSlides([blankSlide("title", "Тема"), blankSlide("thanks", "Спасибо")], plan).map((slide) => slide.kind);
+    expect(kinds).toEqual(["title", "reflection", "homework", "thanks"]);
   });
 
   it("запасной черновик строится из плана без ИИ", () => {

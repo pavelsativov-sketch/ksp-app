@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { generateHandout } from "@/lib/handouts/generate";
+import { generateHandout, withoutTerm } from "@/lib/handouts/generate";
 import { buildCombinedDocx, buildHandoutDocx } from "@/lib/handouts/docx";
 import { layoutCrossword } from "@/lib/handouts/crossword";
 import JSZip from "jszip";
@@ -307,5 +307,15 @@ describe("buildHandoutDocx", () => {
     expect(studentXml).not.toContain("Ответы для учителя");
     // Пустая сетка: букв-ответов в ячейках нет (только номера).
     expect(studentXml).not.toContain(">ДРОБЬ<");
+  });
+});
+
+describe("определение в задании на пары", () => {
+  it("не повторяет термин, иначе пара видна сразу", () => {
+    expect(withoutTerm("Ядро — центр управления клеткой.", "Ядро")).toBe("Центр управления клеткой.");
+  });
+
+  it("определение без термина не меняется", () => {
+    expect(withoutTerm("Центр управления клеткой.", "Ядро")).toBe("Центр управления клеткой.");
   });
 });

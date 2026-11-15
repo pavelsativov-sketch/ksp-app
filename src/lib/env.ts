@@ -29,6 +29,7 @@ const SPECS: EnvSpec[] = [
   { key: "CEREBRAS_API_KEY", severity: "optional", description: "AI-провайдер" },
   { key: "OPENROUTER_API_KEY", severity: "optional", description: "AI-провайдер" },
   { key: "OPENAI_API_KEY", severity: "optional", description: "AI-провайдер и embeddings для RAG" },
+  { key: "KREA_API_KEY", severity: "optional", description: "Картинки (Krea, баланс API пополняется отдельно)" },
   { key: "CLOUDFLARE_ACCOUNT_ID", severity: "optional", description: "Картинки (Workers AI)" },
   { key: "CLOUDFLARE_API_TOKEN", severity: "optional", description: "Картинки (Workers AI)" },
 ];

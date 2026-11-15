@@ -19,6 +19,12 @@ describe("matchObjectives", () => {
     expect(matchObjectives({ subject: "Кулинария", grade: 5, topic: "дроби" })).toEqual([]);
   });
 
+  it("редкое слово темы важнее частого: клетка, а не строение листа", () => {
+    const codes = matchObjectives({ subject: "Биология", grade: 7, topic: "Строение клетки растения" }).map((o) => o.code);
+    expect(codes[0]).toBe("7.4.2.2");
+    expect(codes).not.toContain("7.1.2.1");
+  });
+
   it("берёт цели только своего класса", () => {
     const result = matchObjectives({ subject: "Математика", grade: 6, topic: "дроби", limit: 10 });
     expect(result.every((o) => o.code.startsWith("6."))).toBe(true);

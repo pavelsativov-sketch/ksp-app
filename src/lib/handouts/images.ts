@@ -88,7 +88,7 @@ export async function illustrate<T>(
   reserve: ReserveImageSlot,
 ): Promise<IllustrationResult<T>> {
   const cloudflare = process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN;
-  if (!cloudflare && !process.env.GEMINI_API_KEY) {
+  if (!cloudflare && !process.env.GEMINI_API_KEY && !process.env.KREA_API_KEY) {
     return { items, attempted: 0, created: 0, quotaExhausted: false };
   }
 

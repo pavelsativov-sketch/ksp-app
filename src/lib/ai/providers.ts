@@ -243,6 +243,8 @@ function shouldTryNextKey(err: unknown): boolean {
 export interface FallbackOptions {
   /** Общий бюджет на весь каскад (по умолчанию FALLBACK_BUDGET_MS). */
   budgetMs?: number;
+  /** Таймаут одного запроса, если задача длиннее обычной для своего типа. */
+  timeoutMs?: number;
   /** Внешний сигнал отмены: прерывает текущий запрос к провайдеру. */
   signal?: AbortSignal;
 }
@@ -296,7 +298,7 @@ export async function executeWithFallback<T>(
         const client = new OpenAI({
           apiKey,
           baseURL: config.baseURL,
-          timeout: Math.min(PROVIDER_TIMEOUT_MS[task], remaining),
+          timeout: Math.min(opts.timeoutMs ?? PROVIDER_TIMEOUT_MS[task], remaining),
           maxRetries: 0,
         });
         // Ключ из обрыва ответа модели (`apiKey` в конфиге) — для промптов,
