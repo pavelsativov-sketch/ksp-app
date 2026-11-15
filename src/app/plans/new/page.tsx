@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getDict } from "@/lib/i18n/server";
@@ -58,18 +59,19 @@ export default async function NewPlanPage({ searchParams }: { searchParams: Prom
         <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
           {np.lead}
         </p>
-        <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 tabular-nums text-[10px]">Ctrl+S</kbd>
-            {np.saveShortcut}
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 tabular-nums text-[10px]">Ctrl+Z</kbd>
-            {np.undoShortcut}
-          </span>
-        </div>
       </header>
-      <PlanOnboarding examples={examples} selectedKey={selected?.key} />
+      {/* Быстрый путь первым: большинству учителей хватает класса, предмета и темы. */}
+      <Link href="/dashboard?new=1" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-primary-soft p-5">
+        <span>
+          <b className="block text-lg">Урок за один шаг</b>
+          <span className="text-sm text-muted-foreground">Класс, предмет и тема: цели из ГОСО, ход урока и задания ИИ составит сам.</span>
+        </span>
+        <span className="rounded-control bg-ink px-4 py-2 text-sm font-bold text-white">Создать быстро</span>
+      </Link>
+      <details className="rounded-2xl border border-border bg-surface p-5" open={Boolean(selected)}>
+        <summary className="cursor-pointer text-sm font-bold">Заполнить форму на готовом примере</summary>
+        <div className="mt-4"><PlanOnboarding examples={examples} selectedKey={selected?.key} /></div>
+      </details>
       <PlanForm
         key={selected?.key ?? "manual"}
         subjects={subjects}
