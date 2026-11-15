@@ -234,3 +234,35 @@
   .body { display: block; }
   .shell { background: #fff; }
 }
+
+/* Общий слой движения кабинета: страницы появляются одинаково, карточки отзываются на наведение. */
+.content { position: relative; isolation: isolate; }
+.content::before {
+  content: "";
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 32% at 82% 12%, rgb(143 166 251 / 20%), transparent 70%),
+    radial-gradient(34% 30% at 12% 88%, rgb(109 59 234 / 12%), transparent 70%);
+  animation: shellDrift 22s ease-in-out infinite alternate;
+}
+/* fill backwards: после анимации transform снимается и не ломает fixed-элементы внутри. */
+.content > * > * { animation: shellRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.content > * > *:nth-child(2) { animation-delay: 70ms; }
+.content > * > *:nth-child(3) { animation-delay: 140ms; }
+.content > * > *:nth-child(4) { animation-delay: 210ms; }
+.content > * > *:nth-child(n + 5) { animation-delay: 280ms; }
+.content :global(a[class*="rounded-"]:not([class*="rounded-full"])),
+.content :global(article) { transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s; }
+.content :global(a[class*="rounded-"]:not([class*="rounded-full"])):hover,
+.content :global(article):hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgb(83 56 180 / 12%); }
+.content :global(button):active { transform: scale(0.97); }
+@keyframes shellRise { from { opacity: 0; transform: translateY(12px); } }
+@keyframes shellDrift { to { transform: translate3d(-3%, 2%, 0) scale(1.06); } }
+@media (prefers-reduced-motion: reduce) {
+  .content::before, .content > * > * { animation: none; }
+  .content :global(a), .content :global(article), .content :global(button) { transition: none; transform: none !important; }
+}
+@media print { .content::before { display: none; } }
