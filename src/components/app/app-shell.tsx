@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -135,8 +136,26 @@ export function AppShell({
           )}
         </aside>
         {open && <button type="button" aria-label={c.close} className={s.scrim} onClick={() => setOpen(false)} />}
-        <div className={s.content}>{children}</div>
+        <div className={s.content} data-shell-content>{children}<BannerRobot path={path} /></div>
       </div>
     </div>
   );
+}
+
+/** Шапка страницы: у экранов со своим баннером (главная, урок, конструктор презентации) робот уже есть. */
+const PAGE_HEADER = "header:not([class*='banner']):not([class*='head'])";
+
+/**
+ * Живой 3D-робот в шапке каждой страницы кабинета. Шапки у страниц свои, поэтому робот
+ * подселяется в найденный <header> с заголовком, а не вписывается в десятки файлов.
+ */
+function BannerRobot({ path }: { path: string }) {
+  const [host, setHost] = useState<Element | null>(null);
+  useEffect(() => {
+    const header = [...document.querySelectorAll(`[data-shell-content] ${PAGE_HEADER}`)].find((el) => el.querySelector("h1")) ?? null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- шапку страницы можно найти только в готовой разметке
+    setHost(header);
+  }, [path]);
+  if (!host?.isConnected) return null;
+  return createPortal(<span className={s.bannerRobot} aria-hidden="true"><ThreeStage scene="robot" className={s.bannerFill} /></span>, host);
 }
