@@ -40,6 +40,16 @@ describe("runRecipe", () => {
 
   it("hands over to the model when the page asks to sign in or the switcher is missing", async () => {
     expect(await runRecipe(recipe, async () => ({ success: true, authBarrier: { kind: "login" } }))).toBe(false);
-    expect(await runRecipe(recipe, async (name) => ({ success: name === "browserNavigate" }))).toBe(false);
+    expect(await runRecipe(recipe, async (name) => ({ success: name === "browserNavigate" || name === "browserWait" }))).toBe(false);
+  });
+
+  it("treats an empty auth barrier as no barrier and retries until the header is drawn", async () => {
+    let clicks = 0;
+    const ok = await runRecipe(recipe, async (name, args) => {
+      if (name !== "browserClickText") return { success: true, authBarrier: { kind: null } };
+      if (["Өткізіп жіберу", "Пропустить", "Skip"].includes(String(args.text))) return { success: false };
+      return { success: ++clicks > 3 }; // первый круг подписей шапки ещё нет
+    });
+    expect(ok).toBe(true);
   });
 });

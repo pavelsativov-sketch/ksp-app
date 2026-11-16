@@ -495,7 +495,7 @@ ${bilimClassInstructions(prompt)}` });
     if (recipe) {
       const callTool = async (name: string, args: Record<string, unknown>, optional: boolean) => {
         const tool = (activeTools as unknown as Record<string, (a: Record<string, unknown>, c: ToolCtx) => Promise<unknown>>)[name]!;
-        const res = (await tool(args, { taskId, userId, signal: abortController.signal, beat, deadline })) as { success?: boolean; authBarrier?: unknown };
+        const res = (await tool(args, { taskId, userId, signal: abortController.signal, beat, deadline })) as { success?: boolean; authBarrier?: { kind?: string | null } | null };
         // Необязательная попытка (закрыть тур, которого нет) в ленту не идёт.
         if (res.success || !optional) {
           const resultStr = JSON.stringify(res).slice(0, 4000);

@@ -63,7 +63,10 @@ export function matchRecipe(prompt: string): Recipe | null {
   };
 }
 
-type ToolCall = (name: string, args: Record<string, unknown>, optional: boolean) => Promise<{ success?: boolean; authBarrier?: unknown }>;
+type ToolCall = (name: string, args: Record<string, unknown>, optional: boolean) => Promise<{ success?: boolean; authBarrier?: { kind?: string | null } | null }>;
+
+/** Страница-приложение дорисовывает шапку после загрузки: даём ей несколько попыток. */
+const CLICK_ATTEMPTS = 3;
 
 /** Выполняет рецепт; false — шаг не удался, задачу должен продолжить обычный агент. */
 export async function runRecipe(recipe: Recipe, call: ToolCall): Promise<boolean> {
@@ -71,13 +74,16 @@ export async function runRecipe(recipe: Recipe, call: ToolCall): Promise<boolean
     if ("navigate" in step) {
       const result = await call("browserNavigate", { url: step.navigate }, false);
       // Сессия BilimClass истекла: вход и подсказки учителю умеет только обычный агент.
-      if (!result.success || result.authBarrier) return false;
+      if (!result.success || result.authBarrier?.kind) return false;
       continue;
     }
     let clicked = false;
-    for (const text of step.clickAny) {
-      clicked = Boolean((await call("browserClickText", { text }, true)).success);
-      if (clicked) break;
+    for (let attempt = 0; attempt < (step.optional ? 1 : CLICK_ATTEMPTS) && !clicked; attempt++) {
+      if (attempt > 0) await call("browserWait", { seconds: 1 }, true);
+      for (const text of step.clickAny) {
+        clicked = Boolean((await call("browserClickText", { text }, true)).success);
+        if (clicked) break;
+      }
     }
     if (!clicked && !step.optional) return false;
   }
