@@ -1,5 +1,5 @@
 /* Листы для печати: размер A4 при 96 dpi, цвета сохраняются при печати. */
-.stack { display: flex; flex-direction: column; align-items: center; gap: 18px; overflow-x: auto; }
+.stack { display: flex; flex-direction: column; align-items: safe center; gap: 18px; overflow-x: auto; }
 
 .page {
   position: relative;

@@ -1,5 +1,5 @@
 /* Карточки групповой работы: альбомный A4 при 96 dpi, как на образцах учителя. */
-.stack { display: flex; flex-direction: column; align-items: center; gap: 18px; overflow-x: auto; }
+.stack { display: flex; flex-direction: column; align-items: safe center; gap: 18px; overflow-x: auto; }
 
 .page {
   --accent: #2f6df0;
