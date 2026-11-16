@@ -57,10 +57,11 @@ const cardSchema = z.object({
   title: short(90),
   situation: z.array(short(600)).min(2).max(7),
   tasks: z.array(z.object({ text: short(320), schema: z.array(short(40)).min(2).max(4).optional().nullable() })).min(4).max(6),
-  value: short(200),
-  note: short(120),
-  slogan: short(90),
-  imagePrompt: short(600),
+  // Второстепенные поля модель иногда пропускает: из-за них не теряем весь набор карточек.
+  value: z.string().trim().max(200).optional().default(""),
+  note: z.string().trim().max(120).optional().default(""),
+  slogan: z.string().trim().max(90).optional().default(""),
+  imagePrompt: z.string().trim().max(600).optional().default(""),
 });
 const responseSchema = z.object({ cards: z.array(cardSchema).min(1) });
 

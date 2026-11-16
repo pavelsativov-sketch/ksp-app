@@ -57,7 +57,8 @@ export async function POST(request: Request) {
       const illustrated = await illustrate(
         work.cards,
         { topic, subject, grade },
-        (card) => card.imagePrompt,
+        // Без описания рисуем нейтральную сцену: русский заголовок FLUX превратил бы в надпись.
+        (card) => card.imagePrompt || "Pupils working together at a classroom table with notebooks and a laptop",
         (card, image) => ({ ...card, imageBase64: image.base64, imageMime: image.mimeType === "image/png" ? ("image/png" as const) : ("image/jpeg" as const) }),
         () => quota.reserve("image"),
       ).catch(() => null);

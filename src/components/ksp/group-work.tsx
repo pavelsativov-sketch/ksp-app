@@ -24,7 +24,7 @@ function Card({ card, index, mode, language }: { card: GroupCard; index: number;
       <header className={s.head}>
         <div className={s.group}><span className={s.groupIcon} aria-hidden="true">👥</span>{label} {index + 1}</div>
         <h3 className={s.title}>{card.title}</h3>
-        <div className={s.sticky}>{card.note}</div>
+        {card.note ? <div className={s.sticky}>{card.note}</div> : <span />}
       </header>
       <div className={s.body}>
         <div className={s.left}>
@@ -36,7 +36,7 @@ function Card({ card, index, mode, language }: { card: GroupCard; index: number;
               {card.imageBase64 && <img className={s.image} src={`data:${card.imageMime ?? "image/jpeg"};base64,${card.imageBase64}`} alt="" />}
             </div>
           </section>
-          <div className={s.value}><span className={s.valueIcon} aria-hidden="true">💡</span>{card.value}</div>
+          {card.value && <div className={s.value}><span className={s.valueIcon} aria-hidden="true">💡</span>{card.value}</div>}
         </div>
         <div className={s.right}>
           <section className={s.panel}>
@@ -60,7 +60,7 @@ function Card({ card, index, mode, language }: { card: GroupCard; index: number;
               ))}
             </ol>
           </section>
-          <div className={s.slogan}>{card.slogan}</div>
+          {card.slogan && <div className={s.slogan}>{card.slogan}</div>}
         </div>
       </div>
     </article>

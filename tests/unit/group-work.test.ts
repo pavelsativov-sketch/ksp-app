@@ -29,6 +29,15 @@ describe("parseGroupWork", () => {
     expect(withoutBlankChain("Определите источник и приёмник. Заполните схему.")).toBe("Определите источник и приёмник. Заполните схему.");
   });
 
+  it("keeps a card whose model answer missed the picture, note or slogan", () => {
+    const bare: Record<string, unknown> = { ...card("Без картинки") };
+    delete bare.imagePrompt;
+    delete bare.note;
+    delete bare.slogan;
+    const work = parseGroupWork(JSON.stringify({ cards: [card("Полная"), bare] }), input);
+    expect(work.cards[1]).toMatchObject({ title: "Без картинки", imagePrompt: "", note: "", slogan: "" });
+  });
+
   it("rejects too few cards or a card without enough tasks, so the next provider is tried", () => {
     expect(() => parseGroupWork(JSON.stringify({ cards: [card("Одна")] }), input)).toThrow();
     expect(() => parseGroupWork(JSON.stringify({ cards: [card("Мало", 3), card("Ок")] }), input)).toThrow();
