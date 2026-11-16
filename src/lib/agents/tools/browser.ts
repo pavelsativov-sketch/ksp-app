@@ -8,6 +8,7 @@ import {
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
   denormalize,
+  normalize,
   probeElement,
   readInteractables,
 } from '../computer/screen';
@@ -162,6 +163,76 @@ async function snapshotAfterNavigation(userId: string, page: BrowserPage) {
   return { ...(await extractPageSnapshot(page)), autoLogin: atLogin.autoLogin, signedIn: true };
 }
 
+/** Клик по нормализованным координатам с проверкой опасных кнопок; общий для browserClick и browserClickText. */
+async function clickAt(
+  { x, y, intent }: { x: number; y: number; intent?: string },
+  ctx?: { userId?: string },
+) {
+  if (!ctx?.userId || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
+    return { success: false, error: 'Нужны нормализованные координаты x и y (0–999) из списка interactables' };
+  }
+  const px = denormalize(Number(x), SCREEN_WIDTH);
+  const py = denormalize(Number(y), SCREEN_HEIGHT);
+
+  try {
+    const session = await getAgentBrowserSession(ctx.userId);
+    const beforeUrl = session.page.url();
+    const probe = await probeElement(session.page as never, px, py);
+    const decision = classifyClick(probe.label);
+    if (decision.requiresConfirmation) {
+      const desc = `${intent ? `${intent} — ` : ''}нажать «${probe.label || `(${x}, ${y})`}» (${decision.reason})`;
+      const allowed = await requestPermission(ctx.userId, desc, 'high');
+      if (!allowed) {
+        return {
+          success: false,
+          denied: true,
+          error: `Учитель отклонил действие: «${probe.label || intent || 'клик'}». Не повторяй его.`,
+        };
+      }
+    }
+    await session.page.mouse.click(px, py);
+    await session.page.waitForTimeout(1500);
+    await persistAgentBrowserSession(ctx.userId);
+    const snap = await snapshotWithAutoLogin(ctx.userId, session.page);
+    const pageUnchanged = beforeUrl === snap.url;
+    return boundedResult({
+      success: true,
+      clicked: probe.label || `(${px}, ${py})`,
+      pageUnchanged,
+      ...(pageUnchanged ? { notice: 'адрес страницы не изменился; на одностраничных сайтах содержимое могло обновиться — сверь content и interactables' } : {}),
+      ...snap,
+    });
+  } catch (e) {
+    return boundedResult({ success: false, error: e instanceof Error ? e.message : 'click failed' });
+  }
+}
+
+/**
+ * Скрипт страницы: самый маленький видимый элемент, чья подпись равна тексту
+ * (или начинается с него), прокручивается в центр; возвращает его центр в пикселях.
+ */
+export function findByTextScript(text: string): string {
+  return `(() => {
+    const want = ${JSON.stringify(text.toLowerCase())};
+    const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    let best = null;
+    for (const el of document.querySelectorAll('body *')) {
+      const label = norm(el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title'));
+      if (label !== want && !(label.startsWith(want) && label.length <= want.length + 3)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) continue;
+      const style = getComputedStyle(el);
+      if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) continue;
+      const area = rect.width * rect.height;
+      if (!best || area < best.area) best = { el, area };
+    }
+    if (!best) return null;
+    best.el.scrollIntoView({ block: 'center', inline: 'center' });
+    const rect = best.el.getBoundingClientRect();
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+  })`;
+}
+
 /**
  * Инструменты браузера агента.
  *
@@ -203,49 +274,28 @@ export const browserTools = {
     }
   },
 
-  browserClick: async (
-    { x, y, intent }: { x: number; y: number; intent?: string },
-    ctx?: { userId?: string },
-  ) => {
-    if (!ctx?.userId || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
-      return { success: false, error: 'Нужны нормализованные координаты x и y (0–999) из списка interactables' };
-    }
-    const px = denormalize(Number(x), SCREEN_WIDTH);
-    const py = denormalize(Number(y), SCREEN_HEIGHT);
+  browserClick: clickAt,
 
+  /**
+   * Клик по видимой подписи. Переключатели из div без роли (язык BilimClass)
+   * не попадают в interactables, и модель гадала координаты.
+   */
+  browserClickText: async ({ text, intent }: { text: string; intent?: string }, ctx?: { userId?: string }) => {
+    const wanted = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+    if (!ctx?.userId || !wanted || wanted.length > 80) {
+      return { success: false, error: 'Нужен text — видимая подпись элемента, до 80 символов' };
+    }
     try {
       const session = await getAgentBrowserSession(ctx.userId);
-      const beforeUrl = session.page.url();
-      const probe = await probeElement(session.page as never, px, py);
-      const decision = classifyClick(probe.label);
-      if (decision.requiresConfirmation) {
-        const desc = `${intent ? `${intent} — ` : ''}нажать «${probe.label || `(${x}, ${y})`}» (${decision.reason})`;
-        const allowed = await requestPermission(ctx.userId, desc, 'high');
-        if (!allowed) {
-          return {
-            success: false,
-            denied: true,
-            error: `Учитель отклонил действие: «${probe.label || intent || 'клик'}». Не повторяй его.`,
-          };
-        }
+      const found = await session.page.evaluate<{ x: number; y: number } | null>(findByTextScript(wanted));
+      if (!found) {
+        return { success: false, error: `На экране нет элемента с текстом «${wanted}». Прокрути страницу или открой меню, где он может быть.` };
       }
-      await session.page.mouse.click(px, py);
-      await session.page.waitForTimeout(1500);
-      await persistAgentBrowserSession(ctx.userId);
-      const snap = await snapshotWithAutoLogin(ctx.userId, session.page);
-      const pageUnchanged = beforeUrl === snap.url;
-      return boundedResult({
-        success: true,
-        clicked: probe.label || `(${px}, ${py})`,
-        pageUnchanged,
-        ...(pageUnchanged ? { notice: 'адрес страницы не изменился; на одностраничных сайтах содержимое могло обновиться — сверь content и interactables' } : {}),
-        ...snap,
-      });
+      return clickAt({ x: normalize(found.x, SCREEN_WIDTH), y: normalize(found.y, SCREEN_HEIGHT), intent: intent ?? wanted }, ctx);
     } catch (e) {
       return boundedResult({ success: false, error: e instanceof Error ? e.message : 'click failed' });
     }
   },
-
   browserType: async (
     { x, y, text, pressEnter }: { x?: number; y?: number; text: string; pressEnter?: boolean },
     ctx?: { userId?: string },

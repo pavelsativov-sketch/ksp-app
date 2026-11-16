@@ -19,6 +19,7 @@ const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekt
 - writeFile / readFile / listFiles — файлы в той же рабочей папке пользователя;
 - browserNavigate — открыть публичную страницу в облачном браузере и получить её текст + список кликабельных элементов с координатами (x, y);
 - browserClick — кликнуть в облачном браузере по координатам (x, y) из списка interactables;
+- browserClickText — нажать элемент по видимой подписи (text), когда его нет в interactables или координаты не помогают: переключатели языка, пункты выпадающих меню;
 - browserType — ввести текст в поле на странице в облачном браузере (с опциональными координатами x, y поля и нажатием Enter);
 - browserScroll — прокрутить страницу (direction: up/down/left/right, amount — число экранов) и получить обновлённый список элементов: нужно для журналов и длинных таблиц;
 - browserPressKey — служебная клавиша: Escape (закрыть окно), Tab, стрелки, PageUp/PageDown, Home/End;
@@ -53,6 +54,7 @@ const TOOL_SCHEMAS = [
   { type: 'function' as const, function: { name: 'listFiles', description: 'Список файлов песочницы', parameters: { type: 'object', properties: {}, required: [] } } },
   { type: 'function' as const, function: { name: 'browserNavigate', description: 'Открыть URL в браузере, вернуть заголовок, видимый текст и список кликабельных элементов interactables с координатами (x, y)', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } },
   { type: 'function' as const, function: { name: 'browserClick', description: 'Кликнуть в браузере по координатам (x, y) из списка interactables текущей страницы и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, intent: { type: 'string', description: 'Краткое пояснение, на какую кнопку нажимаем' } }, required: ['x', 'y'] } } },
+  { type: 'function' as const, function: { name: 'browserClickText', description: 'Нажать видимый элемент по его подписи (точный текст на экране), например «Қазақша» или «Русский». Используй, когда элемента нет в interactables', parameters: { type: 'object', properties: { text: { type: 'string', description: 'Видимый текст элемента' }, intent: { type: 'string' } }, required: ['text'] } } },
   { type: 'function' as const, function: { name: 'browserType', description: 'Ввести текст в поле на странице браузера (опционально кликнув по координатам x, y из interactables) и вернуть обновлённый экран', parameters: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, text: { type: 'string' }, pressEnter: { type: 'boolean' } }, required: ['text'] } } },
   { type: 'function' as const, function: { name: 'browserScroll', description: 'Прокрутить страницу и вернуть обновлённый экран и список interactables. Используй, когда нужный элемент не виден: журналы, таблицы, длинные списки', parameters: { type: 'object', properties: { direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] }, amount: { type: 'number', description: 'Сколько экранов прокрутить, 0.25–5, по умолчанию 1' } }, required: [] } } },
   { type: 'function' as const, function: { name: 'browserPressKey', description: 'Нажать служебную клавишу: Escape, Tab, ArrowUp/Down/Left/Right, PageUp, PageDown, Home, End. Enter не поддерживается — для него browserType с pressEnter', parameters: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } } },
@@ -420,7 +422,7 @@ export async function runAgentTask(
           }
           await beat(); // каждый сделанный шаг инструмента — подтверждение жизни
           await log({ type: 'TOOL_RESULT', message: humanToolResult(name, resultStr), data: { tool: name, result: resultStr } });
-          if (name === 'browserNavigate' || name === 'browserClick' || name === 'browserType' || name === 'browserScroll' || name === 'browserPressKey' || name === 'browserGoBack' || name === 'browserWait') {
+          if (name === 'browserNavigate' || name === 'browserClick' || name === 'browserClickText' || name === 'browserType' || name === 'browserScroll' || name === 'browserPressKey' || name === 'browserGoBack' || name === 'browserWait') {
             try {
               const browserResult = JSON.parse(resultStr) as {
                 success?: boolean;
@@ -577,6 +579,7 @@ function humanToolCall(name: string, args: Record<string, unknown>): string {
     case 'browserNavigate': return `Открываю страницу ${String(args.url ?? '')}`.slice(0, 300);
     case 'browserClick': return `Нажимаю (${String(args.x ?? '?')}, ${String(args.y ?? '?')})${args.intent ? ` — ${String(args.intent)}` : ''}`.slice(0, 300);
     case 'browserType': return `Ввожу текст «${String(args.text ?? '').slice(0, 80)}»`.slice(0, 300);
+    case 'browserClickText': return `Нажимаю «${String(args.text ?? '?')}»`;
     case 'browserDescribeScreen': return 'Смотрю на экран браузера';
     case 'browserScroll': return `Прокручиваю страницу: ${args.direction === 'up' ? 'вверх' : args.direction === 'left' ? 'влево' : args.direction === 'right' ? 'вправо' : 'вниз'}`;
     case 'browserPressKey': return `Нажимаю клавишу ${String(args.key ?? '')}`.slice(0, 120);
@@ -594,7 +597,7 @@ function humanToolResult(name: string, resultStr: string): string {
   try {
     const parsed = JSON.parse(resultStr) as { success?: boolean; output?: string; error?: string; title?: string; content?: string; files?: string[]; message?: string; exitCode?: number; stdout?: string; stderr?: string; clicked?: string; typed?: string; url?: string };
     if (name === 'browserNavigate') return parsed.title ? `Страница: ${parsed.title}` : parsed.error ?? '';
-    if (name === 'browserClick') return parsed.clicked ? `Нажато: ${parsed.clicked} → ${parsed.title || parsed.url || ''}` : parsed.error ?? '';
+    if (name === 'browserClick' || name === 'browserClickText') return parsed.clicked ? `Нажато: ${parsed.clicked} → ${parsed.title || parsed.url || ''}` : parsed.error ?? '';
     if (name === 'browserType') return parsed.typed ? `Введено: «${parsed.typed}»` : parsed.error ?? '';
     if (name === 'runCommand') return parsed.error ?? `Код завершения ${String(parsed.exitCode ?? '?')}: ${String(parsed.stdout ?? parsed.stderr ?? '').slice(0, 250)}`;
     if (name === 'createKsp' || name === 'createKtp') return parsed.success === false ? (parsed.error ?? 'Не удалось создать материал') : (parsed.message ?? 'Готово');
