@@ -19,6 +19,7 @@ export interface RemoteBrowserSession {
   sessionId: string;
   /** Когда последний раз реально проверяли живость сессии (см. VALIDATE_INTERVAL_MS). */
   lastValidatedAt: number;
+  rpcUrl?: string;
   getInteractionState: () => unknown;
   performUiAction: (action: string, args?: Record<string, unknown>, allowedOrigin?: string) => Promise<{ screenshot: Uint8Array; title: string; currentUrl: string }>;
 }
@@ -57,7 +58,13 @@ type SavedBrowserState = {
   currentUrl?: string;
   sessionId?: string;
   interactionState?: unknown;
+  /** Адрес раннера в песочнице: новому экземпляру функции не нужно искать песочницу через API. */
+  rpcUrl?: string;
 };
+
+/** Принимаем только адрес песочницы Vercel: подменённый документ не уведёт RPC на чужой хост. */
+const isSandboxRpcUrl = (value: unknown): value is string =>
+  typeof value === "string" && /^https:\/\/[a-z0-9-]+\.vercel\.run\/_agent\/browser$/i.test(value);
 
 /**
  * Сохранённое состояние браузера пользователя: куки/localStorage, текущий
@@ -91,6 +98,7 @@ async function readStoredState(userId: string): Promise<SavedBrowserState | unde
       currentUrl,
       sessionId,
       interactionState: value.interactionState,
+      rpcUrl: isSandboxRpcUrl(value.rpcUrl) ? value.rpcUrl : undefined,
     };
   } catch {
     return undefined;
@@ -113,7 +121,7 @@ export async function persistAgentBrowserSession(userId: string): Promise<void> 
   const db = await getDb();
   await db.collection(COL.agentBrowserSessions).updateOne(
     { user_id: userId },
-    { $set: { encrypted_state: encryptState(JSON.stringify({ storageState: merged, currentUrl: currentUrl ?? prev?.currentUrl, sessionId: sessionId ?? prev?.sessionId, interactionState: session.remote?.getInteractionState?.() ?? prev?.interactionState })), updated_at: new Date() }, $setOnInsert: { created_at: new Date() } },
+    { $set: { encrypted_state: encryptState(JSON.stringify({ storageState: merged, currentUrl: currentUrl ?? prev?.currentUrl, sessionId: sessionId ?? prev?.sessionId, interactionState: session.remote?.getInteractionState?.() ?? prev?.interactionState, rpcUrl: session.remote?.rpcUrl ?? prev?.rpcUrl })), updated_at: new Date() }, $setOnInsert: { created_at: new Date() } },
     { upsert: true },
   );
 }
@@ -262,6 +270,17 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
     );
   }
 
+  // Быстрый путь: раннер из прошлого запроса жив, значит поиск песочницы через API
+  // (несколько секунд на каждый новый экземпляр функции) не нужен.
+  if (stored?.sessionId && stored.rpcUrl) {
+    const remote = createRemoteSession(userId, stored.sessionId, stored.currentUrl, stored.storageState, stored.interactionState, now, stored.rpcUrl);
+    if (await remote.remote!.validate()) {
+      remote.remote!.lastValidatedAt = now;
+      return remote;
+    }
+    sessions.delete(userId);
+  }
+
   try {
     const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
     const rpcUrl = await getSandboxBrowserRpcUrl(userId);
@@ -275,7 +294,10 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
       currentUrl: stored?.currentUrl,
       rpcUrl,
     });
-    return createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl);
+    const session = createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl);
+    // Адрес раннера сохраняем сразу: следующий запрос пойдёт быстрым путём.
+    void persistAgentBrowserSession(userId).catch(() => undefined);
+    return session;
   } catch (e) {
     log.error("browser-session: Vercel Sandbox runner unavailable", { userId, error: String(e) });
     throw new BrowserRpcError(
@@ -312,7 +334,8 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
         ...(allowedOrigin ? { allowedOrigin } : {}),
         ...(captureScreenshot ? { captureScreenshot: true } : {}),
         ...(args ? { args } : {}),
-        timeoutMs: action === "navigate" ? 35_000 : 55_000,
+        // Проверка статуса короткая: уснувшая песочница не должна держать запрос минуту.
+        timeoutMs: action === "status" ? 5_000 : action === "navigate" ? 35_000 : 55_000,
       });
     } catch (error) {
       // 410 — раннер забыл сеанс (песочница уснула или перезапустилась). Раньше
@@ -406,6 +429,7 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
     lastSeen: now,
     remote: {
       sessionId,
+      rpcUrl,
       getInteractionState: () => currentInteractionState,
       performUiAction: async (action, args, allowedOrigin) => {
         const response = await send<{ url?: string; status?: number | null }>(action, args, allowedOrigin, true);
