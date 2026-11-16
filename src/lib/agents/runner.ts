@@ -9,6 +9,7 @@ import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain
 import { appBaseUrl, decideContinuation, MAX_CONTINUATIONS, triggerContinuation } from './continuation';
 import { buildPartialReport } from './partial-report';
 import { matchRecipe, runRecipe } from './recipes';
+import { flushBrowserPersist } from './tools/browser';
 
 const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekty (сервис для учителей Казахстана).
 Файлы пользователя сохраняются в отдельной рабочей области аккаунта. Не пытайся обращаться
@@ -99,6 +100,8 @@ export async function runAgentTask(
   await setControlOwner(userId, 'ai');
 
   const finish = async (status: 'completed' | 'failed' | 'stopped', patch: Record<string, unknown> = {}) => {
+    // Сессия браузера сохраняется в фоне: дожидаемся записи, пока функция ещё жива.
+    await flushBrowserPersist(userId).catch(() => undefined);
     await agentTasks.updateOne(
       { _id: new ObjectId(taskId) },
       { $set: { status, updated_at: new Date(), ...patch }, $unset: { heartbeat_at: 1, checkpoint: 1 } },
@@ -530,7 +533,10 @@ ${bilimClassInstructions(prompt)}` });
     // Агент ждал учителя, пока функция не начала умирать: статус остаётся
     // running с «давним» пульсом, кнопка «Передать управление ИИ» перезапустит
     // задачу с контрольной точки.
-    if (pausedForTimeout) return;
+    if (pausedForTimeout) {
+      await flushBrowserPersist(userId).catch(() => undefined);
+      return;
+    }
 
     // Время сессии вышло, а задача не закончена: продолжаем в новом запросе с
     // контрольной точки, а не требуем от учителя запускать задачу заново.

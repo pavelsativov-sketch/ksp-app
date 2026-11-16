@@ -174,6 +174,24 @@ async function snapshotAfterNavigation(userId: string, page: BrowserPage) {
   return { ...(await extractPageSnapshot(page)), autoLogin: atLogin.autoLogin, signedIn: true };
 }
 
+const pendingPersists = new Map<string, Promise<void>>();
+
+/**
+ * Сохранение сессии в фоне. Запись в базу занимала ~5 с из каждого открытия
+ * страницы и клика, а агенту для следующего шага она не нужна. Сохранения одного
+ * пользователя идут по очереди; задача дожидается их через flushBrowserPersist.
+ */
+function persistInBackground(userId: string): void {
+  const previous = pendingPersists.get(userId) ?? Promise.resolve();
+  const next = previous.then(() => persistAgentBrowserSession(userId)).then(() => undefined, () => undefined);
+  pendingPersists.set(userId, next);
+}
+
+/** Дождаться фоновых сохранений сессии: без этого функция могла бы завершиться раньше записи. */
+export async function flushBrowserPersist(userId: string): Promise<void> {
+  await pendingPersists.get(userId);
+}
+
 /** Клик по нормализованным координатам с проверкой опасных кнопок; общий для browserClick и browserClickText. */
 async function clickAt(
   { x, y, intent }: { x: number; y: number; intent?: string },
@@ -203,7 +221,8 @@ async function clickAt(
     }
     await session.page.mouse.click(px, py);
     await session.page.waitForTimeout(1500);
-    const [snap] = await Promise.all([snapshotWithAutoLogin(ctx.userId, session.page), persistAgentBrowserSession(ctx.userId)]);
+    persistInBackground(ctx.userId);
+    const snap = await snapshotWithAutoLogin(ctx.userId, session.page);
     const pageUnchanged = beforeUrl === snap.url;
     return boundedResult({
       success: true,
@@ -294,8 +313,8 @@ export const browserTools = {
         }
         timing.readyMs = Date.now() - readyStartedAt;
         // Сохранение сессии и снимок страницы друг от друга не зависят.
-        const [snapshot] = await Promise.all([snapshotAfterNavigation(userId, session.page as never), persistAgentBrowserSession(userId)]);
-        return snapshot;
+        persistInBackground(userId);
+        return snapshotAfterNavigation(userId, session.page as never);
       });
       timing.totalMs = Date.now() - startedAt;
       return boundedResult({ success: true, timing, ...snap });
