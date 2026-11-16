@@ -3,7 +3,7 @@ import { z } from "zod";
 export const DECK_THEMES = ["network", "lavender", "ocean", "sunset"] as const;
 export type DeckTheme = (typeof DECK_THEMES)[number];
 
-export const SLIDE_KINDS = ["title", "mood", "guess", "goals", "flow", "list", "cards", "question", "quiz", "activity", "reflection", "homework", "thanks"] as const;
+export const SLIDE_KINDS = ["title", "mood", "review", "guess", "goals", "infographic", "flow", "list", "cards", "question", "quiz", "groups", "activity", "assessment", "reflection", "homework", "thanks"] as const;
 export type SlideKind = (typeof SLIDE_KINDS)[number];
 
 const line = z.string().trim().min(1).max(400);
@@ -34,14 +34,18 @@ export const deckSlidesSchema = z.array(deckSlideSchema).min(1).max(30);
 export const SLIDE_KIND_LABELS: Record<SlideKind, string> = {
   title: "Титульный",
   mood: "Настрой на урок",
+  review: "Повторение",
   guess: "Определи тему",
   goals: "Цели урока",
+  infographic: "Инфографика: понятие и ветви",
   flow: "Схема-конвейер",
   list: "Тезис и пункты",
   cards: "Карточки",
   question: "Вопрос классу",
   quiz: "Тест с ответом по клику",
+  groups: "Групповая работа",
   activity: "Работа учеников",
+  assessment: "Оценивание",
   reflection: "Рефлексия",
   homework: "Домашнее задание",
   thanks: "Завершение",
@@ -51,14 +55,18 @@ export const SLIDE_KIND_LABELS: Record<SlideKind, string> = {
 export const SLIDE_FIELDS: Record<SlideKind, Array<"lead" | "steps" | "points" | "takeaway" | "options" | "imagePrompt">> = {
   title: ["lead", "imagePrompt"],
   mood: ["points", "imagePrompt"],
+  review: ["points", "imagePrompt"],
   guess: ["points", "imagePrompt"],
   goals: ["points"],
+  infographic: ["lead", "points", "takeaway"],
   flow: ["lead", "steps", "points", "takeaway"],
   list: ["points", "takeaway", "imagePrompt"],
   cards: ["points", "takeaway"],
   question: ["points"],
   quiz: ["options"],
+  groups: ["lead", "points"],
   activity: ["lead", "points"],
+  assessment: ["points"],
   reflection: ["points"],
   homework: ["points"],
   thanks: ["lead"],
@@ -80,3 +88,37 @@ export const DECK_PALETTES: Record<DeckTheme, DeckPalette> = {
   ocean: { ink: "0f2a3a", muted: "4c6573", net: "dcedf3", accent: "0c7fa8", band: "0c7fa8", soft: "e3f4f9", tones: ["16a3b8", "2f6fe4", "37c29a", "f2a33c", "5b7ee8", "2dbbd0"] },
   sunset: { ink: "3a1d20", muted: "7a5a55", net: "f8e4da", accent: "d6532f", band: "d6532f", soft: "fff0e6", tones: ["f07a3c", "e04f7a", "f4b13d", "a25fd1", "e8665a", "f2954a"] },
 };
+
+export interface InfographicBranch {
+  icon: string;
+  head: string;
+  caption: string;
+}
+
+const LEADING_EMOJI = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*/u;
+
+/**
+ * Ветвь инфографики хранится строкой «🌡️ Числовая форма: Числа, температура»:
+ * значок, заголовок плашки и подпись. Отдельных полей нет, чтобы черновики и
+ * конструктор работали со старым форматом слайда.
+ */
+export function parseBranch(point: string): InfographicBranch {
+  const emoji = point.match(LEADING_EMOJI);
+  const rest = emoji ? point.slice(emoji[0].length) : point;
+  const split = rest.search(/\s*[:—–]\s+/);
+  if (split < 0) return { icon: emoji?.[1] ?? "", head: rest.trim(), caption: "" };
+  const separator = rest.slice(split).match(/^\s*[:—–]\s+/)![0];
+  return { icon: emoji?.[1] ?? "", head: rest.slice(0, split).trim(), caption: rest.slice(split + separator.length).trim() };
+}
+
+/** Заголовок-тезис как на слайдах учителя: часть после тире выделяется цветом. */
+export function splitThesis(title: string): [string, string] {
+  const at = title.indexOf(" — ");
+  return at > 0 ? [title.slice(0, at + 3), title.slice(at + 3)] : [title, ""];
+}
+
+/** Баллы из конца дескриптора: «… — 2 балла», «(1 б.)». */
+export function descriptorPoints(text: string): { text: string; points: number | null } {
+  const match = text.match(/\s*[—–(-]?\s*(\d+)\s*(?:балл\S*|б\.?|ұпай)\)?\s*$/i);
+  return match ? { text: text.slice(0, match.index).trim(), points: Number(match[1]) } : { text: text.trim(), points: null };
+}

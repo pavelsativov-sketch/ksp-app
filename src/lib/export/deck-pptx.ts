@@ -1,6 +1,6 @@
 import PptxGenJS from "pptxgenjs";
 import JSZip from "jszip";
-import { DECK_PALETTES, type DeckPalette, type DeckSlide, type DeckTheme } from "@/lib/materials/deck-types";
+import { DECK_PALETTES, descriptorPoints, parseBranch, splitThesis, type DeckPalette, type DeckSlide, type DeckTheme } from "@/lib/materials/deck-types";
 
 /** Презентация из конструктора: макеты, цвета темы, переходы и появление элементов. */
 
@@ -79,6 +79,16 @@ function card(ctx: Ctx, text: string, box: { x: number; y: number; w: number; h:
   });
 }
 
+/** Заголовок-тезис в белой плашке: часть после тире цветом темы, как на слайдах учителя. */
+function addThesis(ctx: Ctx, y = 0.25) {
+  const { s, p, slide, pres } = ctx;
+  const [main, accent] = splitThesis(slide.title);
+  s.addText(
+    [{ text: main, options: { color: p.ink } }, ...(accent ? [{ text: accent, options: { color: p.accent } }] : [])],
+    { shape: pres.ShapeType.roundRect, rectRadius: 0.3, x: PAD, y, w: CONTENT_W, h: 1.05, fill: { color: "ffffff" }, line: { color: p.net, width: 1.5 }, fontSize: 34, bold: true, fontFace: "Arial", align: "center", valign: "middle", fit: "shrink", ...auto("thesis") },
+  );
+}
+
 function addTakeaway(ctx: Ctx, text: string, reveal: Reveal) {
   ctx.s.addText(text, { shape: ctx.pres.ShapeType.rect, x: 0, y: H - 1, w: W, h: 1, fill: { color: ctx.p.band }, color: "ffffff", fontSize: 28, bold: true, fontFace: "Arial", align: "center", valign: "middle", fit: "shrink", ...reveal });
 }
@@ -106,6 +116,52 @@ const LAYOUTS: Record<DeckSlide["kind"], (ctx: Ctx) => void> = {
       const x = left ? PAD : W - PAD - sideW;
       card(ctx, phrase, { x, y: BODY_Y + row * rowH, w: sideW, h: rowH - 0.15 }, { fill: ctx.p.tones[i % ctx.p.tones.length]!, fontSize: 19, bold: true }, auto(i));
     });
+  },
+  review(ctx) {
+    addTitle(ctx, "center");
+    const questions = ctx.slide.points.slice(0, 6);
+    const hasImage = addImage(ctx, { x: 8.9, y: BODY_Y, w: W - 8.9 - PAD, h: 5.4 }, auto("img"));
+    const w = hasImage ? 7.9 : CONTENT_W;
+    const rowH = Math.min(1.25, 5.4 / Math.max(questions.length, 1));
+    // Вопросы повторения учитель открывает по одному, после ответа класса.
+    questions.forEach((question, i) => {
+      const y = BODY_Y + i * rowH;
+      card(ctx, "?", { x: PAD, y, w: 0.9, h: rowH - 0.15 }, { fill: ctx.p.tones[i % ctx.p.tones.length]!, fontSize: 28, bold: true }, click(`n${i}`));
+      card(ctx, question, { x: PAD + 1, y, w: w - 1, h: rowH - 0.15 }, { fill: ctx.p.soft, color: ctx.p.ink, line: ctx.p.net, fontSize: 21, align: "left" }, click(`q${i}`));
+    });
+  },
+  infographic(ctx) {
+    const { s, p, slide, pres } = ctx;
+    addThesis(ctx);
+    const branches = slide.points.slice(0, 5).map(parseBranch);
+    const count = Math.max(branches.length, 1);
+    const gap = 0.2;
+    const cardW = (CONTENT_W - gap * (count - 1)) / count;
+    const cardY = 2.85;
+    const cardH = slide.takeaway ? 2.95 : 3.85;
+    const centerW = 3.8;
+    const centerX = (W - centerW) / 2;
+    if (slide.lead) {
+      s.addText(slide.lead, { shape: pres.ShapeType.roundRect, rectRadius: 0.2, x: centerX, y: 1.5, w: centerW, h: 0.8, fill: { color: "ffffff" }, line: { color: p.accent, width: 2 }, color: p.accent, fontSize: 26, bold: true, fontFace: "Arial", align: "center", valign: "middle", fit: "shrink", ...auto("center") });
+    }
+    branches.forEach((branch, i) => {
+      const tone = p.tones[i % p.tones.length]!;
+      const x = PAD + i * (cardW + gap);
+      if (slide.lead) {
+        // Стрелка от понятия к ветви: линия в прямоугольнике между точками, отражённая, если ветвь левее центра.
+        const fromX = W / 2;
+        const toX = x + cardW / 2;
+        s.addShape(pres.ShapeType.line, { x: Math.min(fromX, toX), y: 2.3, w: Math.max(Math.abs(toX - fromX), 0.01), h: cardY - 2.3, flipH: toX < fromX, line: { color: tone, width: 2.5, endArrowType: "triangle" }, ...auto(`line${i}`) });
+      }
+      s.addText(branch.head, { shape: pres.ShapeType.roundRect, rectRadius: 0.15, x, y: cardY, w: cardW, h: 0.6, fill: { color: tone }, line: { color: tone, width: 1 }, color: "ffffff", fontSize: 17, bold: true, fontFace: "Arial", align: "center", valign: "middle", fit: "shrink", ...auto(`head${i}`) });
+      s.addText(
+        [...(branch.icon ? [{ text: branch.icon, options: { fontSize: 44, breakLine: true } }] : []), { text: branch.caption, options: { fontSize: 16, color: p.ink } }],
+        { shape: pres.ShapeType.roundRect, rectRadius: 0.15, x, y: cardY + 0.65, w: cardW, h: cardH - 0.65, fill: { color: "ffffff" }, line: { color: tone, width: 1.5 }, fontFace: "Arial", align: "center", valign: "middle", margin: 8, fit: "shrink", ...auto(`body${i}`) },
+      );
+    });
+    if (slide.takeaway) {
+      s.addText(`💡  ${slide.takeaway}`, { shape: pres.ShapeType.roundRect, rectRadius: 0.3, x: 1.2, y: H - 1.45, w: W - 2.4, h: 1.05, fill: { color: p.soft }, line: { color: p.accent, width: 1.5 }, color: p.ink, fontSize: 21, bold: true, fontFace: "Arial", align: "center", valign: "middle", fit: "shrink", ...click("summary") });
+    }
   },
   guess(ctx) {
     addTitle(ctx, "center");
@@ -195,6 +251,27 @@ const LAYOUTS: Record<DeckSlide["kind"], (ctx: Ctx) => void> = {
       }
     });
   },
+  groups(ctx) {
+    const { s, p, slide } = ctx;
+    addTitle(ctx, "center");
+    if (slide.lead) s.addText(slide.lead, { x: PAD, y: 1.45, w: CONTENT_W, h: 0.6, fontSize: 20, bold: true, color: p.accent, fontFace: "Arial", align: "center", fit: "shrink", ...auto("lead") });
+    const groups = slide.points.slice(0, 4);
+    const cols = groups.length <= 2 ? groups.length || 1 : 2;
+    const rows = Math.ceil(groups.length / cols);
+    const top = 2.2;
+    const w = (CONTENT_W - 0.25 * (cols - 1)) / cols;
+    const h = (H - 0.45 - top - 0.25 * (rows - 1)) / Math.max(rows, 1);
+    groups.forEach((group, i) => {
+      const at = group.indexOf(":");
+      const head = at > 0 ? group.slice(0, at).trim() : `Группа ${i + 1}`;
+      const body = at > 0 ? group.slice(at + 1).trim() : group;
+      const x = PAD + (i % cols) * (w + 0.25);
+      const y = top + Math.floor(i / cols) * (h + 0.25);
+      const tone = p.tones[i % p.tones.length]!;
+      s.addText(`👥  ${head}`, { shape: ctx.pres.ShapeType.roundRect, rectRadius: 0.15, x, y, w, h: 0.65, fill: { color: tone }, line: { color: tone, width: 1 }, color: "ffffff", fontSize: 20, bold: true, fontFace: "Arial", align: "left", valign: "middle", margin: 10, ...auto(`h${i}`) });
+      card(ctx, body, { x, y: y + 0.7, w, h: h - 0.7 }, { fill: "ffffff", color: p.ink, line: tone, fontSize: 19, align: "left" }, auto(`b${i}`));
+    });
+  },
   activity(ctx) {
     const { s, p, slide } = ctx;
     addTitle(ctx, "center");
@@ -202,6 +279,20 @@ const LAYOUTS: Record<DeckSlide["kind"], (ctx: Ctx) => void> = {
     const steps = slide.points.slice(0, 6);
     const rowH = Math.min(1.2, 4.6 / Math.max(steps.length, 1));
     steps.forEach((step, i) => card(ctx, `${i + 1}.  ${step}`, { x: 1.2, y: 2.35 + i * rowH, w: W - 2.4, h: rowH - 0.12 }, { fill: p.tones[i % p.tones.length]!, fontSize: 22, bold: true, align: "left" }, auto(i)));
+  },
+  assessment(ctx) {
+    const { s, p, slide } = ctx;
+    addTitle(ctx, "center");
+    const rows = slide.points.slice(0, 7).map(descriptorPoints);
+    const total = rows.reduce((sum, row) => sum + (row.points ?? 0), 0);
+    const bottom = total > 0 ? H - 1.25 : H - 0.45;
+    const rowH = Math.min(0.95, (bottom - BODY_Y) / Math.max(rows.length, 1));
+    rows.forEach((row, i) => {
+      const y = BODY_Y + i * rowH;
+      card(ctx, row.text, { x: PAD, y, w: CONTENT_W - 1.6, h: rowH - 0.12 }, { fill: p.soft, color: p.ink, line: p.net, fontSize: 19, align: "left" }, auto(`d${i}`));
+      if (row.points !== null) card(ctx, `${row.points} б.`, { x: W - PAD - 1.5, y, w: 1.5, h: rowH - 0.12 }, { fill: p.tones[i % p.tones.length]!, fontSize: 20, bold: true }, auto(`p${i}`));
+    });
+    if (total > 0) s.addText(`Итого: ${total} б.`, { shape: ctx.pres.ShapeType.roundRect, rectRadius: 0.2, x: W - PAD - 3.2, y: H - 1.1, w: 3.2, h: 0.7, fill: { color: p.accent }, color: "ffffff", fontSize: 22, bold: true, fontFace: "Arial", align: "center", valign: "middle", ...auto("total") });
   },
   reflection(ctx) {
     const { s, p, slide, pres } = ctx;

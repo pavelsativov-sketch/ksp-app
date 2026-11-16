@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Loader2, Plus, Presentation, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DECK_PALETTES, DECK_THEMES, SLIDE_FIELDS, SLIDE_KINDS, SLIDE_KIND_LABELS, type DeckSlide, type DeckTheme, type SlideKind } from "@/lib/materials/deck-types";
+import { DECK_PALETTES, DECK_THEMES, SLIDE_FIELDS, SLIDE_KINDS, SLIDE_KIND_LABELS, descriptorPoints, parseBranch, splitThesis, type DeckSlide, type DeckTheme, type SlideKind } from "@/lib/materials/deck-types";
 import s from "./deck-builder.module.css";
 
 const THEME_LABELS: Record<DeckTheme, string> = { network: "Сеть", lavender: "Лаванда", ocean: "Океан", sunset: "Закат" };
@@ -77,6 +77,36 @@ function SlideView({ slide, theme, play = false }: { slide: DeckSlide; theme: De
     case "homework":
       body = <>{centerTitle}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={light}>{point}</div>)}</div></>;
       break;
+    case "review":
+      body = <>{centerTitle}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={s.row}><div className={s.box} style={{ flex: "0 0 7cqw", background: tone(i) }}>?</div><div className={`${s.box} ${s.boxLight}`} style={light}>{point}</div></div>)}</div></>;
+      break;
+    case "infographic": {
+      const [main, accent] = splitThesis(slide.title);
+      body = <>
+        <div className={`${s.sTitle} ${s.center}`} style={{ background: "#fff", border: `0.2cqw solid ${hex(p.net)}`, borderRadius: "3cqw", padding: "0.8cqw 2cqw" }}>{main}<span style={{ color: hex(p.accent) }}>{accent}</span></div>
+        {slide.lead && <div className={s.center} style={{ alignSelf: "center", padding: "0.6cqw 3cqw", fontSize: "2.6cqw", fontWeight: 800, color: hex(p.accent), border: `0.25cqw solid ${hex(p.accent)}`, borderRadius: "1.5cqw", background: "#fff" }}>{slide.lead}</div>}
+        <div className={s.row} style={{ flex: 1, alignItems: "stretch" }}>{slide.points.slice(0, 5).map(parseBranch).map((branch, i) => (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.5cqw", minWidth: 0 }}>
+            <div className={s.box} style={{ flex: "none", minHeight: "7.4cqw", background: tone(i), fontSize: "1.7cqw" }}>{branch.head}</div>
+            <div className={`${s.box} ${s.boxLight}`} style={{ flex: 1, background: "#fff", color: hex(p.ink), border: `0.2cqw solid ${tone(i)}`, flexDirection: "column", fontSize: "1.6cqw" }}><span style={{ fontSize: "4.5cqw" }}>{branch.icon}</span>{branch.caption}</div>
+          </div>
+        ))}</div>
+        {slide.takeaway && <div className={s.center} style={{ padding: "1cqw 2cqw", fontSize: "2cqw", fontWeight: 700, borderRadius: "3cqw", background: hex(p.soft), border: `0.2cqw solid ${hex(p.accent)}` }}>💡 {slide.takeaway}</div>}
+      </>;
+      break;
+    }
+    case "groups":
+      body = <>{centerTitle}<div className={`${s.sLead} ${s.center}`} style={{ color: hex(p.accent), fontWeight: 700 }}>{slide.lead}</div><div className={s.grid2}>{slide.points.slice(0, 4).map((point, i) => {
+        const at = point.indexOf(":");
+        return <div key={i} style={{ display: "flex", flexDirection: "column", gap: "0.4cqw" }}><div className={s.box} style={{ flex: "none", background: tone(i), justifyContent: "flex-start" }}>👥 {at > 0 ? point.slice(0, at) : `Группа ${i + 1}`}</div><div className={`${s.box} ${s.boxLight}`} style={{ background: "#fff", color: hex(p.ink), border: `0.2cqw solid ${tone(i)}` }}>{at > 0 ? point.slice(at + 1).trim() : point}</div></div>;
+      })}</div></>;
+      break;
+    case "assessment": {
+      const rows = slide.points.map(descriptorPoints);
+      const total = rows.reduce((sum, row) => sum + (row.points ?? 0), 0);
+      body = <>{centerTitle}<div className={s.grow}>{rows.map((row, i) => <div key={i} className={s.row}><div className={`${s.box} ${s.boxLight}`} style={{ ...light, justifyContent: "flex-start" }}>{row.text}</div>{row.points !== null && <div className={s.box} style={{ flex: "0 0 10cqw", background: tone(i) }}>{row.points} б.</div>}</div>)}</div>{total > 0 && <div className={s.box} style={{ flex: "none", alignSelf: "flex-end", padding: "0.8cqw 2.5cqw", background: hex(p.accent) }}>Итого: {total} б.</div>}</>;
+      break;
+    }
     case "thanks":
       body = <div className={s.grow} style={{ justifyContent: "center", color: "#fff" }}><div className={`${s.sTitle} ${s.center}`} style={{ fontSize: "7cqw" }}>{slide.title}</div><div className={`${s.sLead} ${s.center}`}>{slide.lead}</div></div>;
       break;
