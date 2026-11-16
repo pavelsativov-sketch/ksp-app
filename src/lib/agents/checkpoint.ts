@@ -20,6 +20,8 @@ export const KEEP_TAIL_MESSAGES = 24;
 export const MAX_CHECKPOINT_CHARS = 300_000;
 /** Предельная длина результата инструмента в старых сообщениях. */
 const OLD_TOOL_RESULT_CHARS = 1_500;
+/** ~3 тыс. токенов истории: вместе с подсказкой и инструментами шаг влезает в 8000 токенов Groq. */
+export const MODEL_HISTORY_CHARS = 9_000;
 
 export interface AgentCheckpoint {
   v: number;
@@ -105,10 +107,25 @@ export function compactMessages(messages: AgentMessage[], keepTail = KEEP_TAIL_M
  * полной остаётся только выдача после последнего хода модели. Бесплатный Groq
  * даёт 8000 токенов в минуту, а полные страницы съедали лимит за шаг.
  */
-export function compactForModel(messages: AgentMessage[]): AgentMessage[] {
-  const compact = compactMessages(messages);
-  const lastAssistant = compact.map((m) => m.role).lastIndexOf("assistant");
-  return shrinkOldToolResults(compact, Math.max(0, lastAssistant));
+export function compactForModel(messages: AgentMessage[], budgetChars = MODEL_HISTORY_CHARS): AgentMessage[] {
+  const shrink = (tail: number) => {
+    const compact = compactMessages(messages, tail);
+    const lastAssistant = compact.map((m) => m.role).lastIndexOf("assistant");
+    return shrinkOldToolResults(compact, Math.max(0, lastAssistant));
+  };
+  // История растёт с каждым шагом: убираем самые старые шаги, пока она не уложится в лимит.
+  let tail = KEEP_TAIL_MESSAGES;
+  let out = shrink(tail);
+  while (historyChars(out) > budgetChars && tail > 4) {
+    tail -= 2;
+    out = shrink(tail);
+  }
+  return out;
+}
+
+/** Размер истории без системной подсказки и исходного задания: они в запросе всегда. */
+function historyChars(messages: AgentMessage[]): number {
+  return JSON.stringify(messages.slice(2)).length;
 }
 
 /** Собирает контрольную точку, гарантируя предел размера. */

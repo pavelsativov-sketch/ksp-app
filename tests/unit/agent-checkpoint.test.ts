@@ -3,6 +3,7 @@ import {
   buildCheckpoint,
   compactMessages,
   compactForModel,
+  MODEL_HISTORY_CHARS,
   parseCheckpoint,
   repairTranscript,
   MAX_CHECKPOINT_CHARS,
@@ -119,5 +120,18 @@ describe("compactForModel", () => {
     const tools = out.filter((m) => m.role === "tool").map((m) => String((m as { content: string }).content).length);
     expect(tools[0]).toBeLessThan(2000);
     expect(tools[1]).toBe(6000);
+  });
+
+  it("drops the oldest steps once the history outgrows the per-request budget", () => {
+    const steps: AgentMessage[] = [];
+    for (let i = 0; i < 12; i++) {
+      steps.push({ role: "assistant", content: null, tool_calls: [{ id: `c${i}`, type: "function", function: { name: "browserClick", arguments: "{}" } }] } as AgentMessage);
+      steps.push({ role: "tool", tool_call_id: `c${i}`, content: "y".repeat(4000) } as AgentMessage);
+    }
+    const out = compactForModel([sys, task, ...steps]);
+    expect(JSON.stringify(out.slice(2)).length).toBeLessThanOrEqual(MODEL_HISTORY_CHARS);
+    expect(out[0]).toEqual(sys);
+    expect(out[1]).toEqual(task);
+    expect(out.at(-1)).toMatchObject({ tool_call_id: "c11" });
   });
 });
