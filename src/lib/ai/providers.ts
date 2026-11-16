@@ -42,6 +42,7 @@ const GROQ_BASE = "https://api.groq.com/openai/v1";
 const CEREBRAS_BASE = "https://api.cerebras.ai/v1";
 const MXR_BASE = "https://mxr.one/v1";
 const MERCURY_BASE = "https://api.inceptionlabs.ai/v1";
+const KENARI_BASE = "https://kenari.id/v1";
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const OPENAI_BASE = "https://api.openai.com/v1";
 const XAI_BASE = "https://api.x.ai/v1";
@@ -68,6 +69,7 @@ const keys = {
   cerebras: () => parseApiKeys(process.env.CEREBRAS_API_KEY),
   mxr: () => parseApiKeys(process.env.MXR_API_KEY),
   mercury: () => parseApiKeys(process.env.MERCURY_API_KEY),
+  kenari: () => parseApiKeys(process.env.KENARI_API_KEY),
   openrouter: () => parseApiKeys(process.env.OPENROUTER_API_KEY),
   apinex: () => parseApiKeys(process.env.APINEX_API_KEY || process.env.APINEX_KEY),
 };
@@ -107,6 +109,8 @@ function configured(config: ProviderConfig): boolean {
  */
 export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
   generation: () => [
+    // Mercury первым: КСП — длинный JSON, а Mercury пишет его за секунды (см. tasks).
+    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (KSP Primary)", temperature: 0.4, maxTokens: 8192 }),
     // Apinex (Apinex/Bond) — проверено живым бенчмарком 2026-10-28:
     // kimi-k3 даёт самый полный валидный КСП; glm-5.3 — быстрый запасной;
     // gpt-6-luna — ещё один резерв.
@@ -115,6 +119,8 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
     withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback 2)", temperature: 0.5, maxTokens: 8192 }),
     // Groq GPT OSS 120B — резерв (недоступен/медленнее, чем Apinex).
     withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Fallback 3)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna (KSP Fallback)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.kenari(), baseURL: KENARI_BASE, model: "nemotron-3-ultra-550b-a55b:free", supportsJsonSchema: false, label: "Kenari Nemotron 3 Ultra (KSP Fallback)", temperature: 0.5, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.7, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o", supportsJsonSchema: true, label: "OpenAI GPT-4o (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
@@ -134,11 +140,13 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-pro", supportsJsonSchema: false, label: "OpenRouter Nex 2.5 Pro (Free Emergency Fallback)", temperature: 0.5, maxTokens: 8192 }),
   ],
   tasks: () => [
-    // MXR и Mercury — без минутного лимита бесплатного Groq (8000 токенов): шаг агента
-    // занимает 2–3 с, а не минуту ожидания. Идут первыми; без ключей пропускаются.
+    // Без минутного лимита бесплатного Groq (8000 токенов). Замер 2026-11-16: Mercury
+    // пишет ~470 токенов/с и вызывает инструменты за 0,9 с, MXR — ~50 токенов/с, поэтому
+    // длинный рабочий лист у MXR упирался в таймаут 45 с. Без ключей пропускаются.
+    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (Primary)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6.1-terra", supportsJsonSchema: false, label: "MXR GPT 6.1 Terra (Agent Primary)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna (Agent Fallback)", temperature: 0.2, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (Agent Fallback)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.kenari(), baseURL: KENARI_BASE, model: "nemotron-3-ultra-550b-a55b:free", supportsJsonSchema: false, label: "Kenari Nemotron 3 Ultra (Fallback)", temperature: 0.2, maxTokens: 8192 }),
     // Apinex — первичный маршрут для инструментов агента и заданий.
     withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Primary)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.2, maxTokens: 8192 }),
@@ -192,6 +200,7 @@ export function isAnyProviderConfigured(): boolean {
       keys.cerebras().length ||
       keys.mxr().length ||
       keys.mercury().length ||
+      keys.kenari().length ||
       keys.openrouter().length,
   );
 }

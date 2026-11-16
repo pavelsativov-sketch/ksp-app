@@ -11,6 +11,7 @@ const AI_ENV_KEYS = [
   "CEREBRAS_API_KEY",
   "MXR_API_KEY",
   "MERCURY_API_KEY",
+  "KENARI_API_KEY",
   "OPENROUTER_API_KEY",
 ] as const;
 const ORIGINAL_KEYS = Object.fromEntries(
