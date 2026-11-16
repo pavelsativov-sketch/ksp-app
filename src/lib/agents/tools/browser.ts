@@ -39,7 +39,11 @@ async function extractPageSnapshot(page: {
   title: () => Promise<string>;
   evaluate: (fn: () => unknown) => Promise<unknown>;
 }) {
-  const title = await page.title().catch(() => '');
+  // Четыре чтения страницы независимы: параллельно это одна секунда вместо четырёх
+  // (каждый запрос к песочнице стоит ~0,9 с).
+  const titlePromise = page.title().catch(() => '');
+  const interactablesPromise = readInteractables(page as never);
+  const authBarrierPromise = detectPageAuthBarrier(page as never);
   const content = (await page
     .evaluate(() => {
       // Обходим живой документ и берём только видимые текстовые узлы. Раньше
@@ -69,13 +73,13 @@ async function extractPageSnapshot(page: {
       return lines.join('\n').slice(0, 2000);
     })
     .catch(() => '')) as string;
-  const interactables = await readInteractables(page as never);
+  const interactables = await interactablesPromise;
   // runner.ts по этому флагу переводит управление учителю и просит
   // авторизоваться — без него агент застревал бы на странице входа.
-  const authBarrier = await detectPageAuthBarrier(page as never);
+  const authBarrier = await authBarrierPromise;
   return {
     url: page.url(),
-    title,
+    title: await titlePromise,
     content,
     interactables,
     authBarrier,
@@ -199,8 +203,7 @@ async function clickAt(
     }
     await session.page.mouse.click(px, py);
     await session.page.waitForTimeout(1500);
-    await persistAgentBrowserSession(ctx.userId);
-    const snap = await snapshotWithAutoLogin(ctx.userId, session.page);
+    const [snap] = await Promise.all([snapshotWithAutoLogin(ctx.userId, session.page), persistAgentBrowserSession(ctx.userId)]);
     const pageUnchanged = beforeUrl === snap.url;
     return boundedResult({
       success: true,
@@ -281,8 +284,9 @@ export const browserTools = {
         if (/bilimclass\.kz/i.test(checked.url.hostname)) {
           await waitForBilimReady(session.page as never);
         }
-        await persistAgentBrowserSession(userId);
-        return snapshotAfterNavigation(userId, session.page as never);
+        // Сохранение сессии и снимок страницы друг от друга не зависят.
+        const [snapshot] = await Promise.all([snapshotAfterNavigation(userId, session.page as never), persistAgentBrowserSession(userId)]);
+        return snapshot;
       });
       return boundedResult({ success: true, ...snap });
     } catch (e) {
