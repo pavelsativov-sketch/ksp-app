@@ -3,6 +3,9 @@ import { requireApiAuth } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// При первом прогреве ставятся Chromium и системные зависимости. Дефолтного
+// лимита route handler недостаточно; browser-stream использует тот же лимит.
+export const maxDuration = 300;
 
 /**
  * Keepalive для браузера рабочей области ОС.
@@ -22,6 +25,10 @@ export async function GET() {
   try {
     const { getSandboxBrowserRpcUrl } = await import("@/lib/agents/sandbox-browser-service");
     await getSandboxBrowserRpcUrl(auth.user.id);
+    // Сам Chrome и сохранённый вход поднимаются при создании сессии. Без этого
+    // раннер уже отвечал, а первая команда агенту всё равно ждала около 50 с.
+    const { getAgentBrowserSession } = await import("@/lib/agents/browser-session");
+    await getAgentBrowserSession(auth.user.id);
     // Внутренний адрес песочницы наружу не отдаём: это инфраструктура,
     // а RPC всё равно защищён HMAC-подписью.
     return NextResponse.json({ status: "ok", runner: "alive" });
