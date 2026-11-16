@@ -8,6 +8,7 @@ import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
 import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
 import { appBaseUrl, decideContinuation, MAX_CONTINUATIONS, triggerContinuation } from './continuation';
 import { buildPartialReport } from './partial-report';
+import { matchRecipe, runRecipe } from './recipes';
 
 const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekty (сервис для учителей Казахстана).
 Файлы пользователя сохраняются в отдельной рабочей области аккаунта. Не пытайся обращаться
@@ -488,7 +489,29 @@ ${bilimClassInstructions(prompt)}` });
     // Бесплатный Groq даёт ~8000 токенов в минуту: когда все модели исчерпали
     // минуту, ждём столько, сколько просит провайдер, и продолжаем с того же шага.
     let summaryFinal = '';
-    for (let attempt = 0; ; attempt++) {
+    // Базовые команды (сменить язык, открыть раздел) идут готовым рецептом без
+    // модели: секунды вместо минут ожидания лимитов. Не вышло — обычный агент.
+    const recipe = resumed ? null : matchRecipe(prompt);
+    if (recipe) {
+      const callTool = async (name: string, args: Record<string, unknown>, optional: boolean) => {
+        const tool = (activeTools as unknown as Record<string, (a: Record<string, unknown>, c: ToolCtx) => Promise<unknown>>)[name]!;
+        const res = (await tool(args, { taskId, userId, signal: abortController.signal, beat, deadline })) as { success?: boolean; authBarrier?: unknown };
+        // Необязательная попытка (закрыть тур, которого нет) в ленту не идёт.
+        if (res.success || !optional) {
+          const resultStr = JSON.stringify(res).slice(0, 4000);
+          await log({ type: 'TOOL_CALL', message: humanToolCall(name, args), data: { tool: name, args } });
+          await log({ type: 'TOOL_RESULT', message: humanToolResult(name, resultStr), data: { tool: name, result: resultStr } });
+        }
+        return res;
+      };
+      if (await runRecipe(recipe, callTool).catch(() => false)) {
+        summaryFinal = recipe.summary;
+        await log({ type: 'END', message: summaryFinal });
+      } else {
+        await log({ type: 'WARNING', message: 'Быстрый путь не сработал: продолжаю обычным способом.' });
+      }
+    }
+    if (!summaryFinal) for (let attempt = 0; ; attempt++) {
       try {
         summaryFinal = await runLoop();
         break;
