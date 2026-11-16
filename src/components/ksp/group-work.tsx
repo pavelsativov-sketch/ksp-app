@@ -33,7 +33,7 @@ function Card({ card, index, mode, language }: { card: GroupCard; index: number;
             <div className={s.situation}>
               <div className={s.situationText}>{card.situation.map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              {card.imageBase64 && <img className={s.image} src={`data:image/jpeg;base64,${card.imageBase64}`} alt="" />}
+              {card.imageBase64 && <img className={s.image} src={`data:${card.imageMime ?? "image/jpeg"};base64,${card.imageBase64}`} alt="" />}
             </div>
           </section>
           <div className={s.value}><span className={s.valueIcon} aria-hidden="true">💡</span>{card.value}</div>

@@ -26,6 +26,7 @@ export interface GroupCard {
   /** Описание иллюстрации для генератора картинок (без текста на картинке). */
   imagePrompt: string;
   imageBase64?: string;
+  imageMime?: "image/jpeg" | "image/png";
 }
 
 export interface GroupWork {

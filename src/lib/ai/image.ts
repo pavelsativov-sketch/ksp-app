@@ -533,12 +533,12 @@ function buildImagePrompt(input: GenerateImageInput): string {
   const parts: string[] = [];
 
   // Базовый контекст — яркие, красочные изображения для учебника
-  parts.push("Vibrant, colorful, eye-catching educational illustration for a children's textbook.");
+  parts.push("Wordless, vibrant, colorful educational illustration for a children's textbook.");
   parts.push("The image should be engaging, visually striking, and suitable for young students.");
 
-  if (input.subject) parts.push(`Subject: ${input.subject}.`);
-  if (input.grade) parts.push(`Grade: ${input.grade} (age ${input.grade + 5}-${input.grade + 6} years old).`);
-  if (input.topic) parts.push(`Topic: "${input.topic}".`);
+  // Тему и предмет в промпт не пишем: FLUX рисует текст в кавычках и кириллицу буквами
+  // на картинке («Topic: "Строение клетки"» превращался в надпись). Сцену задаёт описание.
+  if (input.grade) parts.push(`Audience: children aged ${input.grade + 5}-${input.grade + 6}.`);
 
   // Стиль
   const style = input.style ?? "flat-illustration";
@@ -556,7 +556,7 @@ function buildImagePrompt(input: GenerateImageInput): string {
   // Общие требования
   parts.push(
     "Composition: clear, uncluttered, focused on the main subject. " +
-    "No text, words, letters, or numbers in the image. " +
+    "Pure picture only: blank surfaces, unlabeled, no captions, no lettering, no numbers, no logos, no signage. " +
     "Child friendly, safe for work, educational. " +
     "High quality, detailed, visually appealing, rich in color and detail. " +
     "Suitable for children's textbook — bright, engaging, and memorable.",

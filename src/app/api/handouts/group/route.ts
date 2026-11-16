@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { generateGroupWork } from "@/lib/handouts/group-work";
+import { illustrate } from "@/lib/handouts/images";
 import { handoutQuota, quotaErrorResponse } from "@/lib/ai/quota-bridge";
 
 export const runtime = "nodejs";
@@ -17,6 +18,7 @@ const bodySchema = z.object({
   count: z.coerce.number().int().min(2).max(4).default(3),
   learningObjectives: z.array(z.string().trim().max(500)).max(10).optional(),
   values: z.string().trim().max(1_000).optional(),
+  withImages: z.boolean().default(true),
 });
 
 /** Карточки групповой или парной работы по теме урока. */
@@ -45,7 +47,22 @@ export async function POST(request: Request) {
   }
 
   try {
-    const work = await generateGroupWork({ ...parsed.data, quota: handoutQuota(auth.user.id) });
+    const quota = handoutQuota(auth.user.id);
+    let work = await generateGroupWork({ ...parsed.data, quota });
+    // Картинка к ситуации, как на карточках учителя. Лимит картинок общий с листами;
+    // без ключей или при исчерпанной квоте карточки остаются без иллюстрации.
+    const imageRl = parsed.data.withImages ? await checkRateLimitAsync(`image:${auth.user.id}`, 20, 3600_000) : { ok: false };
+    if (imageRl.ok) {
+      const { topic, subject, grade } = parsed.data;
+      const illustrated = await illustrate(
+        work.cards,
+        { topic, subject, grade },
+        (card) => card.imagePrompt,
+        (card, image) => ({ ...card, imageBase64: image.base64, imageMime: image.mimeType === "image/png" ? ("image/png" as const) : ("image/jpeg" as const) }),
+        () => quota.reserve("image"),
+      ).catch(() => null);
+      if (illustrated) work = { ...work, cards: illustrated.items };
+    }
     return NextResponse.json({ work }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const quotaResponse = quotaErrorResponse(error);
