@@ -136,7 +136,7 @@ export function AppShell({
           )}
         </aside>
         {open && <button type="button" aria-label={c.close} className={s.scrim} onClick={() => setOpen(false)} />}
-        <div className={s.content} data-shell-content>{children}<BannerRobot path={path} /></div>
+        <div className={s.content} data-shell-content>{children}<BannerRobot path={path} /><BrowserWarmup /></div>
       </div>
     </div>
   );
@@ -158,4 +158,26 @@ function BannerRobot({ path }: { path: string }) {
   }, [path]);
   if (!host?.isConnected) return null;
   return createPortal(<span className={s.bannerRobot} aria-hidden="true"><ThreeStage scene="robot" className={s.bannerFill} /></span>, host);
+}
+
+const WARMUP_KEY = "mekty:browser-warmup";
+/** Песочница засыпает через 15 минут простоя: будим не чаще, чем раз в 10. */
+const WARMUP_EVERY_MS = 10 * 60_000;
+
+/**
+ * Будит облачный браузер, пока учитель ещё смотрит кабинет: иначе первая команда
+ * агенту ждала холодный старт песочницы (~80 с). Ответ не нужен, сбой не мешает.
+ */
+function BrowserWarmup() {
+  useEffect(() => {
+    try {
+      const last = Number(sessionStorage.getItem(WARMUP_KEY) ?? 0);
+      if (Date.now() - last < WARMUP_EVERY_MS) return;
+      sessionStorage.setItem(WARMUP_KEY, String(Date.now()));
+    } catch {
+      // без sessionStorage (приватное окно) просто будим при каждом заходе
+    }
+    void fetch("/api/health/browser-keepalive", { cache: "no-store" }).catch(() => undefined);
+  }, []);
+  return null;
 }
