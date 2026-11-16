@@ -392,7 +392,7 @@ export const browserTools = {
     try {
       const session = await getAgentBrowserSession(ctx.userId);
       const shot = await session.page.screenshot({ type: 'jpeg', quality: 70 });
-      const base64 = shot.toString('base64');
+      const base64 = Buffer.from(shot).toString('base64'); // RPC отдаёт Uint8Array: у него toString('base64') даёт «255,216,…»
       const description = await executeWithFallback('vision', async (client, model) => {
         const resp = await client.chat.completions.create({
           model,

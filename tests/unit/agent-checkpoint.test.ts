@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCheckpoint,
   compactMessages,
+  compactForModel,
   parseCheckpoint,
   repairTranscript,
   MAX_CHECKPOINT_CHARS,
@@ -107,5 +108,16 @@ describe("buildCheckpoint / parseCheckpoint", () => {
     };
     const restored = parseCheckpoint({ v: 1, step: 2, messages: [sys, task, dangling] });
     expect(restored!.messages).toEqual([sys, task]);
+  });
+});
+
+describe("compactForModel", () => {
+  it("keeps only the newest tool result in full so a step fits Groq's per-minute limit", () => {
+    const call = (id: string): AgentMessage => ({ role: "assistant", content: null, tool_calls: [{ id, type: "function", function: { name: "browserNavigate", arguments: "{}" } }] } as AgentMessage);
+    const result = (id: string): AgentMessage => ({ role: "tool", tool_call_id: id, content: "x".repeat(6000) } as AgentMessage);
+    const out = compactForModel([sys, task, call("a"), result("a"), call("b"), result("b")]);
+    const tools = out.filter((m) => m.role === "tool").map((m) => String((m as { content: string }).content).length);
+    expect(tools[0]).toBeLessThan(2000);
+    expect(tools[1]).toBe(6000);
   });
 });

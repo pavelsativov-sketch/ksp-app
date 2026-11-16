@@ -100,6 +100,17 @@ export function compactMessages(messages: AgentMessage[], keepTail = KEEP_TAIL_M
   return repairTranscript([...head, note, ...tail]);
 }
 
+/**
+ * Транскрипт для очередного шага модели: старые выдачи инструментов усечены,
+ * полной остаётся только выдача после последнего хода модели. Бесплатный Groq
+ * даёт 8000 токенов в минуту, а полные страницы съедали лимит за шаг.
+ */
+export function compactForModel(messages: AgentMessage[]): AgentMessage[] {
+  const compact = compactMessages(messages);
+  const lastAssistant = compact.map((m) => m.role).lastIndexOf("assistant");
+  return shrinkOldToolResults(compact, Math.max(0, lastAssistant));
+}
+
 /** Собирает контрольную точку, гарантируя предел размера. */
 export function buildCheckpoint(step: number, messages: AgentMessage[], now = new Date()): AgentCheckpoint {
   let tailSize = KEEP_TAIL_MESSAGES;

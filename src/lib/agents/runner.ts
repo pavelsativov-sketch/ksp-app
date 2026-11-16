@@ -3,7 +3,7 @@ import { getDb, COL } from '@/lib/mongo';
 import { tools, type ToolCtx } from './tools';
 import { executeWithFallback } from '@/lib/ai/providers';
 import { getControlOwner, releaseControlToUser, setControlOwner, waitForControl } from './session';
-import { buildCheckpoint, compactMessages, parseCheckpoint, repairTranscript, type AgentMessage } from './checkpoint';
+import { buildCheckpoint, compactForModel, parseCheckpoint, repairTranscript, type AgentMessage } from './checkpoint';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
 import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
 import { appBaseUrl, decideContinuation, MAX_CONTINUATIONS, triggerContinuation } from './continuation';
@@ -337,7 +337,7 @@ export async function runAgentTask(
 
         await log({ type: 'THINK', message: `Шаг ${step}: обдумываю следующий ход…` });
 
-        messages = compactMessages(messages);
+        messages = compactForModel(messages);
         transcript = messages;
         const response = await client.chat.completions.create(
           {
