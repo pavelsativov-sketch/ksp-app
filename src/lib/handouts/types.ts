@@ -155,6 +155,8 @@ export interface WorksheetTask {
   imagePromptEn?: string | null;
   /** Уровень сложности задания. */
   difficulty?: DifficultyLevel;
+  /** Лист ООП: ответ говорится вслух, строк для письма нет. */
+  oral?: boolean;
   /** Для word_search: слова для поиска в сетке. */
   searchWords?: string[];
   /** Для word_search: сетка букв (сгенерируется автоматически). */
@@ -210,6 +212,8 @@ export interface Worksheet {
    * Цели обучения, по которым сгенерирован лист (для отображения в шапке).
    */
   learningObjectives?: string[];
+  /** Вариант для ученика с ООП (toOopSheet): крупнее шрифт, меньше заданий. */
+  oop?: boolean;
 }
 
 export interface Flashcard {

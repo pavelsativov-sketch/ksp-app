@@ -157,6 +157,7 @@ function TaskContent({ task, withKey, onLinkChange, fallback }: { task: Workshee
     case "open": {
       const questions = splitLines(task.prompt);
       const answer = withKey ? task.expectedAnswer : undefined;
+      if (task.oral) return <p className={s.oral}>🗣 Ответ устно{answer ? <>: <span className={s.key}>{answer}</span></> : null}</p>;
       if (questions.length <= 1) return <HandLines count={3} answer={answer} />;
       return (
         <>
@@ -299,7 +300,7 @@ export function WorksheetSheet({ sheet, grade, subject, footer = "MEKTY", withKe
     <div ref={rootRef} className={s.stack}>
       <style>{PRINT_CSS}</style>
       {pages.map((page, pageIndex) => (
-        <article key={pageIndex} className={s.page} data-sheet-page>
+        <article key={pageIndex} className={`${s.page} ${sheet.oop ? s.oop : ""}`} data-sheet-page>
           <div className={s.topline}>
             {pageIndex === 0
               ? <><span className={`${s.fieldLine} ${s.fieldLineDate}`}>{language === "kz" ? "Күні" : "Дата"}</span><span className={s.fieldLine}>{language === "kz" ? "Аты-жөні" : "ФИ"}</span></>

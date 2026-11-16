@@ -110,6 +110,10 @@
   background: repeating-linear-gradient(transparent 0 24px, #6c63d9 24px 25px);
 }
 
+/* Лист ООП: тот же лист крупнее; устный ответ вместо строк. */
+.oop .task { zoom: 1.14; }
+.oral { margin: 2px 0 0; padding: 6px 12px; font-size: 14px; font-weight: 700; color: #3d3f73; border-radius: 9px; background: #eef0ff; }
+
 /* Лист с ответами: красная ручка учителя поверх того же листа. */
 .key { color: #e3262e; font-family: var(--font-lora), Georgia, serif; font-style: italic; font-weight: 700; }
 .keyLine { margin: 6px 0 0; font-size: 14px; line-height: 1.4; }

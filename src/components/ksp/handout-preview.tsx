@@ -12,6 +12,7 @@ import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CardsSheet, WorksheetSheet } from "@/components/ksp/print-sheet";
 import { downloadSheetImages } from "@/lib/handouts/sheet-export";
+import { toOopSheet } from "@/lib/handouts/oop";
 import { docTitle, docTopic, SaveKitButton } from "@/components/kits/save-kit-button";
 
 /** Цветовая схема эталона РК (как в docx.ts): синие баннеры, персиковое облако, золото. */
@@ -752,7 +753,10 @@ export function HandoutPreview({
   const [printError, setPrintError] = useState<string | null>(null);
   const [settings, setSettings] = useState<PreviewSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
-  const [withKey, setWithKey] = useState(false);
+  // Один лист в трёх видах, как в папке учителя: ученику, с ответами красным, для ученика с ООП.
+  const [variant, setVariant] = useState<"student" | "key" | "oop">("student");
+  const withKey = variant === "key";
+  const shown = useCallback((sheet: Worksheet) => (variant === "oop" ? toOopSheet(sheet) : sheet), [variant]);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<HTMLDivElement | null>(null);
 
@@ -836,12 +840,12 @@ export function HandoutPreview({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          handout: doc,
-          extra: extraDoc ?? undefined,
+          handout: doc.kind === "worksheet" ? shown(doc) : doc,
+          extra: extraDoc?.kind === "worksheet" ? shown(extraDoc) : extraDoc ?? undefined,
           includeAnswers,
           fileName:
             (fileName ?? "handout.docx").replace(/\.docx$/i, "") +
-            (includeAnswers ? ".docx" : " — ученикам.docx"),
+            (variant === "oop" ? " — ООП.docx" : includeAnswers ? ".docx" : " — ученикам.docx"),
         }),
       });
       if (!res.ok) throw new Error("Не удалось собрать документ");
@@ -851,7 +855,7 @@ export function HandoutPreview({
       a.href = url;
       a.download =
         (fileName ?? "handout.docx").replace(/\.docx$/i, "") +
-        (includeAnswers ? ".docx" : " — ученикам.docx");
+        (variant === "oop" ? " — ООП.docx" : includeAnswers ? ".docx" : " — ученикам.docx");
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -877,7 +881,7 @@ export function HandoutPreview({
     } finally {
       setPrinting(false);
     }
-  }, [doc, extraDoc, fileName, docxBase64, h.downloadFailed]);
+  }, [doc, extraDoc, fileName, docxBase64, h.downloadFailed, variant, shown]);
 
   const showStudentButton = doc.kind !== "flashcards" || (extraDoc != null && extraDoc.kind !== "flashcards");
 
@@ -914,10 +918,20 @@ export function HandoutPreview({
               </button>
             )}
             {doc.kind === "worksheet" && (
-              <label className="inline-flex items-center gap-1.5 rounded-md bg-white/15 px-2.5 py-1.5 text-sm font-medium">
-                <input type="checkbox" checked={withKey} onChange={(e) => setWithKey(e.target.checked)} />
-                С ответами
-              </label>
+              <div role="radiogroup" aria-label="Вид листа" className="inline-flex rounded-md bg-white/15 p-0.5 text-sm font-medium">
+                {([["student", "Ученику"], ["key", "С ответами"], ["oop", "ООП"]] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={variant === value}
+                    onClick={() => setVariant(value)}
+                    className={`rounded px-2.5 py-1 ${variant === value ? "bg-white text-[#5a2cd0]" : "text-white hover:bg-white/10"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             )}
             <button
               type="button"
@@ -987,10 +1001,10 @@ export function HandoutPreview({
         <div ref={sheetRef} className="p-4 sm:p-6 print:p-0">
           {doc.kind === "worksheet" && (
             <WorksheetView
-              sheet={doc}
-              onRegenerate={(index) => regenerateTask("main", index)}
+              sheet={shown(doc)}
+              onRegenerate={variant === "oop" ? undefined : (index) => regenerateTask("main", index)}
               regenBusyIndex={regenBusy?.part === "main" ? regenBusy.index : null}
-              onLinkChange={(index, link) => patchTask("main", index, { link })}
+              onLinkChange={variant === "oop" ? undefined : (index, link) => patchTask("main", index, { link })}
               settings={settings}
               meta={meta}
               withKey={withKey}
@@ -1002,10 +1016,10 @@ export function HandoutPreview({
             <div className="mt-8 border-t-2 border-dashed border-border pt-6">
               {extraDoc.kind === "worksheet" && (
                 <WorksheetView
-                  sheet={extraDoc}
-                  onRegenerate={(index) => regenerateTask("extra", index)}
+                  sheet={shown(extraDoc)}
+                  onRegenerate={variant === "oop" ? undefined : (index) => regenerateTask("extra", index)}
                   regenBusyIndex={regenBusy?.part === "extra" ? regenBusy.index : null}
-                  onLinkChange={(index, link) => patchTask("extra", index, { link })}
+                  onLinkChange={variant === "oop" ? undefined : (index, link) => patchTask("extra", index, { link })}
                   settings={settings}
                   meta={meta}
                   withKey={withKey}
