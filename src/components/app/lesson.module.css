@@ -50,6 +50,9 @@
 .tile:nth-child(5) { animation-delay: 240ms; }
 .tile:nth-child(6) { animation-delay: 300ms; }
 .tile:hover { transform: translateY(-3px); box-shadow: 0 12px 26px rgb(83 56 180 / 14%); }
+/* Анимация и подъём делают каждую плитку отдельным слоем: открытое меню материала
+   (z-50) оказывалось под соседними плитками. Плитка с открытым меню встаёт выше. */
+.tile:focus-within, .tile:has(:global(.z-50)) { z-index: 5; }
 .tile b { font-size: 16px; font-weight: 800; }
 .tile > p { margin-bottom: 6px; font-size: 13px; line-height: 1.4; color: #45406b; }
 .tile :global(button), .tile :global(a) { background: #fff; color: #1e1a3c; }

@@ -9,6 +9,7 @@ import { PlanView } from "@/components/ksp/plan-view";
 import { PrintButton } from "@/components/ksp/print-button";
 import { ClonePlanButton } from "@/components/ksp/clone-plan-button";
 import { CrosswordButton, MemosButton, WorksheetButton } from "@/components/ksp/handouts-button";
+import { GroupWorkButton } from "@/components/ksp/group-work";
 import { InteractiveButton, TeacherSpeechButton } from "@/components/ksp/materials-buttons";
 import { KtpBuilder } from "@/components/ksp/ktp-builder";
 import { LikeButton } from "@/components/ksp/like-button";
@@ -32,7 +33,7 @@ import { resolveWatermark } from "@/lib/billing/watermark";
 import { getComments, getReviews, getUserNames } from "@/lib/comments";
 import { log } from "@/lib/logger";
 import type { LessonPlanRow } from "@/lib/types/ksp";
-import { Archive, Download, Edit, FileSpreadsheet, Gamepad2, Grid3x3, History as HistoryIcon, Layers, MessageSquareText, Presentation, Printer, Radio, ScrollText } from "lucide-react";
+import { Archive, Download, Edit, FileSpreadsheet, Gamepad2, Grid3x3, History as HistoryIcon, Layers, MessageSquareText, Presentation, Printer, Radio, ScrollText, Users } from "lucide-react";
 import { ThreeStage } from "@/components/three/three-stage";
 import l from "@/components/app/lesson.module.css";
 
@@ -259,6 +260,9 @@ export default async function PlanViewPage({
           </div>
           <div className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Красочный лист A4: картинка для печати, PDF или Word.</p>
             <WorksheetButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
+          </div>
+          <div className={l.tile} data-tone="violet"><Users aria-hidden="true" className={l.tileIcon} /><b>Групповая работа</b><p>Карточки для групп или пар: ситуация, пять заданий, схема и ценность урока.</p>
+            <GroupWorkButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} learningObjectives={handoutKspContext?.learningObjectives} values={plan.content?.values} />
           </div>
           <div className={l.tile} data-tone="peach"><MessageSquareText aria-hidden="true" className={l.tileIcon} /><b>Слова педагога</b><p>Живая речь учителя по этапам, в Word.</p>
             {user ? <TeacherSpeechButton planId={plan.id} /> : <Button asChild variant="outline"><a href={`/api/export/teacher-script/${plan.id}`}><ScrollText /> Слова педагога</a></Button>}
