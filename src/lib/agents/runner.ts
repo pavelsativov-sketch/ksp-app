@@ -495,12 +495,14 @@ ${bilimClassInstructions(prompt)}` });
     if (recipe) {
       const callTool = async (name: string, args: Record<string, unknown>, optional: boolean) => {
         const tool = (activeTools as unknown as Record<string, (a: Record<string, unknown>, c: ToolCtx) => Promise<unknown>>)[name]!;
-        const res = (await tool(args, { taskId, userId, signal: abortController.signal, beat, deadline })) as { success?: boolean; authBarrier?: { kind?: string | null } | null };
         // Необязательная попытка (закрыть тур, которого нет) в ленту не идёт.
+        if (!optional) await log({ type: 'TOOL_CALL', message: humanToolCall(name, args), data: { tool: name, args } });
+        const startedAt = Date.now();
+        const res = (await tool(args, { taskId, userId, signal: abortController.signal, beat, deadline })) as { success?: boolean; authBarrier?: { kind?: string | null } | null };
         if (res.success || !optional) {
           const resultStr = JSON.stringify(res).slice(0, 4000);
-          await log({ type: 'TOOL_CALL', message: humanToolCall(name, args), data: { tool: name, args } });
-          await log({ type: 'TOOL_RESULT', message: humanToolResult(name, resultStr), data: { tool: name, result: resultStr } });
+          if (optional) await log({ type: 'TOOL_CALL', message: humanToolCall(name, args), data: { tool: name, args } });
+          await log({ type: 'TOOL_RESULT', message: `${humanToolResult(name, resultStr)} (${((Date.now() - startedAt) / 1000).toFixed(1)} с)`, data: { tool: name, result: resultStr } });
         }
         return res;
       };
@@ -602,7 +604,7 @@ function humanToolCall(name: string, args: Record<string, unknown>): string {
     case 'browserNavigate': return `Открываю страницу ${String(args.url ?? '')}`.slice(0, 300);
     case 'browserClick': return `Нажимаю (${String(args.x ?? '?')}, ${String(args.y ?? '?')})${args.intent ? ` — ${String(args.intent)}` : ''}`.slice(0, 300);
     case 'browserType': return `Ввожу текст «${String(args.text ?? '').slice(0, 80)}»`.slice(0, 300);
-    case 'browserClickText': return `Нажимаю «${String(args.text ?? '?')}»`;
+    case 'browserClickText': return `Нажимаю «${String(args.text ?? (Array.isArray(args.texts) ? args.texts.join(' / ') : '?'))}»`;
     case 'browserDescribeScreen': return 'Смотрю на экран браузера';
     case 'browserScroll': return `Прокручиваю страницу: ${args.direction === 'up' ? 'вверх' : args.direction === 'left' ? 'влево' : args.direction === 'right' ? 'вправо' : 'вниз'}`;
     case 'browserPressKey': return `Нажимаю клавишу ${String(args.key ?? '')}`.slice(0, 120);

@@ -211,25 +211,34 @@ async function clickAt(
  * Скрипт страницы: самый маленький видимый элемент, чья подпись равна тексту
  * (или начинается с него), прокручивается в центр; возвращает его центр в пикселях.
  */
-export function findByTextScript(text: string): string {
+export function findByTextScript(text: string | string[]): string {
+  const wants = (Array.isArray(text) ? text : [text]).map((item) => item.toLowerCase());
   return `(() => {
-    const want = ${JSON.stringify(text.toLowerCase())};
-    const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    let best = null;
+    const wants = ${JSON.stringify(wants)};
+    const norm = (s) => String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+    const visible = [];
     for (const el of document.querySelectorAll('body *')) {
       const label = norm(el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title'));
-      if (label !== want && !(label.startsWith(want) && label.length <= want.length + 3)) continue;
+      if (!label || label.length > 90) continue;
       const rect = el.getBoundingClientRect();
       if (rect.width < 2 || rect.height < 2) continue;
       const style = getComputedStyle(el);
       if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) continue;
-      const area = rect.width * rect.height;
-      if (!best || area < best.area) best = { el, area };
+      visible.push({ el, label, area: rect.width * rect.height });
     }
-    if (!best) return null;
-    best.el.scrollIntoView({ block: 'center', inline: 'center' });
-    const rect = best.el.getBoundingClientRect();
-    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+    // Подписи идут по приоритету: первая найденная на экране и нажимается.
+    for (const want of wants) {
+      let best = null;
+      for (const item of visible) {
+        if (item.label !== want && !(item.label.startsWith(want) && item.label.length <= want.length + 3)) continue;
+        if (!best || item.area < best.area) best = item;
+      }
+      if (!best) continue;
+      best.el.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = best.el.getBoundingClientRect();
+      return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2), text: want };
+    }
+    return null;
   })`;
 }
 
@@ -280,14 +289,16 @@ export const browserTools = {
    * Клик по видимой подписи. Переключатели из div без роли (язык BilimClass)
    * не попадают в interactables, и модель гадала координаты.
    */
-  browserClickText: async ({ text, intent }: { text: string; intent?: string }, ctx?: { userId?: string }) => {
-    const wanted = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
-    if (!ctx?.userId || !wanted || wanted.length > 80) {
+  browserClickText: async ({ text, texts, intent }: { text?: string; texts?: string[]; intent?: string }, ctx?: { userId?: string }) => {
+    // texts — несколько подписей по приоритету одним запросом к браузеру (рецепты).
+    const list = (Array.isArray(texts) ? texts : [text]).map((item) => (typeof item === 'string' ? item.replace(/\s+/g, ' ').trim() : '')).filter((item) => item && item.length <= 80).slice(0, 6);
+    const wanted = list.join(' / ');
+    if (!ctx?.userId || !list.length) {
       return { success: false, error: 'Нужен text — видимая подпись элемента, до 80 символов' };
     }
     try {
       const session = await getAgentBrowserSession(ctx.userId);
-      const found = await session.page.evaluate<{ x: number; y: number } | null>(findByTextScript(wanted));
+      const found = await session.page.evaluate<{ x: number; y: number; text: string } | null>(findByTextScript(list));
       if (!found) {
         return { success: false, error: `На экране нет элемента с текстом «${wanted}». Прокрути страницу или открой меню, где он может быть.` };
       }

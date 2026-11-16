@@ -22,7 +22,11 @@ describe("findByTextScript", () => {
       return { left, top, width, height, x: left, y: top, right: left + width, bottom: top + height, toJSON() {} } as DOMRect;
     });
     Element.prototype.scrollIntoView = vi.fn();
-    expect(run("қазақша")).toEqual({ x: 1140, y: 30 });
+    expect(run("қазақша")).toEqual({ x: 1140, y: 30, text: "қазақша" });
+    expect(new Function(`return (${findByTextScript(["Skip", "Қазақша"])})()`)()).toMatchObject({ text: "қазақша" });
     expect(run("Русский")).toBeNull();
+    // Латинская s в подписи: без второго слэша в шаблонной строке пробельный класс превращался в букву s.
+    document.body.innerHTML = '<div data-r="header"><div data-r="lang">English  class</div></div>';
+    expect(run("english class")).toMatchObject({ x: 1140, y: 30 });
   });
 });

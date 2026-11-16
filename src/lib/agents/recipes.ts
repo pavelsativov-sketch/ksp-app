@@ -80,10 +80,7 @@ export async function runRecipe(recipe: Recipe, call: ToolCall): Promise<boolean
     let clicked = false;
     for (let attempt = 0; attempt < (step.optional ? 1 : CLICK_ATTEMPTS) && !clicked; attempt++) {
       if (attempt > 0) await call("browserWait", { seconds: 1 }, true);
-      for (const text of step.clickAny) {
-        clicked = Boolean((await call("browserClickText", { text }, true)).success);
-        if (clicked) break;
-      }
+      clicked = Boolean((await call("browserClickText", { texts: step.clickAny }, true)).success);
     }
     if (!clicked && !step.optional) return false;
   }

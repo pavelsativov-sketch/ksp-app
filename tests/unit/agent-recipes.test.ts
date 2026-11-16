@@ -26,29 +26,30 @@ describe("matchRecipe", () => {
 
 describe("runRecipe", () => {
   const recipe = matchRecipe("переключи язык BilimClass на русский")!;
+  const TOUR = ["Өткізіп жіберу", "Пропустить", "Skip"];
+  const sameList = (args: Record<string, unknown>, list: string[]) => JSON.stringify(args.texts) === JSON.stringify(list);
 
-  it("clicks the first label on screen, then the target", async () => {
-    const calls: string[] = [];
+  it("sends each group of labels as one browser call: tour, switcher, target", async () => {
+    const calls: unknown[] = [];
     const ok = await runRecipe(recipe, async (name, args) => {
-      calls.push(String(args.text ?? args.url));
-      // Тура нет, текущий язык English.
-      return { success: !["Өткізіп жіберу", "Пропустить", "Skip", "Қазақша"].includes(String(args.text)) };
+      calls.push(args.texts ?? args.url);
+      return { success: !sameList(args, TOUR), authBarrier: { kind: null } }; // тура на экране нет
     });
     expect(ok).toBe(true);
-    expect(calls.slice(-3)).toEqual(["Қазақша", "English", "Русский"]);
+    expect(calls.slice(1)).toEqual([TOUR, ["Қазақша", "English", "Русский"], ["Русский"]]);
   });
 
   it("hands over to the model when the page asks to sign in or the switcher is missing", async () => {
     expect(await runRecipe(recipe, async () => ({ success: true, authBarrier: { kind: "login" } }))).toBe(false);
-    expect(await runRecipe(recipe, async (name) => ({ success: name === "browserNavigate" || name === "browserWait" }))).toBe(false);
+    expect(await runRecipe(recipe, async (name) => ({ success: name !== "browserClickText" }))).toBe(false);
   });
 
-  it("treats an empty auth barrier as no barrier and retries until the header is drawn", async () => {
-    let clicks = 0;
+  it("retries a required click while the page is still drawing its header", async () => {
+    let attempts = 0;
     const ok = await runRecipe(recipe, async (name, args) => {
-      if (name !== "browserClickText") return { success: true, authBarrier: { kind: null } };
-      if (["Өткізіп жіберу", "Пропустить", "Skip"].includes(String(args.text))) return { success: false };
-      return { success: ++clicks > 3 }; // первый круг подписей шапки ещё нет
+      if (name !== "browserClickText") return { success: true };
+      if (sameList(args, TOUR)) return { success: false };
+      return { success: ++attempts > 1 };
     });
     expect(ok).toBe(true);
   });
