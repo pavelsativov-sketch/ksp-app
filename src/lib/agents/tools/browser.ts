@@ -271,24 +271,34 @@ export const browserTools = {
       if (!checked.ok) return { success: false, error: checked.error };
 
       const userId = ctx.userId;
+      // Разбивка по этапам уходит в результат: по ней видно, где теряются секунды.
+      const timing: Record<string, number | boolean> = {};
+      const startedAt = Date.now();
       const snap = await withBrowserSession(userId, async (session) => {
+        timing.sessionMs = Date.now() - startedAt;
         await installRequestGuard(session.page);
+        const gotoStartedAt = Date.now();
         try {
           await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
         } catch (error) {
+          timing.gotoRetried = true;
           // A single retry tolerates a transient load timeout without turning a
           // permanently slow site into an endless agent loop.
           if (!navigationTimedOut(error)) throw error;
           await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
         }
+        timing.gotoMs = Date.now() - gotoStartedAt;
+        const readyStartedAt = Date.now();
         if (/bilimclass\.kz/i.test(checked.url.hostname)) {
           await waitForBilimReady(session.page as never);
         }
+        timing.readyMs = Date.now() - readyStartedAt;
         // Сохранение сессии и снимок страницы друг от друга не зависят.
         const [snapshot] = await Promise.all([snapshotAfterNavigation(userId, session.page as never), persistAgentBrowserSession(userId)]);
         return snapshot;
       });
-      return boundedResult({ success: true, ...snap });
+      timing.totalMs = Date.now() - startedAt;
+      return boundedResult({ success: true, timing, ...snap });
     } catch (e) {
       return boundedResult({ success: false, error: e instanceof Error ? e.message : 'navigation failed' });
     }
