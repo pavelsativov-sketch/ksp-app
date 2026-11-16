@@ -2,7 +2,7 @@
 
 import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { QrCodeSvg } from "@/components/ksp/qr-card";
-import { optionLetter, worksheetAnswerLines, worksheetTypeLabel } from "@/lib/handouts/answers";
+import { optionLetter, taskAnswerParts, worksheetTypeLabel } from "@/lib/handouts/answers";
 import type { Flashcard, FlashcardSet, Worksheet, WorksheetTask } from "@/lib/handouts/types";
 import s from "./print-sheet.module.css";
 
@@ -50,8 +50,61 @@ export function matchOrder(length: number): number[] {
   return new Set(out).size === length ? out : order.reverse();
 }
 
-function Blanks({ text }: { text: string }) {
-  return <>{text.split(/(_{3,})/).map((part, i) => (/^_{3,}$/.test(part) ? <span key={i} className={s.blank}>&nbsp;</span> : part))}</>;
+/** Пропуски «___»; на листе с ответами в них по порядку вписаны ответы красным. */
+function Blanks({ text, answers = [] }: { text: string; answers?: string[] }) {
+  let blank = 0;
+  return <>{text.split(/(_{3,})/).map((part, i) => {
+    if (!/^_{3,}$/.test(part)) return part;
+    const answer = answers[blank++];
+    return <span key={i} className={s.blank}>{answer ? <span className={s.key}>{answer}</span> : <>&nbsp;</>}</span>;
+  })}</>;
+}
+
+/** Ответы на несколько пропусков модель пишет через «;» или «,». */
+const blankAnswers = (task: WorksheetTask): string[] => (task.expectedAnswer ?? "").split(/\s*[;,]\s*/).filter(Boolean);
+
+/** Строки для письма; на листе с ответами по ним идёт ответ красным, как ручкой учителя. */
+function HandLines({ count, answer }: { count: number; answer?: string }) {
+  return <div className={s.handLines} style={{ minHeight: count * 25 }}>{answer && <span className={s.key}>{answer}</span>}</div>;
+}
+
+/** Соединить пары: цветные строки с точками, справа перемешанные варианты; в ключе — красные линии. */
+function MatchRows({ task, withKey }: { task: WorksheetTask; withKey: boolean }) {
+  const terms = task.options ?? [];
+  const definitions = task.pairs ?? [];
+  const order = matchOrder(definitions.length);
+  const rows = Math.max(terms.length, definitions.length);
+  return (
+    <div className={s.match} style={{ gridTemplateRows: `repeat(${rows}, minmax(34px, 1fr))` }}>
+      {terms.map((term, i) => (
+        <div key={`l${i}`} className={s.matchLeft} style={{ ...tone(i), gridRow: i + 1 }}>
+          <span className={s.matchNum}>{i + 1}</span><span className={s.matchText}>{term}</span><span className={s.dot} />
+        </div>
+      ))}
+      {order.map((source, j) => (
+        <div key={`r${j}`} className={s.matchRight} style={{ ...tone(j + 3), gridRow: j + 1 }}>
+          <span className={s.dot} /><span className={s.matchText}>{definitions[source]}</span>
+        </div>
+      ))}
+      {withKey && (
+        <svg className={s.matchLines} style={{ gridRow: `1 / ${rows + 1}` }} viewBox={`0 0 100 ${rows}`} preserveAspectRatio="none" aria-hidden="true">
+          {order.map((source, j) => (source < terms.length ? <line key={j} x1="0" y1={source + 0.5} x2="100" y2={j + 0.5} vectorEffect="non-scaling-stroke" /> : null))}
+        </svg>
+      )}
+    </div>
+  );
+}
+
+/** Какие типы показывают ответ прямо в своём оформлении; остальным ответ пишется строкой под заданием. */
+function answersInPlace(task: WorksheetTask): boolean {
+  switch (task.type) {
+    case "match": return (task.pairs?.length ?? 0) > 0;
+    case "multiple_choice": return typeof task.correctIndex === "number";
+    case "true_false": return task.correctIndex === 0 || task.correctIndex === 1;
+    case "open": case "fill": return Boolean(task.expectedAnswer);
+    case "reflection": case "interactive": return true;
+    default: return false;
+  }
 }
 
 const splitLines = (text: string) => text.split(/\n+|(?=\s\d+[.)]\s)/).map((line) => line.trim().replace(/^\d+[.)]\s*/, "")).filter(Boolean);
@@ -75,7 +128,7 @@ export function splitMarkdownTable(prompt: string): { intro: string; rows: strin
   };
 }
 
-function TaskContent({ task, onLinkChange, fallback }: { task: WorksheetTask; onLinkChange?: (link: string) => void; fallback: (task: WorksheetTask) => ReactNode }) {
+function TaskContent({ task, withKey, onLinkChange, fallback }: { task: WorksheetTask; withKey: boolean; onLinkChange?: (link: string) => void; fallback: (task: WorksheetTask) => ReactNode }) {
   const table = splitMarkdownTable(task.prompt);
   if (table) {
     const [head, ...body] = table.rows;
@@ -87,22 +140,8 @@ function TaskContent({ task, onLinkChange, fallback }: { task: WorksheetTask; on
     );
   }
   switch (task.type) {
-    case "match": {
-      const terms = task.options ?? [];
-      const definitions = task.pairs ?? [];
-      const order = matchOrder(definitions.length);
-      return (
-        <>
-          <div className={s.matchTop}>
-            <ol className={s.matchTerms}>{terms.map((term, i) => <li key={i}>{term}</li>)}</ol>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {task.imageBase64 && <img className={s.matchImage} src={imageSrc(task.imageBase64, task.imageMime)} alt={task.imageAlt ?? ""} />}
-          </div>
-          <ul className={s.lines}>{order.map((source, i) => <li key={i}><b>{optionLetter(i)}.</b> {definitions[source]}</li>)}</ul>
-          <div className={s.answerPill}><span>Ответы:</span>{terms.map((_, i) => <span key={i}>{i + 1}____</span>)}</div>
-        </>
-      );
-    }
+    case "match":
+      return <MatchRows task={task} withKey={withKey} />;
     case "fill_bank":
       return (
         <>
@@ -110,20 +149,27 @@ function TaskContent({ task, onLinkChange, fallback }: { task: WorksheetTask; on
           <ol className={s.numbered}>{bankLines(task.prompt).map((line, i) => <li key={i}><Blanks text={line} /></li>)}</ol>
         </>
       );
-    case "fill":
-      return <p className={s.question}><Blanks text={task.prompt} /></p>;
-    case "open":
+    case "fill": {
+      const blanks = (task.prompt.match(/_{3,}/g) ?? []).length;
+      const answers = !withKey ? [] : blanks <= 1 ? [task.expectedAnswer ?? ""] : blankAnswers(task);
+      return <p className={s.question}><Blanks text={task.prompt} answers={answers} /></p>;
+    }
+    case "open": {
+      const questions = splitLines(task.prompt);
+      const answer = withKey ? task.expectedAnswer : undefined;
+      if (questions.length <= 1) return <HandLines count={3} answer={answer} />;
       return (
         <>
-          {splitLines(task.prompt).length > 1 && splitLines(task.prompt).map((question, i) => (
+          {questions.map((question, i) => (
             <div key={i}>
               <p className={s.question}>{i + 1}. {question}</p>
-              <div className={s.ruled} /><div className={s.ruled} />
+              {/* Эталон один на всё задание: пишем его под последним вопросом. */}
+              <HandLines count={2} answer={i === questions.length - 1 ? answer : undefined} />
             </div>
           ))}
-          {splitLines(task.prompt).length <= 1 && <><div className={s.ruled} /><div className={s.ruled} /><div className={s.ruled} /></>}
         </>
       );
+    }
     case "compare": {
       const columns = task.compareColumns ?? [];
       return (
@@ -134,9 +180,14 @@ function TaskContent({ task, onLinkChange, fallback }: { task: WorksheetTask; on
       );
     }
     case "multiple_choice":
-      return <div className={s.options}>{(task.options ?? []).map((option, i) => <div key={i} className={s.option}><span className={s.letter}>{optionLetter(i)}</span>{option}</div>)}</div>;
+      return <div className={s.options}>{(task.options ?? []).map((option, i) => <div key={i} className={`${s.option} ${withKey && task.correctIndex === i ? s.correct : ""}`}><span className={s.letter}>{optionLetter(i)}</span>{option}</div>)}</div>;
     case "true_false":
-      return <div className={s.options}><div className={s.option}><span className={s.letter}>✓</span>Верно</div><div className={s.option}><span className={s.letter}>✗</span>Неверно</div></div>;
+      return (
+        <div className={s.options}>
+          <div className={`${s.option} ${withKey && task.correctIndex === 0 ? s.correct : ""}`}><span className={s.letter}>✓</span>Верно</div>
+          <div className={`${s.option} ${withKey && task.correctIndex === 1 ? s.correct : ""}`}><span className={s.letter}>✗</span>Неверно</div>
+        </div>
+      );
     case "reflection": {
       const labels = task.reflectionOptions?.length ? task.reflectionOptions : ["Всё понял", "Есть вопросы", "Нужна помощь"];
       const colors = ["#35b34a", "#2f7bf0", "#e5352d"];
@@ -169,27 +220,30 @@ function instructionOf(task: WorksheetTask, language: "ru" | "kz"): string {
   return task.prompt;
 }
 
-function TaskBlock({ task, index, language, onRegenerate, regenerating, onLinkChange, fallback }: {
+function TaskBlock({ task, index, language, withKey, onRegenerate, regenerating, onLinkChange, fallback }: {
   task: WorksheetTask;
   index: number;
   language: "ru" | "kz";
+  withKey: boolean;
   onRegenerate?: () => void;
   regenerating?: boolean;
   onLinkChange?: (link: string) => void;
   fallback: (task: WorksheetTask) => ReactNode;
 }) {
   const word = language === "kz" ? "Тапсырма" : "Задание";
+  const keyLine = withKey && !answersInPlace(task) ? taskAnswerParts(task, language).join("; ") : "";
   return (
     <section className={s.task} style={tone(index)} data-task>
       <div className={s.taskHead}>
-        <span className={s.badge}>{word} {index + 1}</span>
+        <span className={s.badge}>{word} №{index + 1}.</span>
         <span className={s.instruction}>{instructionOf(task, language)}</span>
         <span className={s.points}>{task.points > 0 ? `${task.points} б.` : ""}</span>
         {onRegenerate && <button type="button" data-no-capture className={s.replace} onClick={onRegenerate} disabled={regenerating}>{regenerating ? "…" : "Заменить"}</button>}
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {task.imageBase64 && task.type !== "match" && <img className={s.taskImage} src={imageSrc(task.imageBase64, task.imageMime)} alt={task.imageAlt ?? ""} />}
-      <TaskContent task={task} onLinkChange={onLinkChange} fallback={fallback} />
+      {task.imageBase64 && <img className={s.taskImage} src={imageSrc(task.imageBase64, task.imageMime)} alt={task.imageAlt ?? ""} />}
+      <TaskContent task={task} withKey={withKey} onLinkChange={onLinkChange} fallback={fallback} />
+      {keyLine && <p className={`${s.key} ${s.keyLine}`}>{keyLine}</p>}
       <div style={{ clear: "both" }} />
     </section>
   );
@@ -232,6 +286,7 @@ export function WorksheetSheet({ sheet, grade, subject, footer = "MEKTY", withKe
       task={task}
       index={i}
       language={language}
+      withKey={withKey}
       onRegenerate={onRegenerate ? () => onRegenerate(i) : undefined}
       regenerating={regeneratingIndex === i}
       onLinkChange={onLinkChange ? (link) => onLinkChange(i, link) : undefined}
@@ -257,15 +312,6 @@ export function WorksheetSheet({ sheet, grade, subject, footer = "MEKTY", withKe
           <div className={s.footer}>{footer}</div>
         </article>
       ))}
-      {withKey && (
-        <article className={s.page} data-sheet-page>
-          <div className={s.topline}><span>{language === "kz" ? "Мұғалімге жауаптар" : "Ответы для учителя"}</span></div>
-          <div className={s.paper}>
-            <ul className={s.keyList}>{worksheetAnswerLines(sheet.tasks, language).map((line, i) => <li key={i}>{line}</li>)}</ul>
-          </div>
-          <div className={s.footer}>{footer}</div>
-        </article>
-      )}
     </div>
   );
 }

@@ -80,6 +80,21 @@ export function worksheetAnswerLines(tasks: WorksheetTask[], language: HandoutLa
   const lines: string[] = [];
 
   tasks.forEach((task, index) => {
+    const answers = taskAnswerParts(task, language);
+    if (answers.length > 0) {
+      const points =
+        language === "kz"
+          ? `Тапсырма ${index + 1} (${task.points} б.)`
+          : `Задание ${index + 1} (${task.points} б.)`;
+      lines.push(`${points}: ${answers.join("; ")}`);
+    }
+  });
+
+  return lines;
+}
+
+/** Ответ на одно задание: печатается в ключе и красным прямо на листе с ответами. */
+export function taskAnswerParts(task: WorksheetTask, language: HandoutLanguage = "ru"): string[] {
     const answers: string[] = [];
 
     switch (task.type) {
@@ -230,14 +245,5 @@ export function worksheetAnswerLines(tasks: WorksheetTask[], language: HandoutLa
         if (task.expectedAnswer) answers.push(task.expectedAnswer);
     }
 
-    if (answers.length > 0) {
-      const points =
-        language === "kz"
-          ? `Тапсырма ${index + 1} (${task.points} б.)`
-          : `Задание ${index + 1} (${task.points} б.)`;
-      lines.push(`${points}: ${answers.join("; ")}`);
-    }
-  });
-
-  return lines;
+    return answers;
 }

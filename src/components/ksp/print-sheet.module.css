@@ -58,71 +58,85 @@
   text-shadow: 0 0 8px #ff4fa3;
 }
 
+/* Как на образце: оранжевый рукописный заголовок с тёмной обводкой. */
 .title {
-  margin: 0 0 2px;
-  font-family: var(--font-unbounded), var(--font-manrope), sans-serif;
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1.2;
+  margin: 0 0 4px;
+  font-family: var(--font-lobster), var(--font-lora), serif;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.15;
   text-align: center;
-  color: #fff;
-  -webkit-text-stroke: 5px #4a2bd8;
+  color: #ff8a1d;
+  -webkit-text-stroke: 7px #2a1650;
   paint-order: stroke fill;
-  filter: drop-shadow(0 2px 0 #b58cff);
+  filter: drop-shadow(0 3px 0 #2a1650);
 }
 .intro { margin: 0; font-size: 12.5px; text-align: center; color: #4a4c78; }
 
 .task { position: relative; break-inside: avoid; }
 .taskHead { display: flex; align-items: center; gap: 12px; margin-bottom: 7px; }
+/* Плашка «Задание №N.» одна на весь лист: синяя, рукописный шрифт, как на образце. */
 .badge {
   flex: none;
-  padding: 4px 11px;
+  align-self: flex-start;
+  padding: 5px 13px 7px;
   color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  border-radius: 8px;
-  background: var(--tone);
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--tone) 40%, transparent);
+  font-family: var(--font-lobster), var(--font-lora), serif;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 3px;
+  background: #2c47c4;
+  box-shadow: 0 3px 0 #18267a;
 }
-.instruction { font-size: 15px; font-weight: 800; line-height: 1.25; color: #1b1e59; }
+.instruction { font-family: var(--font-lora), Georgia, serif; font-size: 15.5px; font-style: italic; font-weight: 700; line-height: 1.3; color: #15172e; }
 .points { flex: none; margin-left: auto; font-size: 11px; font-weight: 700; color: #6a6c92; }
 .replace { flex: none; padding: 2px 9px; font-size: 11px; font-weight: 700; color: #4a2bd8; border: 1px solid #c9bdf7; border-radius: 99px; background: #fff; cursor: pointer; }
 
-.matchTop { display: flex; align-items: stretch; margin-bottom: 8px; }
-.matchTerms {
-  flex: 1 1 54%;
-  margin: 0;
-  padding: 9px 14px 9px 34px;
-  list-style: decimal;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.55;
-  border-radius: 14px;
-  background: #cfe3fc;
-}
-.matchImage { flex: 0 0 46%; min-width: 0; object-fit: cover; border-radius: 0 14px 14px 0; margin-left: -10px; }
-.lines { margin: 0; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.5; }
-.lines li { margin-bottom: 3px; }
-.answerPill {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin: 8px auto 0;
-  width: fit-content;
-  padding: 4px 16px;
-  font-size: 14px;
-  font-weight: 800;
-  border-radius: 8px;
-  background: #cfe3fc;
-}
 
 .bank { margin-bottom: 8px; font-size: 13.5px; font-weight: 700; line-height: 1.45; text-align: center; }
 .bankTitle { display: block; font-weight: 800; color: #4a2bd8; }
 .numbered { margin: 0; padding-left: 22px; list-style: decimal; font-size: 13.5px; line-height: 1.75; }
-.blank { display: inline-block; min-width: 170px; border-bottom: 1.5px solid #171a4a; }
+.blank { display: inline-block; min-width: 170px; padding: 0 4px; text-align: center; border-bottom: 1.5px solid #6c63d9; }
 
 .question { margin: 4px 0 2px; font-size: 13.5px; font-weight: 700; }
-.ruled { height: 25px; border-bottom: 1.5px solid #171a4a; }
+.ruled { height: 25px; border-bottom: 1.5px solid #6c63d9; }
+/* Линейки для письма: ответ учителя ложится прямо на строки. */
+.handLines {
+  padding-top: 1px;
+  font-size: 15px;
+  line-height: 25px;
+  background: repeating-linear-gradient(transparent 0 24px, #6c63d9 24px 25px);
+}
+
+/* Лист с ответами: красная ручка учителя поверх того же листа. */
+.key { color: #e3262e; font-family: var(--font-lora), Georgia, serif; font-style: italic; font-weight: 700; }
+.keyLine { margin: 6px 0 0; font-size: 14px; line-height: 1.4; }
+.correct { outline: 2.5px solid #e3262e; outline-offset: 1px; }
+.correct .letter { background: #e3262e; }
+
+/* Соединить пары: строки с номером и точкой слева, варианты с точкой справа. */
+.match { display: grid; grid-template-columns: 1fr 70px 1fr; row-gap: 6px; margin-top: 2px; font-size: 14px; }
+.matchLeft, .matchRight {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1.5px solid color-mix(in srgb, var(--tone) 35%, #fff);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tone) 13%, #fff);
+}
+.matchLeft { grid-column: 1; }
+.matchRight { grid-column: 3; justify-content: flex-start; font-weight: 700; }
+.matchText { flex: 1; min-width: 0; line-height: 1.3; }
+.matchNum { flex: none; display: grid; place-items: center; width: 26px; height: 26px; color: #fff; font-weight: 800; border-radius: 50%; background: var(--tone); }
+.dot { flex: none; width: 11px; height: 11px; border: 2px solid var(--tone); border-radius: 50%; background: #fff; }
+.matchLeft .dot { margin-right: -4px; }
+.matchRight .dot { margin-left: -4px; }
+.matchLines { grid-column: 2; width: 100%; height: 100%; overflow: visible; }
+.matchLines line { stroke: #e3262e; stroke-width: 2px; }
 
 .table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .table th { padding: 7px 10px; color: #fff; font-weight: 800; background: var(--tone); border: 1px solid #5a5c7a; }
@@ -142,8 +156,6 @@
 .qrInput { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid #c9bdf7; border-radius: 8px; }
 
 .taskImage { float: right; width: 34%; max-height: 180px; margin: 0 0 6px 12px; object-fit: cover; border-radius: 12px; }
-.keyList { margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.5; }
-.keyList li { padding: 6px 0; border-bottom: 1px dashed #c9bdf7; }
 
 /* Карточки для тетради: белый лист, линии реза, цвет у каждой карточки свой. */
 .cardsPage { background: #fff; padding: 26px; gap: 0; }

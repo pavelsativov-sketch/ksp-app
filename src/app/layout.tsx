@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Lora, Geist_Mono, Manrope, Nunito, Unbounded } from "next/font/google";
+import { Inter, Lobster, Lora, Geist_Mono, Manrope, Nunito, Unbounded } from "next/font/google";
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import Image from "next/image";
@@ -30,6 +30,9 @@ const nunito = Nunito({ variable: "--font-nunito", subsets: ["latin", "cyrillic"
 // Выразительный широкий шрифт для крупных заголовков (есть кириллица). В плотных
 // интерфейсах не используется: только лендинг, вход и заставки.
 const unbounded = Unbounded({ variable: "--font-unbounded", subsets: ["latin", "cyrillic", "cyrillic-ext"], weight: ["500", "700", "800"], display: "swap" });
+// Заголовок и плашки рабочего листа, как на образцах учителя. preload: false — файл
+// шрифта качается только там, где лист открыт, а не на каждой странице.
+const lobster = Lobster({ variable: "--font-lobster", weight: "400", subsets: ["latin", "cyrillic", "cyrillic-ext"], display: "swap", preload: false });
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -121,7 +124,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   );
 
   return (
-    <html lang={locale} data-scroll-behavior="smooth" suppressHydrationWarning className={`${inter.variable} ${lora.variable} ${geistMono.variable} ${manrope.variable} ${nunito.variable} ${unbounded.variable} h-full antialiased`}>
+    <html lang={locale} data-scroll-behavior="smooth" suppressHydrationWarning className={`${inter.variable} ${lora.variable} ${geistMono.variable} ${manrope.variable} ${nunito.variable} ${unbounded.variable} ${lobster.variable} h-full antialiased`}>
       <head>
         {/* Тема применяется до первой отрисовки — иначе при перезагрузке
             страница на мгновение показывается светлой. */}
