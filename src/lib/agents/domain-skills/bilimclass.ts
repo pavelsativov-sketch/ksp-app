@@ -21,7 +21,30 @@ export function isBilimClassContext(goal: string, url: string): boolean {
   );
 }
 
-export function bilimClassInstructions(): string {
+/** Разделы инструкции, нужные не в каждой задаче: номер раздела → слова поручения. */
+const OPTIONAL_SECTIONS: Record<number, RegExp> = {
+  2: /д[эа]шборд|dashboard|провед/i,
+  3: /д[эа]шборд|dashboard|провед/i,
+  5: /журнал|чат|расписан|отч[её]т|урок|задани|раздел/i,
+};
+
+/**
+ * Инструкция BilimClass. С поручением отдаёт только нужные ему разделы: полная
+ * весит ~6 тыс. токенов и одна съедала минутный лимит бесплатного Groq.
+ */
+export function bilimClassInstructions(goal?: string): string {
+  const full = bilimClassFullInstructions();
+  if (goal === undefined) return full;
+  return full
+    .split(/\n(?=\d\. )/)
+    .filter((part) => {
+      const pattern = OPTIONAL_SECTIONS[Number(part.match(/^(\d)\. /)?.[1])];
+      return !pattern || pattern.test(goal);
+    })
+    .join("\n");
+}
+
+function bilimClassFullInstructions(): string {
   return `
 Предметные правила и устройство интерфейса BilimClass.kz:
 - Вход выполняет система, а не ты: учитель один раз вводит логин и пароль в специальном окне, дальше браузер сам заполняет форму и входит. Если результат инструмента содержит autoLogin — ты уже вошёл, продолжай задачу. Если пришёл needsCredentials или страница входа осталась, остановись и жди учителя. Не запрашивай и не вводи пароль, код из SMS или другие секреты сам.

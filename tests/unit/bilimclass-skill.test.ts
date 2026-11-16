@@ -76,3 +76,14 @@ describe("playbook агента BilimClass", () => {
     expect(prompt).toContain("раздел пуст");
   });
 });
+
+describe("bilimClassInstructions(goal)", () => {
+  it("drops the dashboard walkthrough for a language switch but keeps the safety rules", () => {
+    const full = bilimClassInstructions();
+    const slim = bilimClassInstructions("переключи язык интерфейса на русский");
+    expect(slim.length).toBeLessThan(full.length * 0.6);
+    expect(slim).toContain("6. ");
+    expect(slim).not.toContain("3. Как выполнить поручение");
+    expect(bilimClassInstructions("открой дэшборд и отметь урок")).toContain("3. Как выполнить поручение");
+  });
+});

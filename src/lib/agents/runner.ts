@@ -181,7 +181,7 @@ export async function runAgentTask(
     } catch { /* память некритична */ }
 
     const systemPrompt = (isBilimClassContext(prompt, '')
-      ? `${baseSystemPrompt}\n\n${bilimClassInstructions()}`
+      ? `${baseSystemPrompt}\n\n${bilimClassInstructions(prompt)}`
       : baseSystemPrompt) + memoryBlock;
     const deadline = Date.now() + TIME_BUDGET_MS;
 
@@ -465,7 +465,7 @@ export async function runAgentTask(
       if (bilimSeenOnPage && !bilimSkillInjected) {
         bilimSkillInjected = true;
         messages.push({ role: 'user', content: `Ты оказался на BilimClass. Используй эту инструкцию для дальнейшей работы.
-${bilimClassInstructions()}` });
+${bilimClassInstructions(prompt)}` });
         await log({ type: 'THINK', message: 'Подключаю навык BilimClass: разделы, журнал, расписание, КТП.' }).catch(() => {});
       }
       }
