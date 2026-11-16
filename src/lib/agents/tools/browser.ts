@@ -83,7 +83,28 @@ async function extractPageSnapshot(page: {
 }
 
 /** SPA BilimClass показывает индикатор загрузки, пока не ответит API: ждём до ~12 с, а не читаем пустой экран. */
-const READY_CHECKS = 15;
+const READY_MAX_MS = 10_000;
+
+/**
+ * Ожидание идёт внутри страницы одной командой. Раньше каждый опрос был отдельным
+ * запросом к песочнице (~1 с туда-обратно плюс секунда паузы), и открытие
+ * страницы занимало 15–20 с даже на прогретом браузере.
+ */
+const READY_SCRIPT = `(async () => {
+  const deadline = Date.now() + ${READY_MAX_MS};
+  let previous = -1;
+  let stable = 0;
+  while (Date.now() < deadline) {
+    const loading = !!document.querySelector('.v-loading-screen.is-loading');
+    const size = (document.body?.innerText ?? '').trim().length;
+    // Готово, когда индикатора нет, текст есть и не меняется два замера подряд.
+    stable = !loading && size > 0 && Math.abs(size - previous) <= 2 ? stable + 1 : 0;
+    if (stable >= 2) return true;
+    previous = size;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+})`;
 
 type BrowserPage = Parameters<typeof extractPageSnapshot>[0] & {
   waitForTimeout(ms: number): Promise<void>;
@@ -91,21 +112,7 @@ type BrowserPage = Parameters<typeof extractPageSnapshot>[0] & {
 };
 
 async function waitForBilimReady(page: BrowserPage) {
-  let previous = -1;
-  for (let i = 0; i < READY_CHECKS; i += 1) {
-    const state = (await page
-      .evaluate(() => ({
-        loading: !!document.querySelector('.v-loading-screen.is-loading'),
-        size: (document.body?.innerText ?? '').trim().length,
-      }))
-      .catch(() => null)) as { loading?: boolean; size?: number } | null;
-    if (!state) return;
-    // Готово, когда индикатора нет, текст есть и перестал расти: журнал догружается после меню.
-    const size = state.size ?? 0;
-    if (!state.loading && size > 0 && size === previous) return;
-    previous = size;
-    await page.waitForTimeout(1000);
-  }
+  await (page.evaluate as unknown as (script: string) => Promise<unknown>)(READY_SCRIPT).catch(() => undefined);
 }
 
 /**
