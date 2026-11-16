@@ -335,7 +335,7 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
         ...(captureScreenshot ? { captureScreenshot: true } : {}),
         ...(args ? { args } : {}),
         // Проверка статуса короткая: уснувшая песочница не должна держать запрос минуту.
-        timeoutMs: action === "status" ? 5_000 : action === "navigate" ? 35_000 : 55_000,
+        timeoutMs: action === "status" ? 10_000 : action === "navigate" ? 35_000 : 55_000,
       });
     } catch (error) {
       // 410 — раннер забыл сеанс (песочница уснула или перезапустилась). Раньше

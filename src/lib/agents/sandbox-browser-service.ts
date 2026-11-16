@@ -21,6 +21,28 @@ const openingLocks = new Map<string, Promise<string>>();
 const readyAttempts = Number(process.env.RUNNER_READY_ATTEMPTS ?? 45);
 const readyDelayMs = Number(process.env.RUNNER_READY_DELAY_MS ?? 1_000);
 
+const HEALTH_ATTEMPTS = 3;
+const HEALTH_TIMEOUT_MS = 4000;
+
+/**
+ * Жив ли раннер. В песочнице одно ядро: пока Chrome грузит тяжёлую страницу,
+ * /health отвечает с задержкой. Раньше одна просрочка в 2 с считалась смертью,
+ * раннер перезапускался посреди задачи и сессия агента терялась. Повторяем
+ * только при таймауте: отказ соединения или ошибка прокси приходят сразу.
+ */
+export async function runnerAlive(baseUrl: string): Promise<boolean> {
+  for (let attempt = 0; attempt < HEALTH_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS), cache: "no-store" });
+      return response.ok;
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      if (name !== "TimeoutError" && name !== "AbortError") return false;
+    }
+  }
+  return false;
+}
+
 /**
  * Обеспечивает запуск и доступность автономного браузерного раннера внутри Vercel Sandbox.
  * Возвращает прямой HTTPS RPC URL (на домене *.vercel.run).
@@ -33,12 +55,7 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
     const now = Date.now();
     const cached = runnerCache.get(userId);
     if (cached && now - cached.verifiedAt < 60_000) {
-      const alive = await fetch(`${cached.url}/health`, {
-        signal: AbortSignal.timeout(1500),
-        cache: "no-store",
-      })
-        .then((r) => r.ok)
-        .catch(() => false);
+      const alive = await runnerAlive(cached.url);
       if (alive) {
         cached.verifiedAt = now;
         return `${cached.url}/_agent/browser`;
@@ -50,12 +67,7 @@ export async function getSandboxBrowserRpcUrl(userId: string): Promise<string> {
     const domainUrl = sandbox.domain(3000);
 
     // 1. Проверяем, отвечает ли уже запущенный runner
-    const alive = await fetch(`${domainUrl}/health`, {
-      signal: AbortSignal.timeout(2000),
-      cache: "no-store",
-    })
-      .then((r) => r.ok)
-      .catch(() => false);
+    const alive = await runnerAlive(domainUrl);
 
     if (alive) {
       // Раннер, поднятый старой версией, мог получить общий BROWSER_RPC_SECRET.
