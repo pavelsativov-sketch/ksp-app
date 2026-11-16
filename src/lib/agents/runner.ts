@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
 import { getDb, COL } from '@/lib/mongo';
 import { tools, type ToolCtx } from './tools';
-import { executeWithFallback } from '@/lib/ai/providers';
+import { executeWithFallback, rateLimitRetryMs } from '@/lib/ai/providers';
 import { getControlOwner, releaseControlToUser, setControlOwner, waitForControl } from './session';
 import { buildCheckpoint, compactForModel, parseCheckpoint, repairTranscript, type AgentMessage } from './checkpoint';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
@@ -68,6 +68,8 @@ const TOOL_SCHEMAS = [
 // Общий лимит шагов на задачу (все провайдеры и перезапуски вместе). 12 шагов
 // не хватало даже на «открыть страницу → найти → кликнуть → проверить».
 const MAX_LOOPS = 120;
+const RATE_LIMIT_RETRIES = 6;
+const RATE_LIMIT_MAX_WAIT_MS = 65_000;
 // Leave headroom under Vercel Hobby's five-minute function ceiling.
 const TIME_BUDGET_MS = 4 * 60_000 + 50_000;
 
@@ -223,7 +225,7 @@ export async function runAgentTask(
     // Мульти-провайдерный фоллбэк: Groq → Cerebras → Gemini → OpenRouter.
     // Провайдер используется для всего цикла; при его сбое (лимит 429 и т.п.)
     // loop перезапускается на следующем провайдере.
-    const summaryFinal = await executeWithFallback('tasks', async (client, model, config, signal) => {
+    const runLoop = () => executeWithFallback('tasks', async (client, model, config, signal) => {
       // ── План: короткий чеклист из 3–5 шагов для чата (как у Devin) ──
       // План строится один раз; при продолжении с контрольной точки он уже есть.
       if (!transcript) try {
@@ -480,6 +482,23 @@ ${bilimClassInstructions(prompt)}` });
       }
       return summary;
     }, { signal: abortController.signal, budgetMs: TIME_BUDGET_MS });
+
+    // Бесплатный Groq даёт ~8000 токенов в минуту: когда все модели исчерпали
+    // минуту, ждём столько, сколько просит провайдер, и продолжаем с того же шага.
+    let summaryFinal = '';
+    for (let attempt = 0; ; attempt++) {
+      try {
+        summaryFinal = await runLoop();
+        break;
+      } catch (error) {
+        const waitMs = rateLimitRetryMs(error);
+        const fits = waitMs !== null && waitMs <= RATE_LIMIT_MAX_WAIT_MS && Date.now() + waitMs < deadline - 30_000;
+        if (!fits || attempt >= RATE_LIMIT_RETRIES || abortController.signal.aborted) throw error;
+        await log({ type: 'WARNING', message: `Бесплатная модель упёрлась в минутный лимит: жду ${Math.ceil(waitMs / 1000)} с и продолжаю.` });
+        await new Promise((resolve) => setTimeout(resolve, waitMs + 500));
+        await beat();
+      }
+    }
 
     // Агент ждал учителя, пока функция не начала умирать: статус остаётся
     // running с «давним» пульсом, кнопка «Передать управление ИИ» перезапустит

@@ -232,6 +232,22 @@ const MIN_PROVIDER_BUDGET_MS = 8_000;
  * Исчерпание лимита одной квоты не должно блокировать другой ключ того же
  * провайдера; при 429 перебираем все ключи, затем идём дальше по каскаду.
  */
+/**
+ * Через сколько миллисекунд провайдер просит повторить запрос после минутного
+ * лимита («try again in 42.3s»). null — ошибка не про лимит или времени нет.
+ */
+export function rateLimitRetryMs(err: unknown): number | null {
+  const value = (err as { retryAfterMs?: unknown } | null)?.retryAfterMs;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function parseRetryAfterMs(message: string): number | null {
+  const match = message.match(/try again in (?:(\d+)m)?([\d.]+)(ms|s)/i);
+  if (!match) return null;
+  const amount = Number(match[2]) * (match[3] === "ms" ? 1 : 1000);
+  return Math.ceil(Number(match[1] ?? 0) * 60_000 + amount);
+}
+
 function shouldTryNextKey(err: unknown): boolean {
   const status = (err as { status?: number })?.status;
   // 401/403 — ключ отозван или невалиден; 429 — исчерпан лимит.
@@ -274,6 +290,7 @@ export async function executeWithFallback<T>(
     else opts.signal.addEventListener("abort", onAbort, { once: true });
   }
 
+  let soonestRetryMs: number | null = null;
   for (const config of configs) {
     // Ключи провайдера: первый основной, остальные резервные. Перебор идёт
     // только по тем, кто подходит под ошибку выше, — иначе второй ключ
@@ -343,6 +360,8 @@ export async function executeWithFallback<T>(
           error: message.slice(0, 500),
         });
         lastError = err;
+        const retryMs = parseRetryAfterMs(message);
+        if (retryMs !== null) soonestRetryMs = Math.min(soonestRetryMs ?? retryMs, retryMs);
 
         // Ключи исчерпаны — переходим к следующему провайдеру каскада.
         if (!tryNextKeyOnly) break;
@@ -352,9 +371,12 @@ export async function executeWithFallback<T>(
 
   if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
 
-  throw new Error(
+  const failure = new Error(
     `Все AI провайдеры для «${task}» недоступны. Последняя ошибка: ${
       lastError instanceof Error ? lastError.message : String(lastError)
     }`,
   );
+  // Хоть один провайдер упёрся лишь в минутный лимит: вызывающий может подождать и повторить.
+  if (soonestRetryMs !== null) Object.assign(failure, { retryAfterMs: soonestRetryMs });
+  throw failure;
 }
