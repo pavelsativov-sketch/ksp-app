@@ -135,6 +135,8 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
     withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback 2)", temperature: 0.3, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Fallback 3)", temperature: 0.2, maxTokens: 8192 }),
+    // У Qwen на Groq свой минутный лимит токенов: агент не встаёт, когда GPT OSS исчерпал свой.
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "qwen/qwen3.8-27b", supportsJsonSchema: false, label: "Groq Qwen 3.8 27B (Fallback 3b)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-20b", supportsJsonSchema: true, label: "Groq GPT OSS 20B (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),

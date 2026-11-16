@@ -342,7 +342,8 @@ export async function runAgentTask(
         const response = await client.chat.completions.create(
           {
             model,
-            max_completion_tokens: 1024,
+            // Groq засчитывает запас на ответ в минутный лимит; вызову инструмента хватает 700.
+            max_completion_tokens: 700,
             messages,
             tools: activeToolSchemas,
             tool_choice: 'auto',
@@ -410,7 +411,7 @@ export async function runAgentTask(
               // (boundedResult). Обрезка JSON посреди строки ломала разбор
               // authBarrier ниже, поэтому режем только прочие результаты.
               const rawResult = JSON.stringify(res);
-              resultStr = name.startsWith('browser') ? rawResult.slice(0, 6000) : rawResult.slice(0, 4000);
+              resultStr = rawResult.slice(0, 4000); // полная страница не влезала в минутный лимит Groq
             } catch (e) {
               resultStr = JSON.stringify({ success: false, error: e instanceof Error ? e.message : 'tool failed' });
             }
