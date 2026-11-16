@@ -27,6 +27,8 @@ const SPECS: EnvSpec[] = [
   { key: "XAI_API_KEY", severity: "optional", description: "xAI Grok (допустимый алиас: GROK_API_KEY)" },
   { key: "GROK_API_KEY", severity: "optional", description: "xAI Grok (допустимый алиас: XAI_API_KEY)" },
   { key: "CEREBRAS_API_KEY", severity: "optional", description: "AI-провайдер" },
+  { key: "MXR_API_KEY", severity: "optional", description: "AI-провайдер агента (mxr.one)" },
+  { key: "MERCURY_API_KEY", severity: "optional", description: "AI-провайдер агента (Inception Mercury)" },
   { key: "OPENROUTER_API_KEY", severity: "optional", description: "AI-провайдер" },
   { key: "OPENAI_API_KEY", severity: "optional", description: "AI-провайдер и embeddings для RAG" },
   { key: "CLOUDFLARE_ACCOUNT_ID", severity: "optional", description: "Картинки (Workers AI)" },
@@ -66,6 +68,8 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): EnvReport {
     env.XAI_API_KEY,
     env.GROK_API_KEY,
     env.CEREBRAS_API_KEY,
+    env.MXR_API_KEY,
+    env.MERCURY_API_KEY,
     env.OPENROUTER_API_KEY,
     env.OPENAI_API_KEY,
   ].some((value) => typeof value === "string" && value.split(",").some((key) => key.trim().length > 0));

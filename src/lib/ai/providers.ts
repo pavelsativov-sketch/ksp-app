@@ -40,6 +40,8 @@ export interface ProviderConfig {
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/";
 const GROQ_BASE = "https://api.groq.com/openai/v1";
 const CEREBRAS_BASE = "https://api.cerebras.ai/v1";
+const MXR_BASE = "https://mxr.one/v1";
+const MERCURY_BASE = "https://api.inceptionlabs.ai/v1";
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const OPENAI_BASE = "https://api.openai.com/v1";
 const XAI_BASE = "https://api.x.ai/v1";
@@ -64,6 +66,8 @@ const keys = {
   gemini: () => parseApiKeys(process.env.GEMINI_API_KEY),
   groq: () => parseApiKeys(process.env.GROQ_API_KEY),
   cerebras: () => parseApiKeys(process.env.CEREBRAS_API_KEY),
+  mxr: () => parseApiKeys(process.env.MXR_API_KEY),
+  mercury: () => parseApiKeys(process.env.MERCURY_API_KEY),
   openrouter: () => parseApiKeys(process.env.OPENROUTER_API_KEY),
   apinex: () => parseApiKeys(process.env.APINEX_API_KEY || process.env.APINEX_KEY),
 };
@@ -130,6 +134,11 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-pro", supportsJsonSchema: false, label: "OpenRouter Nex 2.5 Pro (Free Emergency Fallback)", temperature: 0.5, maxTokens: 8192 }),
   ],
   tasks: () => [
+    // MXR и Mercury — без минутного лимита бесплатного Groq (8000 токенов): шаг агента
+    // занимает 2–3 с, а не минуту ожидания. Идут первыми; без ключей пропускаются.
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6.1-terra", supportsJsonSchema: false, label: "MXR GPT 6.1 Terra (Agent Primary)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna (Agent Fallback)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (Agent Fallback)", temperature: 0.2, maxTokens: 8192 }),
     // Apinex — первичный маршрут для инструментов агента и заданий.
     withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Primary)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.2, maxTokens: 8192 }),
@@ -181,6 +190,8 @@ export function isAnyProviderConfigured(): boolean {
       keys.gemini().length ||
       keys.groq().length ||
       keys.cerebras().length ||
+      keys.mxr().length ||
+      keys.mercury().length ||
       keys.openrouter().length,
   );
 }

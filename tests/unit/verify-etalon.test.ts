@@ -4,7 +4,7 @@ import { buildHandoutDocx } from "@/lib/handouts/docx";
 import { worksheetAnswerLines } from "@/lib/handouts/answers";
 import JSZip from "jszip";
 
-const AI_ENV_KEYS = ["OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "OPENROUTER_API_KEY"] as const;
+const AI_ENV_KEYS = ["OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MXR_API_KEY", "MERCURY_API_KEY", "OPENROUTER_API_KEY"] as const;
 const ORIG = Object.fromEntries(AI_ENV_KEYS.map((k) => [k, process.env[k]]));
 beforeEach(() => { for (const k of AI_ENV_KEYS) delete process.env[k]; });
 afterEach(() => {

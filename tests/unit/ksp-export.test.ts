@@ -12,6 +12,8 @@ const AI_ENV_KEYS = [
   "GEMINI_API_KEY",
   "GROQ_API_KEY",
   "CEREBRAS_API_KEY",
+  "MXR_API_KEY",
+  "MERCURY_API_KEY",
   "OPENROUTER_API_KEY",
 ] as const;
 const ORIG_AI_ENV = Object.fromEntries(
