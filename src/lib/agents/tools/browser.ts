@@ -296,6 +296,7 @@ export const browserTools = {
       const snap = await withBrowserSession(userId, async (session) => {
         timing.sessionMs = Date.now() - startedAt;
         await installRequestGuard(session.page);
+        timing.guardMs = Date.now() - startedAt - Number(timing.sessionMs);
         const gotoStartedAt = Date.now();
         try {
           await session.page.goto(checked.url.toString(), { waitUntil: 'domcontentloaded', timeout: 25000 });
@@ -314,7 +315,11 @@ export const browserTools = {
         timing.readyMs = Date.now() - readyStartedAt;
         // Сохранение сессии и снимок страницы друг от друга не зависят.
         persistInBackground(userId);
-        return snapshotAfterNavigation(userId, session.page as never);
+        const snapshotStartedAt = Date.now();
+        const snapshot = await snapshotAfterNavigation(userId, session.page as never);
+        timing.snapshotMs = Date.now() - snapshotStartedAt;
+        timing.autoLogin = Boolean((snapshot as { autoLogin?: unknown }).autoLogin);
+        return snapshot;
       });
       timing.totalMs = Date.now() - startedAt;
       return boundedResult({ success: true, timing, ...snap });
