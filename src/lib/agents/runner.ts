@@ -96,7 +96,7 @@ export async function runAgentTask(
   // Пишем только поверх своего running-прогона: опоздавший раннер-зомби не
   // превращает чужой failed/stopped в completed и не мешает новому прогону.
   const ownRun = () => ({ _id: new ObjectId(taskId), status: 'running', ...(runId ? { run_id: runId } : {}) });
-  const superseded = (doc: { run_id?: unknown } | null | undefined) => !!runId && !!doc?.run_id && doc.run_id !== runId;
+  const superseded = (doc: Record<string, unknown> | null | undefined) => !!runId && !!doc?.run_id && doc.run_id !== runId;
 
   // runAgentTask вызывается не только через startAgentTask: из очереди и при
   // оживлении зависшей задачи он стартует напрямую. В этих путях в Mongo мог
