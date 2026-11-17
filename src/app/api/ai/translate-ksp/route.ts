@@ -98,12 +98,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Перевод — затратная AI-операция: учитываем её в тарифной квоте assist
-  // (как улучшение секций), чтобы её нельзя было использовать мимо тарифа.
-  const quota = await reserveQuotaOrResponse(auth.user, "assist");
-  if (!quota.ok) return quota.response;
-  const { reservation } = quota;
-
   let json: unknown;
   try {
     json = await request.json();
@@ -154,6 +148,13 @@ export async function POST(request: Request) {
 1. Сохрани в точности всю JSON-структуру, типы интерактивных заданий (MCQ, TRUE_FALSE, SHORT_ANSWER, FILL_BLANK, MATCHING, NUMERIC, ORDERING), баллы (points), индексы ответов (correctIndex, correct, pairs, correctOrder, answer) и коды целей обучения (objectiveCode)!
 2. Полностью, без сокращений переведи реплики педагога («Слова педагога:») и ответы учеников («Предполагаемые ответы учащихся:»).
 3. В FILL_BLANK сохрани точное количество пропусков «___».`;
+
+  // Перевод — затратная AI-операция: учитываем её в тарифной квоте assist
+  // (как улучшение секций), чтобы её нельзя было использовать мимо тарифа.
+  // Резерв — после разбора запроса: ранние 400 не должны занимать слот.
+  const quota = await reserveQuotaOrResponse(auth.user, "assist");
+  if (!quota.ok) return quota.response;
+  const { reservation } = quota;
 
   try {
     const translatedBody = await executeWithFallback("generation", async (client, model, config) => {

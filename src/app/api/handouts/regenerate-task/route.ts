@@ -65,6 +65,7 @@ export async function POST(request: Request) {
 
   try {
     const task = await regenerateWorksheetTask(parsed.data);
+    await quota.reservation.finalize(true);
     return NextResponse.json({ task, quota: { remaining: quota.reservation.remaining } }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     await quota.reservation.finalize(false);

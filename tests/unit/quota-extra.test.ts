@@ -12,8 +12,9 @@ vi.mock("@/lib/mongo", async (original) => ({
   getDb: mock.getDb,
 }));
 
-import { getPlanForUser, quotaFailure, reserveQuota, reserveQuotaOrResponse, utcMonthWindow } from "@/lib/billing/quota";
+import { getPlanForUser, quotaFailure, reserveQuota, reserveQuotaOrResponse, STALE_PENDING_MS, utcMonthWindow } from "@/lib/billing/quota";
 import type { UserPlanUsage } from "@/lib/billing/quota";
+import { aiEventsCollection } from "../helpers/ai-events-mock";
 
 const userId = "111111111111111111111111";
 const now = new Date("2026-09-17T12:30:00.000Z");
@@ -29,53 +30,7 @@ beforeEach(() => {
   mock.getDb.mockResolvedValue({
     collection: (name: string) => {
       if (name === "users") return { findOne: async () => user };
-      if (name === "ai_events") return {
-        insertOne: async (entry: Record<string, unknown>) => {
-          if (typeof entry.seq === "number" && events.some((e) =>
-            e.user_id === entry.user_id && e.task === entry.task &&
-            (e as { seq?: number }).seq === (entry as { seq?: number }).seq &&
-            (e as { month?: string }).month === (entry as { month?: string }).month)) {
-            const dup = new Error("E11000 duplicate key");
-            (dup as { code?: number }).code = 11000;
-            throw dup;
-          }
-          events.push(entry);
-        },
-        deleteOne: async () => ({ deletedCount: 0 }),
-        countDocuments: async (filter: { user_id: string; task: string; createdAt: { $gte: Date; $lt: Date } }) =>
-          events.filter((e) => e.user_id === filter.user_id && e.task === filter.task &&
-            (e.createdAt as Date) >= filter.createdAt.$gte && (e.createdAt as Date) < filter.createdAt.$lt).length,
-        aggregate: (pipeline: Array<Record<string, unknown>>) => ({
-          toArray: async () => {
-            let rows: Array<Record<string, unknown>> = [...events];
-            for (const stage of pipeline) {
-              const match = stage.$match as Record<string, unknown> | undefined;
-              if (match) {
-                rows = rows.filter((e) => {
-                  if (match.user_id && e.user_id !== match.user_id) return false;
-                  if (match.task && e.task !== match.task) return false;
-                  if (match.kind && e.kind !== match.kind) return false;
-                  const createdAt = match.createdAt as { $gte?: Date; $lt?: Date } | undefined;
-                  if (createdAt?.$gte && (e.createdAt as Date) < createdAt.$gte) return false;
-                  if (createdAt?.$lt && (e.createdAt as Date) >= createdAt.$lt) return false;
-                  return true;
-                });
-              }
-              const group = stage.$group as { _id: string } | undefined;
-              if (group) {
-                const keyPath = String(group._id).replace(/^\$/, "");
-                const byKey = new Map<string, number>();
-                for (const e of rows) {
-                  const key = String((e as Record<string, unknown>)[keyPath]);
-                  byKey.set(key, (byKey.get(key) ?? 0) + 1);
-                }
-                rows = Array.from(byKey, ([_id, count]) => ({ _id, count }));
-              }
-            }
-            return rows;
-          },
-        }),
-      };
+      if (name === "ai_events") return aiEventsCollection(() => events);
       throw new Error(`Unexpected collection ${name}`);
     },
   });
@@ -184,6 +139,47 @@ describe("admin bonus generations", () => {
   it("ignores a bonus granted for another month", async () => {
     user = { _id: new ObjectId(userId), bonus_generations_month: { month: "2026-08", count: 10 } };
     expect((await getPlanForUser(userId)).limits.kspPerMonth).toBe(3);
+  });
+});
+
+describe("незавершённые слоты (функцию убили до finalize)", () => {
+  const reserveOk = async () => {
+    const r = await reserveQuota({ id: userId }, "generation");
+    if (!r.ok) throw new Error("expected reservation");
+    return r.reservation;
+  };
+
+  it("слот резервируется pending, finalize(true) его подтверждает", async () => {
+    const reservation = await reserveOk();
+    expect(events[0]).toMatchObject({ kind: "slot", pending: true });
+    await reservation.finalize(true);
+    expect(events[0]).not.toHaveProperty("pending");
+  });
+
+  it("finalize идемпотентен: поздний finalize(false) не возвращает выданный слот", async () => {
+    const reservation = await reserveOk();
+    await reservation.finalize(true);
+    await reservation.finalize(false);
+    expect(events).toHaveLength(1);
+  });
+
+  it("брошенный pending-слот перестаёт считаться через STALE_PENDING_MS и освобождается при резерве", async () => {
+    for (let i = 0; i < 3; i++) await reserveOk(); // три генерации «убиты» платформой
+    expect(await reserveQuota({ id: userId }, "generation")).toMatchObject({ ok: false, code: "KSP_QUOTA_EXCEEDED" });
+    vi.setSystemTime(new Date(now.getTime() + STALE_PENDING_MS - 1));
+    expect((await getPlanForUser(userId)).kspUsedThisMonth).toBe(3);
+    vi.setSystemTime(new Date(now.getTime() + STALE_PENDING_MS + 1));
+    expect((await getPlanForUser(userId)).kspUsedThisMonth).toBe(0);
+    const fresh = await reserveOk();
+    await fresh.finalize(true);
+    // Брошенные слоты удалены, их номера заняты заново без конфликта индекса.
+    expect(events.filter((e) => e.kind === "slot")).toHaveLength(1);
+  });
+
+  it("подтверждённые слоты со временем не освобождаются", async () => {
+    for (let i = 0; i < 3; i++) await (await reserveOk()).finalize(true);
+    vi.setSystemTime(new Date(now.getTime() + STALE_PENDING_MS * 3));
+    expect(await reserveQuota({ id: userId }, "generation")).toMatchObject({ ok: false });
   });
 });
 

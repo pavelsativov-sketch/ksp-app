@@ -27,7 +27,7 @@ const bodySchema = z.object({
 });
 
 export const runtime = "nodejs";
-export const maxDuration = 90;
+export const maxDuration = 300; // генерация до 90 с + проверка до 30 с (+ refine); см. src/lib/ai/generate.ts
 
 export async function POST(request: Request) {
   const auth = await requireApiAuth();

@@ -60,7 +60,8 @@ export async function generateKspWithModel(input: GenerateKspOptions): Promise<G
   };
   let capturedModel = "unknown";
   // Бюджет на первый проход: оставляем достаточно времени на 3–4 независимых провайдера,
-  // а второй проход методиста запускаем только если остаётся безопасный запас до maxDuration (120 с).
+  // а второй проход методиста запускаем только если остаётся безопасный запас до maxDuration
+  // роутов генерации (300 с), иначе платформа обрежет супервизор-проход на середине.
   const passBudgetMs = input.refine ? 68_000 : 90_000;
   const perAttemptTimeoutMs = input.refine ? 18_000 : 22_000;
   const draft = await executeWithFallback("generation", async (client, model, config, signal) => {
@@ -204,7 +205,7 @@ function repairStageTasks<T extends { stages?: unknown }>(payload: T, language: 
 }
 
 const REVIEW_BUDGET_MS = 30_000;
-/** Позже этого проверку не начинаем: роут ограничен 120 секундами. */
+/** Позже этого проверку не начинаем: худший случай 75 + 30 с укладывается в maxDuration роутов (300 с) с запасом. */
 const REVIEW_LATEST_START_MS = 75_000;
 
 const STAGE_KEYS = ["beginning", "middle", "end"] as const;

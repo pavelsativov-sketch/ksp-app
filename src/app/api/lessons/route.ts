@@ -6,7 +6,7 @@ import { productTools } from "@/lib/agents/tools/product";
 import { kitAnswersSchema } from "@/lib/materials/kit";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300; // генерация до 90 с + проверка до 30 с (+ refine); см. src/lib/ai/generate.ts
 
 const bodySchema = z.object({
   grade: z.coerce.number().int().min(1).max(11),

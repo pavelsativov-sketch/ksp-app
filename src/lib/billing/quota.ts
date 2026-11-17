@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import type { ObjectId } from "mongodb";
 import { COL, getDb, toObjectId } from "@/lib/mongo";
 import { effectiveLimits, effectivePlan, type Plan, type PlanLimits, type UserBillingFields } from "./plans";
 
@@ -22,6 +23,19 @@ export function utcMonthWindow(now = new Date()): { start: Date; end: Date } {
   };
 }
 
+/**
+ * Слот резервируется с pending: true и подтверждается finalize(true).
+ * Если платформа убила функцию (maxDuration) до finalize, слот так и остаётся
+ * pending — спустя это время его не считаем и удаляем при следующем резерве.
+ * Должно быть заметно больше самого длинного maxDuration AI-роутов (300 с).
+ */
+export const STALE_PENDING_MS = 10 * 60_000;
+
+/** Слоты, которые никто не подтвердил и уже не подтвердит. */
+export function stalePendingFilter(now = new Date()) {
+  return { pending: true, createdAt: { $lt: new Date(now.getTime() - STALE_PENDING_MS) } };
+}
+
 export async function getPlanForUser(userId: string): Promise<UserPlanUsage> {
   const id = toObjectId(userId);
   if (!id) throw new Error("Invalid billing user");
@@ -34,7 +48,7 @@ export async function getPlanForUser(userId: string): Promise<UserPlanUsage> {
   // Учитываем только слоты квоты (kind: "slot"): история AI, телеметрия
   // и фидбек пишутся в ту же коллекцию и не должны считаться расходом.
   const events = await db.collection(COL.aiEvents).aggregate([
-    { $match: { ...monthFilter, kind: "slot" } },
+    { $match: { ...monthFilter, kind: "slot", $nor: [stalePendingFilter(now)] } },
     {
       $group: {
         _id: "$task",
@@ -165,18 +179,24 @@ export async function reserveQuota(
     if (used >= limit) return exceeded();
 
     const db = await getDb();
+    const events = db.collection(COL.aiEvents);
     const month = utcMonthWindow().start.toISOString().slice(0, 7);
+    // Освобождаем номера слотов, брошенных убитыми по таймауту запросами.
+    await events.deleteMany({ user_id: user.id, task: kind, kind: "slot", ...stalePendingFilter() });
     // Перебираем ВСЕ номера слотов: возвращённый после неудачи слот образует
     // «дыру» ниже used, и начни мы с used+1 — она никогда бы не освободилась.
     for (let seq = 1; seq <= limit; seq++) {
+      let slotId: ObjectId;
       try {
-        await db.collection(COL.aiEvents).insertOne({
-          user_id: user.id, task: kind, kind: "slot", month, seq, ok: true, createdAt: new Date(),
+        const inserted = await events.insertOne({
+          user_id: user.id, task: kind, kind: "slot", month, seq, ok: true, pending: true, createdAt: new Date(),
         });
+        slotId = inserted.insertedId;
       } catch (e) {
         if ((e as { code?: number }).code === 11000) continue; // слот занят параллельным запросом
         throw e;
       }
+      let finalized = false;
       return {
         ok: true,
         reservation: {
@@ -184,11 +204,17 @@ export async function reserveQuota(
           // остаток может быть пессимистично занижен — это безопаснее завышения.
           remaining: limit - used - 1,
           finalize: async (success) => {
-            if (success) return;
+            // Первый исход окончательный: поздний finalize(false) после выдачи
+            // результата (abort, сбой постобработки) не должен вернуть слот.
+            if (finalized) return;
+            finalized = true;
+            const own = { _id: slotId, kind: "slot" };
             try {
-              await db.collection(COL.aiEvents).deleteOne({ user_id: user.id, task: kind, month, seq });
+              if (success) await events.updateOne({ ...own, pending: true }, { $unset: { pending: "" } });
+              else await events.deleteOne(own);
             } catch {
-              // слот останется занятым до конца месяца — лучше, чем выдать лишний
+              // pending-слот освободится сам через STALE_PENDING_MS; подтверждённый
+              // останется занятым до конца месяца — лучше, чем выдать лишний
             }
           },
         },

@@ -47,7 +47,7 @@ const SSE_HEADERS = {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300; // генерация до 90 с + проверка до 30 с (+ refine); см. src/lib/ai/generate.ts
 
 export async function POST(request: Request) {
   const auth = await requireApiAuth();

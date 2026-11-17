@@ -22,6 +22,7 @@ import { redeemActivationCodeAction } from "@/app/actions/billing";
 import { POST } from "@/app/api/billing/redeem/route";
 import { GET } from "@/app/api/billing/plan/route";
 import { POST as imagePOST } from "@/app/api/ai/image/route";
+import { aiEventsCollection } from "../helpers/ai-events-mock";
 
 const userId = "111111111111111111111111";
 const now = new Date("2026-09-17T12:30:00.000Z");
@@ -81,60 +82,7 @@ beforeEach(() => {
         if (failAudit) throw new Error("write failed");
         audit.push(entry);
       } };
-      if (name === "ai_events") return {
-        insertOne: async (entry: typeof events[number] & { seq?: number }) => {
-          // Уникальный частичный индекс слотов квоты: дубликат seq → ошибка 11000.
-          if (typeof entry.seq === "number" && events.some((e) =>
-            e.user_id === entry.user_id && e.task === entry.task &&
-            (e as { seq?: number }).seq === entry.seq &&
-            (e as { month?: string }).month === (entry as { month?: string }).month)) {
-            const dup = new Error("E11000 duplicate key");
-            (dup as { code?: number }).code = 11000;
-            throw dup;
-          }
-          events.push(entry);
-        },
-        deleteOne: async (filter: { user_id: string; task: string; month?: string; seq?: number }) => {
-          const idx = events.findIndex((e) => e.user_id === filter.user_id && e.task === filter.task &&
-            (e as { seq?: number }).seq === filter.seq);
-          if (idx >= 0) events.splice(idx, 1);
-          return { deletedCount: idx >= 0 ? 1 : 0 };
-        },
-        countDocuments: async (filter: { user_id: string; task: string; createdAt: { $gte: Date; $lt: Date } }) =>
-          events.filter((event) => event.user_id === filter.user_id && event.task === filter.task &&
-            event.createdAt >= filter.createdAt.$gte && event.createdAt < filter.createdAt.$lt).length,
-        aggregate: (pipeline: Array<Record<string, unknown>>) => ({
-          toArray: async () => {
-            let rows: Array<Record<string, unknown>> = [...events];
-            for (const stage of pipeline) {
-              const match = stage.$match as Record<string, unknown> | undefined;
-              if (match) {
-                const m = match;
-                rows = rows.filter((e) => {
-                  if (m.user_id && e.user_id !== m.user_id) return false;
-                  if (m.task && e.task !== m.task) return false;
-                  if (m.kind && e.kind !== m.kind) return false;
-                  const createdAt = m.createdAt as { $gte?: Date; $lt?: Date } | undefined;
-                  if (createdAt?.$gte && (e.createdAt as Date) < createdAt.$gte) return false;
-                  if (createdAt?.$lt && (e.createdAt as Date) >= createdAt.$lt) return false;
-                  return true;
-                });
-              }
-              const group = stage.$group as { _id: string } | undefined;
-              if (group) {
-                const keyPath = String(group._id).replace(/^\$/, "");
-                const byKey = new Map<string, number>();
-                for (const e of rows) {
-                  const key = String((e as Record<string, unknown>)[keyPath]);
-                  byKey.set(key, (byKey.get(key) ?? 0) + 1);
-                }
-                rows = Array.from(byKey, ([_id, count]) => ({ _id, count }));
-              }
-            }
-            return rows;
-          },
-        }),
-      };
+      if (name === "ai_events") return aiEventsCollection(() => events);
       throw new Error(`Unexpected collection ${name}`);
     },
   });
