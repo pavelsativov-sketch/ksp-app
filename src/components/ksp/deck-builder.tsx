@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Loader2, Plus, Presentation, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DECK_PALETTES, DECK_THEMES, SLIDE_FIELDS, SLIDE_KINDS, SLIDE_KIND_LABELS, descriptorPoints, parseBranch, splitThesis, type DeckSlide, type DeckTheme, type SlideKind } from "@/lib/materials/deck-types";
+import { fetchPlanMaterial } from "@/lib/materials/plan-material-client";
 import s from "./deck-builder.module.css";
 
 const THEME_LABELS: Record<DeckTheme, string> = { network: "Сеть", lavender: "Лаванда", ocean: "Океан", sunset: "Закат" };
@@ -168,12 +169,20 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
   // Черновик живёт в браузере: читаем после гидратации, иначе разметка не совпадёт с серверной.
   useEffect(() => {
     const draft = loadDraft(key);
-    if (!draft?.slides?.length) return;
-    /* eslint-disable react-hooks/set-state-in-effect -- localStorage недоступен при серверной отрисовке */
-    setSlides(draft.slides);
-    setTheme(draft.theme);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [key]);
+    if (draft?.slides?.length) {
+      /* eslint-disable react-hooks/set-state-in-effect -- localStorage недоступен при серверной отрисовке */
+      setSlides(draft.slides);
+      setTheme(draft.theme);
+      /* eslint-enable react-hooks/set-state-in-effect */
+      return;
+    }
+    // В браузере черновика нет: слайды, разобранные заранее (комплект урока или другое устройство).
+    let cancelled = false;
+    void fetchPlanMaterial<{ slides?: DeckSlide[] }>(planId, "deck").then((saved) => {
+      if (!cancelled && saved?.slides?.length) setSlides(saved.slides);
+    });
+    return () => { cancelled = true; };
+  }, [key, planId]);
 
   function update(next: DeckSlide[], nextTheme = theme) {
     setSlides(next);

@@ -138,9 +138,7 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [work, setWork] = useState<GroupWork | null>(null);
-  const [saving, setSaving] = useState(false);
   const [remote, setRemote] = useState<GroupWork | null>(null);
-  const sheetRef = useRef<HTMLDivElement | null>(null);
 
   async function generate() {
     setLoading(true);
@@ -164,18 +162,6 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
       setError(e instanceof Error ? e.message : "Не удалось составить карточки");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function saveImages() {
-    if (!sheetRef.current) return;
-    setSaving(true);
-    try {
-      await downloadSheetImages(sheetRef.current, `${work?.mode === "pair" ? "Парная" : "Групповая"} работа — ${topic}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось сохранить картинки");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -227,24 +213,47 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
           </Button>
         </div>
       )}
-      {work && (
-        <Dialog open onOpenChange={(next) => { if (!next) setWork(null); }}>
-          <DialogContent className="max-h-[92vh] max-w-[min(1200px,96vw)] overflow-auto p-0">
-            <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 bg-ink px-4 py-3 text-white print:hidden">
-              <DialogTitle className="mr-auto text-base font-bold text-white">{work.mode === "pair" ? "Парная работа" : "Групповая работа"} · {work.topic}</DialogTitle>
-              <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-sm font-bold text-[#5a2cd0] hover:bg-violet-100">
-                <Printer className="h-4 w-4" /> Печать / PDF
-              </button>
-              <button type="button" onClick={saveImages} disabled={saving} className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-sm font-bold text-[#5a2cd0] hover:bg-violet-100 disabled:opacity-50">
-                <ImageIcon className="h-4 w-4" /> {saving ? "Сохраняем…" : "Картинки PNG"}
-              </button>
-            </div>
-            <div ref={sheetRef} className="p-4 print:p-0">
-              <GroupCardsSheet work={work} />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+      {work && <GroupWorkDialog work={work} onClose={() => setWork(null)} />}
     </div>
+  );
+}
+
+/** Окно с карточками групп или пар: печать и PNG. Его открывают кнопка и панель комплекта. */
+export function GroupWorkDialog({ work, onClose }: { work: GroupWork; onClose: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+
+  async function saveImages() {
+    if (!sheetRef.current) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await downloadSheetImages(sheetRef.current, `${work.mode === "pair" ? "Парная" : "Групповая"} работа — ${work.topic}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось сохранить картинки");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-h-[92vh] max-w-[min(1200px,96vw)] overflow-auto p-0">
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 bg-ink px-4 py-3 text-white print:hidden">
+          <DialogTitle className="mr-auto text-base font-bold text-white">{work.mode === "pair" ? "Парная работа" : "Групповая работа"} · {work.topic}</DialogTitle>
+          {error && <span role="alert" className="text-sm text-red-100">{error}</span>}
+          <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-sm font-bold text-[#5a2cd0] hover:bg-violet-100">
+            <Printer className="h-4 w-4" /> Печать / PDF
+          </button>
+          <button type="button" onClick={saveImages} disabled={saving} className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-sm font-bold text-[#5a2cd0] hover:bg-violet-100 disabled:opacity-50">
+            <ImageIcon className="h-4 w-4" /> {saving ? "Сохраняем…" : "Картинки PNG"}
+          </button>
+        </div>
+        <div ref={sheetRef} className="p-4 print:p-0">
+          <GroupCardsSheet work={work} />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,0 +1,100 @@
+/* Комплект урока: материалы по этапам и их готовность. */
+.panel {
+  --out: cubic-bezier(0.16, 1, 0.3, 1);
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 20px;
+  background: linear-gradient(160deg, var(--primary-soft) 0%, var(--surface) 70%);
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+}
+.head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.title { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.lead { margin-top: 3px; font-size: 13.5px; line-height: 1.45; color: var(--muted-foreground); }
+.all {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 8px 18px rgb(109 59 234 / 26%);
+  transition: transform 0.3s var(--out), box-shadow 0.3s var(--out);
+}
+.all:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgb(109 59 234 / 32%); }
+.all svg { width: 16px; height: 16px; }
+
+.meter { height: 6px; overflow: hidden; background: var(--muted); border-radius: 99px; }
+.meter span { display: block; height: 100%; background: linear-gradient(90deg, #8b63ff, var(--ink)); border-radius: inherit; transition: width 0.8s var(--out); }
+
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.stage h4 { margin-bottom: 8px; font-size: 12.5px; font-weight: 800; letter-spacing: 0.02em; color: var(--muted-foreground); }
+.stage ul { display: grid; gap: 8px; }
+
+.slot {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  transition: border-color 0.3s, background-color 0.3s;
+}
+.icon { display: grid; place-items: center; width: 36px; height: 36px; color: var(--ink); background: var(--primary-soft); border-radius: 11px; transition: color 0.3s, background-color 0.3s; }
+.icon svg { width: 18px; height: 18px; }
+.name { display: grid; gap: 2px; min-width: 0; }
+.name b { font-size: 13.5px; font-weight: 700; line-height: 1.3; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; line-height: 1.35; color: var(--muted-foreground); }
+.status svg { flex: none; width: 13px; height: 13px; }
+
+.slot[data-status="generating"] { border-color: color-mix(in srgb, var(--ink) 35%, var(--border)); }
+.slot[data-status="generating"] .status { color: var(--ink); }
+.slot[data-status="ready"] { border-color: #b8e6cf; }
+.slot[data-status="ready"] .icon { color: #fff; background: #1c9a5e; animation: done 0.6s var(--out); }
+.slot[data-status="ready"] .status { color: #167a4b; }
+.slot[data-status="failed"] { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.slot[data-status="failed"] .status { color: var(--danger); }
+@keyframes done { 0% { transform: scale(0.7) rotate(-12deg); } 60% { transform: scale(1.12) rotate(4deg); } 100% { transform: none; } }
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--primary-soft);
+  border-radius: 10px;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+.action:hover { background: var(--primary-soft-hover); }
+.action:disabled { opacity: 0.6; }
+.action svg { width: 14px; height: 14px; }
+.action:focus-visible, .all:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+:global(.dark) .slot[data-status="ready"] { border-color: #1f6b49; }
+:global(.dark) .slot[data-status="ready"] .status { color: #6fdcaa; }
+
+@media (max-width: 560px) {
+  .panel { padding: 16px; }
+  .slot { grid-template-columns: 32px minmax(0, 1fr); }
+  .icon { width: 32px; height: 32px; }
+  .action { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter span, .slot, .icon, .all { transition: none; }
+  .slot[data-status="ready"] .icon { animation: none; }
+}

@@ -4,6 +4,7 @@ import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 import { getPlanById } from "@/lib/plans-repo";
 import { deckRequestSchema, generateDeckOutline } from "@/lib/materials/deck";
+import { saveToOwnedPlan } from "@/lib/materials/plan-materials";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
   try {
     const { slides, fromAi } = await generateDeckOutline(plan);
     await quota.reservation.finalize(fromAi);
+    // Черновик слайдов хранится в уроке: конструктор откроет его на любом устройстве.
+    await saveToOwnedPlan({ planId: plan.id, ownerId: auth.user.id, kind: "deck", stage: "beginning", title: "Презентация к уроку", payload: { slides, fromAi } });
     return NextResponse.json({ slides, fromAi });
   } catch (error) {
     await quota.reservation.finalize(false).catch(() => undefined);

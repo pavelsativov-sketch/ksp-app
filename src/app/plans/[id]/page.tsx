@@ -10,6 +10,7 @@ import { PrintButton } from "@/components/ksp/print-button";
 import { ClonePlanButton } from "@/components/ksp/clone-plan-button";
 import { CrosswordButton, MemosButton, WorksheetButton } from "@/components/ksp/handouts-button";
 import { GroupWorkButton } from "@/components/ksp/group-work";
+import { KitPanel } from "@/components/ksp/kit-panel";
 import { InteractiveButton, TeacherSpeechButton } from "@/components/ksp/materials-buttons";
 import { KtpBuilder } from "@/components/ksp/ktp-builder";
 import { LikeButton } from "@/components/ksp/like-button";
@@ -262,6 +263,13 @@ export default async function PlanViewPage({
 
       <section id="materials" aria-labelledby="materials-title" className={`${l.section} no-print`}>
         <h2 id="materials-title" className={l.sectionTitle}>Материалы урока</h2>
+        {isOwner && plan.content?.kit?.slots?.length ? (
+          <KitPanel
+            kit={plan.content.kit}
+            ctx={{ planId: plan.id, topic: plan.content.topic || plan.title, subject: subjectName, grade: plan.grade, language: plan.language, kspContext: handoutKspContext ?? undefined, values: plan.content.values }}
+            footer={plan.content.header.school || plan.content.header.teacherName || undefined}
+          />
+        ) : null}
         <div className={l.tiles}>
           <div className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>Live-квиз, пропуски, пары, порядок: выберите формат.</p>
             {isOwner ? <InteractiveButton planId={plan.id} /> : <p className={l.note}>Доступен автору плана.</p>}

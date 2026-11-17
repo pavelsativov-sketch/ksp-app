@@ -732,7 +732,10 @@ export function HandoutPreview({
   docxBase64,
   onClose,
   meta,
+  initialVariant = "student",
 }: {
+  /** С какого вида открыть лист: ученику, с ответами или для ученика с ООП. */
+  initialVariant?: "student" | "key" | "oop";
   handout: Handout;
   /** Второй материал комплекта (памятки после листа) — показывается ниже с разделителем. */
   extra?: Handout;
@@ -754,7 +757,7 @@ export function HandoutPreview({
   const [settings, setSettings] = useState<PreviewSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
   // Один лист в трёх видах, как в папке учителя: ученику, с ответами красным, для ученика с ООП.
-  const [variant, setVariant] = useState<"student" | "key" | "oop">("student");
+  const [variant, setVariant] = useState<"student" | "key" | "oop">(initialVariant);
   const withKey = variant === "key";
   const shown = useCallback((sheet: Worksheet) => (variant === "oop" ? toOopSheet(sheet) : sheet), [variant]);
   const [saving, setSaving] = useState(false);

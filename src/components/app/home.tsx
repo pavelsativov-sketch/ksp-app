@@ -116,7 +116,8 @@ function LessonDialog({ open, onClose, subjects, c, locale }: { open: boolean; o
       });
       const data = (await res.json().catch(() => ({}))) as { planId?: string; error?: string };
       if (!res.ok || !data.planId) throw new Error(data.error ?? c.lessonError);
-      router.push(`/plans/${data.planId}#materials`);
+      // kit=start: страница урока сразу запустит создание выбранных материалов.
+      router.push(`/plans/${data.planId}?kit=start#materials`);
     } catch (e) {
       setError(e instanceof Error ? e.message : c.lessonError);
       setBusy(false);
