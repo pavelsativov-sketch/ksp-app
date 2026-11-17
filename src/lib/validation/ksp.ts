@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MATERIAL_KINDS } from "@/lib/types/ksp";
 
 const MAX_TEXT_LENGTH = 5_000;
 const MAX_LIST_ITEMS = 50;
@@ -56,12 +57,42 @@ export const interactiveTaskSchema = z.discriminatedUnion("type", [
   z.object({ ...taskBase, type: z.literal("NUMERIC"), answer: z.number().finite(), tolerance: z.number().finite().min(0).max(1_000_000).nullish().transform((v) => v ?? 0), unit: text.max(100).nullish().transform((v) => v ?? undefined) }),
 ]);
 
+const workFormSchema = z.enum(["individual", "pair", "group", "frontal"]);
+const stageKeySchema = z.enum(["beginning", "middle", "end"]);
+
+const activitySchema = z.object({
+  form: workFormSchema,
+  title: text.max(300),
+  minutes: z.number().int().min(1).max(180).optional(),
+  slotId: text.max(60).optional(),
+});
+
+const materialSlotSchema = z.object({
+  id: text.max(60),
+  kind: z.enum(MATERIAL_KINDS),
+  stage: stageKeySchema,
+  status: z.enum(["planned", "generating", "ready", "failed"]),
+  title: text.max(300),
+  error: text.max(500).optional(),
+});
+
+/** Комплект урока (docs/lesson-kit-design.md). Без него план остаётся прежним. */
+export const lessonKitSchema = z.object({
+  workForms: z.array(workFormSchema).max(4).default(["individual"]),
+  groups: z.number().int().min(2).max(4).optional(),
+  oop: z.object({ present: z.boolean(), notes: text.max(500).optional() }).optional(),
+  value: text.max(200).optional(),
+  minutes: z.union([z.literal(40), z.literal(45)]).default(45),
+  slots: z.array(materialSlotSchema).max(12).default([]),
+});
+
 const stageSchema = z.object({
   time: text.default(""),
   teacherActions: text.default(""),
   studentActions: text.default(""),
   resources: text.default(""),
   tasks: z.array(interactiveTaskSchema).max(20).default([]),
+  activities: z.array(activitySchema).max(10).optional(),
   copiedFrom: provenanceSchema.optional(),
   keyQuestions: z.array(text).max(MAX_LIST_ITEMS).default([]),
   descriptors: z.array(text).max(MAX_LIST_ITEMS).default([]),
@@ -94,6 +125,7 @@ export const kspContentSchema = z.object({
   values: text.default(""), crossCurricularLinks: text.default(""), priorKnowledge: text.default(""),
   stages: z.object({ beginning: stageSchema, middle: stageSchema, end: stageSchema }),
   evaluation: z.object({ formativeAssessment: text.default(""), differentiation: text.default(""), healthAndSafety: text.default(""), reflection: text.default("") }),
+  kit: lessonKitSchema.optional(),
 });
 
 export const lessonPlanMetaSchema = z.object({

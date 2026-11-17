@@ -18,6 +18,47 @@ export interface KspQualityTargets {
 }
 
 /** Этап урока: начало / середина / конец */
+/** Форма работы на уроке. */
+export type WorkForm = "individual" | "pair" | "group" | "frontal";
+
+/** Вид материала комплекта урока. */
+export const MATERIAL_KINDS = ["worksheet", "oop_sheet", "group_cards", "pair_cards", "interactive", "crossword", "flashcards", "deck"] as const;
+export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+
+export type StageKey = "beginning" | "middle" | "end";
+
+/** Действие учеников на этапе: форма работы и материал, который для него нужен. */
+export interface LessonActivity {
+  form: WorkForm;
+  title: string;
+  minutes?: number;
+  /** Слот комплекта, если для действия нужен материал. */
+  slotId?: string;
+}
+
+/** Место под материал в комплекте урока: что, на каком этапе и готово ли. */
+export interface MaterialSlot {
+  id: string;
+  kind: MaterialKind;
+  stage: StageKey;
+  status: "planned" | "generating" | "ready" | "failed";
+  /** Как материал назван в КСП: «Карточки групповой работы (3 группы)». */
+  title: string;
+  error?: string;
+}
+
+/** Ответы учителя перед созданием КСП и материалы урока (docs/lesson-kit-design.md). */
+export interface LessonKit {
+  workForms: WorkForm[];
+  /** Сколько групп или пар-карточек, 2–4. */
+  groups?: number;
+  oop?: { present: boolean; notes?: string };
+  /** Ценность урока («Адал азамат»); пусто — подбирает ИИ. */
+  value?: string;
+  minutes: 40 | 45;
+  slots: MaterialSlot[];
+}
+
 export interface LessonStage {
   /** Запланированное время, напр. "0–5 мин" */
   time: string;
@@ -29,6 +70,8 @@ export interface LessonStage {
   resources: string;
   /** Интерактивные задания, привязанные к этому этапу */
   tasks?: InteractiveTask[];
+  /** Действия учеников этапа по формам работы, со ссылками на материалы комплекта. */
+  activities?: LessonActivity[];
   /** Teacher-side source metadata when this stage was copied from an owned KSP. */
   copiedFrom?: ReusableBlockProvenance;
   /**
@@ -122,6 +165,8 @@ export interface KspContent {
     end: LessonStage;
   };
   evaluation: LessonEvaluation;
+  /** Комплект урока: ответы учителя перед КСП и места под материалы. */
+  kit?: LessonKit;
 }
 
 /** Пустой КСП (используется как initialValue формы) */

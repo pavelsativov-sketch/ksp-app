@@ -5,6 +5,7 @@ import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { generateGroupWork } from "@/lib/handouts/group-work";
 import { illustrate } from "@/lib/handouts/images";
 import { handoutQuota, quotaErrorResponse } from "@/lib/ai/quota-bridge";
+import { saveToOwnedPlan } from "@/lib/materials/plan-materials";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -19,6 +20,9 @@ const bodySchema = z.object({
   learningObjectives: z.array(z.string().trim().max(500)).max(10).optional(),
   values: z.string().trim().max(1_000).optional(),
   withImages: z.boolean().default(true),
+  /** Урок, к которому сохранить карточки; без него карточки только возвращаются. */
+  planId: z.string().trim().max(64).optional(),
+  stage: z.enum(["beginning", "middle", "end"]).optional(),
 });
 
 /** Карточки групповой или парной работы по теме урока. */
@@ -64,7 +68,15 @@ export async function POST(request: Request) {
       ).catch(() => null);
       if (illustrated) work = { ...work, cards: illustrated.items };
     }
-    return NextResponse.json({ work }, { headers: { "Cache-Control": "no-store" } });
+    const saved = await saveToOwnedPlan({
+      planId: parsed.data.planId,
+      ownerId: auth.user.id,
+      kind: work.mode === "pair" ? "pair_cards" : "group_cards",
+      stage: parsed.data.stage,
+      title: work.mode === "pair" ? "Карточки парной работы" : `Карточки групповой работы (${work.cards.length})`,
+      payload: work,
+    });
+    return NextResponse.json({ work, saved }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const quotaResponse = quotaErrorResponse(error);
     if (quotaResponse) return quotaResponse;

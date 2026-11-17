@@ -7,6 +7,7 @@ import { generateHandout } from "@/lib/handouts/generate";
 import { buildHandoutDocx } from "@/lib/handouts/docx";
 import { resolveWatermark } from "@/lib/billing/watermark";
 import { handoutQuota, quotaErrorResponse } from "@/lib/ai/quota-bridge";
+import { saveToOwnedPlan } from "@/lib/materials/plan-materials";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -34,6 +35,9 @@ const bodySchema = z.object({
   schoolName: z.string().trim().max(200).optional(),
   teacherName: z.string().trim().max(200).optional(),
   customInstructions: z.string().trim().max(2000).optional(),
+  /** Урок, к которому сохранить материал; без него материал только возвращается. */
+  planId: z.string().trim().max(64).optional(),
+  stage: z.enum(["beginning", "middle", "end"]).optional(),
 }).superRefine((value, ctx) => {
   if (value.kind === "worksheet" && value.count > 10) {
     ctx.addIssue({ code: "custom", path: ["count"], message: "В рабочем листе может быть не более 10 заданий: сумма баллов должна равняться 10." });
@@ -92,7 +96,16 @@ export async function POST(request: Request) {
       showHeader: true,
       showFooter: true,
     });
-    return NextResponse.json({ handout, docxBase64: buffer.toString("base64") }, { headers: { "Cache-Control": "no-store" } });
+    const docxBase64 = buffer.toString("base64");
+    const saved = await saveToOwnedPlan({
+      planId: parsed.data.planId,
+      ownerId: auth.user.id,
+      kind: parsed.data.kind,
+      stage: parsed.data.stage,
+      title: handout.title,
+      payload: { handout, docxBase64 },
+    });
+    return NextResponse.json({ handout, docxBase64, saved }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const quotaResponse = quotaErrorResponse(error);
     if (quotaResponse) return quotaResponse;

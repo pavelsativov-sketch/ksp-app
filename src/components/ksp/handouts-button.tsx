@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import type { FlashcardSet, Handout, Worksheet } from "@/lib/handouts/types";
 import { HandoutPreview } from "./handout-preview";
 import { menuSide } from "@/lib/ui/menu-side";
+import { fetchPlanMaterial } from "@/lib/materials/plan-material-client";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import type { Dict } from "@/lib/i18n/dictionaries";
 
@@ -213,6 +214,19 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open ]);
 
+  // Нет копии в браузере (другое устройство, очищенный кеш) — берём сохранённое в уроке.
+  useEffect(() => {
+    if (!open || cached) return;
+    let cancelled = false;
+    void fetchPlanMaterial<{ handout: Handout; docxBase64?: string }>(base.planId, kind).then((saved) => {
+      if (cancelled || !saved?.handout) return;
+      const next: PreviewState = { handout: saved.handout, title: meta.label, fileName: `${meta.label} — ${base.topic}.docx`, docxBase64: saved.docxBase64 };
+      setCached(next);
+      saveCache(cacheKey, next);
+    });
+    return () => { cancelled = true; };
+  }, [open, cached, kind, base.planId, base.topic, meta.label, cacheKey]);
+
   const canCombine = kind === "worksheet" || kind === "flashcards";
 
   async function generate() {
@@ -268,6 +282,7 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
             withImages: meta.withImages ? withImages || undefined : undefined,
             kspContext: base.kspContext,
             customWords: customWords && customWords.length ? customWords : undefined,
+            planId: base.planId,
           }),
         });
         const data = await res.json().catch(() => null);

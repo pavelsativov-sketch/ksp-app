@@ -1,12 +1,13 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Image as ImageIcon, Loader2, Printer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { GroupCard, GroupMode, GroupWork } from "@/lib/handouts/group-work";
 import { downloadSheetImages } from "@/lib/handouts/sheet-export";
 import { menuSide } from "@/lib/ui/menu-side";
+import { fetchPlanMaterial } from "@/lib/materials/plan-material-client";
 import s from "./group-work.module.css";
 
 /** Цвета кружков-номеров заданий, как на образце: оранжевый, зелёный, розовый, синий, фиолетовый. */
@@ -138,6 +139,7 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
   const [error, setError] = useState<string | null>(null);
   const [work, setWork] = useState<GroupWork | null>(null);
   const [saving, setSaving] = useState(false);
+  const [remote, setRemote] = useState<GroupWork | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
 
   async function generate() {
@@ -147,7 +149,7 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
       const res = await fetch("/api/handouts/group", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, subject, grade, language, mode, count, learningObjectives, values: values || undefined }),
+        body: JSON.stringify({ topic, subject, grade, language, mode, count, learningObjectives, values: values || undefined, planId }),
       });
       const data = (await res.json().catch(() => null)) as { work?: GroupWork; error?: string } | null;
       if (!res.ok || !data?.work) throw new Error(data?.error || "Не удалось составить карточки");
@@ -177,7 +179,19 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
     }
   }
 
-  const saved = open ? loadCached(planId) : null;
+  const local = open ? loadCached(planId) : null;
+  const saved = local ?? remote;
+
+  // Нет копии в браузере — карточки, сохранённые в уроке (групповые или парные).
+  useEffect(() => {
+    if (!open || remote || loadCached(planId)) return;
+    let cancelled = false;
+    void (async () => {
+      const found = (await fetchPlanMaterial<GroupWork>(planId, "group_cards")) ?? (await fetchPlanMaterial<GroupWork>(planId, "pair_cards"));
+      if (!cancelled && found?.cards) setRemote(found);
+    })();
+    return () => { cancelled = true; };
+  }, [open, remote, planId]);
 
   return (
     <div className="relative">

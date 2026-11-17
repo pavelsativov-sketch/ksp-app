@@ -64,7 +64,7 @@ export async function getClient(): Promise<MongoClient> {
 
 export const COL = {
   users: "users", subjects: "subjects", objectives: "learning_objectives",
-  plans: "lesson_plans", planLikes: "lesson_plan_likes", textbooks: "textbooks",
+  plans: "lesson_plans", planLikes: "lesson_plan_likes", planMaterials: "lesson_plan_materials", textbooks: "textbooks",
   textbookChunks: "textbook_chunks", quizRooms: "quiz_rooms", quizEvents: "quiz_events",
   rateLimits: "rate_limits", passwordResets: "password_resets", aiEvents: "ai_events",
   billingCodes: "billing_codes", planEvents: "plan_events", planVersions: "lesson_plan_versions",
