@@ -299,6 +299,20 @@
 .dialogTitle { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
 .dialogLead { max-width: 44ch; font-size: 14px; line-height: 1.5; color: var(--muted-foreground); }
 .fieldRow { display: grid; grid-template-columns: 84px minmax(0, 1fr) 124px; gap: 10px; }
+/* Новый урок с вопросами «Что будет на уроке»: шире, вопросы прокручиваются между шапкой и кнопкой. */
+.dialogWide { width: min(700px, calc(100vw - 24px)); }
+.dialogScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100dvh - 270px);
+  margin: 0 -26px;
+  padding: 4px 26px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
 .field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; }
 .field select, .field input {
   height: 46px;
@@ -379,6 +393,10 @@
   .fieldRow { grid-template-columns: 84px minmax(0, 1fr); }
   .fieldRow .field:last-child { grid-column: 1 / -1; }
   .dialogRobot { width: 110px; height: 110px; top: -58px; right: 40px; }
+  .dialogScroll { max-height: calc(100dvh - 300px); }
+  .dialogBody { padding: 22px 20px; }
+  .dialogScroll { margin: 0 -20px; padding: 4px 20px 10px; }
+  .primary { white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   .page *, .page *::before, .page *::after { animation: none !important; transition: none !important; }

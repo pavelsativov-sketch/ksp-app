@@ -1,0 +1,180 @@
+/* Меню «Что будет на уроке»: объёмные плитки-кристаллы, выбор поднимает плитку к учителю. */
+.kit {
+  --spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --out: cubic-bezier(0.16, 1, 0.3, 1);
+  display: grid;
+  gap: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.kitTitle { font-size: 19px; font-weight: 800; letter-spacing: -0.015em; }
+
+.group { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.group legend { margin-bottom: 10px; padding: 0; font-size: 13px; font-weight: 700; color: var(--foreground); }
+
+.tiles3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+
+.tile {
+  --base: #6d3bea; --hi: #a07fff; --side: #4a22b4; --soft: #efe8ff; --softSide: #d6c8ff;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 11px;
+  padding: 16px 10px 13px;
+  text-align: center;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  perspective: 420px;
+  cursor: pointer;
+  transition: border-color 0.25s, background-color 0.25s, box-shadow 0.35s var(--out), transform 0.35s var(--out);
+}
+.tile[data-tone="blue"] { --base: #3463e8; --hi: #7ea3ff; --side: #2145ad; --soft: #e7eeff; --softSide: #c6d6ff; }
+.tile[data-tone="green"] { --base: #12925f; --hi: #4fd29b; --side: #0b6a44; --soft: #e1f6ec; --softSide: #b9e6d1; }
+.tile[data-tone="pink"] { --base: #d23f78; --hi: #ff88b5; --side: #9f2758; --soft: #fde8f1; --softSide: #f4c3d7; }
+.tile[data-tone="peach"] { --base: #e0682a; --hi: #ffab78; --side: #ad4a17; --soft: #fff0e6; --softSide: #f8d2b9; }
+
+.tile:hover:not(:disabled) { border-color: color-mix(in srgb, var(--base) 45%, var(--border)); transform: translateY(-2px); }
+.tile:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.tile[aria-pressed="true"] {
+  border-color: var(--base);
+  background: color-mix(in srgb, var(--soft) 70%, var(--surface));
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--base) 22%, transparent);
+}
+.tile:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/* Кристалл: лицевая грань и три слоя толщины, повёрнутые в перспективе. */
+.gem {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  margin-top: 2px;
+  transform-style: preserve-3d;
+  transform: rotateX(24deg) rotateY(-24deg);
+  transition: transform 0.55s var(--spring);
+}
+.gem::after {
+  content: "";
+  position: absolute;
+  left: 6px; right: 2px; bottom: -9px;
+  height: 10px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--base) 30%, transparent);
+  filter: blur(6px);
+  transform: translateZ(-14px);
+  transition: opacity 0.4s, transform 0.55s var(--spring);
+}
+.gemBack, .gemBack::before, .gemBack::after, .gemFace { position: absolute; inset: 0; border-radius: 13px; }
+.gemBack { transform: translateZ(-4px); transform-style: preserve-3d; background: var(--softSide); transition: background-color 0.3s; }
+.gemBack::before, .gemBack::after { content: ""; background: inherit; }
+.gemBack::before { transform: translateZ(-4px); filter: brightness(0.95); }
+.gemBack::after { transform: translateZ(-8px); filter: brightness(0.88); }
+.gemFace {
+  display: grid;
+  place-items: center;
+  color: var(--base);
+  background: linear-gradient(150deg, #fff 0%, var(--soft) 70%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%), inset 0 -2px 0 color-mix(in srgb, var(--base) 12%, transparent);
+  transition: color 0.3s, background 0.3s;
+}
+.gemFace svg { width: 22px; height: 22px; stroke-width: 2.2; }
+
+.tile:hover:not(:disabled) .gem { transform: rotateX(20deg) rotateY(-30deg) translateZ(6px); }
+.tile[aria-pressed="true"] .gem { transform: rotateX(18deg) rotateY(-20deg) translateZ(10px); animation: lift 0.6s var(--spring); }
+.tile[aria-pressed="true"] .gem::after { transform: translateZ(-24px) scale(1.15); opacity: 0.9; }
+.tile[aria-pressed="true"] .gemBack { background: var(--side); }
+.tile[aria-pressed="true"] .gemFace { color: #fff; background: linear-gradient(150deg, var(--hi) 0%, var(--base) 72%); }
+.tile:disabled .gem { transform: rotateX(40deg) rotateY(-10deg); }
+
+@keyframes lift {
+  0% { transform: rotateX(24deg) rotateY(-24deg) translateZ(0); }
+  55% { transform: rotateX(-6deg) rotateY(14deg) translateZ(16px); }
+  100% { transform: rotateX(18deg) rotateY(-20deg) translateZ(10px); }
+}
+
+.tileText { display: grid; gap: 2px; min-width: 0; }
+.tileText b { font-size: 14px; font-weight: 750; line-height: 1.2; hyphens: auto; }
+.tileText small { font-size: 12px; line-height: 1.3; color: var(--muted-foreground); }
+
+/* Галочка сидит на углу кристалла и поднимается вместе с ним. */
+.check {
+  position: absolute;
+  top: -7px; right: -7px;
+  box-shadow: 0 0 0 2px var(--surface);
+  display: grid;
+  place-items: center;
+  width: 20px; height: 20px;
+  color: #fff;
+  background: var(--base);
+  border-radius: 50%;
+  transform: scale(0);
+  transition: transform 0.4s var(--spring);
+}
+.check svg { width: 13px; height: 13px; stroke-width: 3; }
+.tile[aria-pressed="true"] .check { transform: scale(1); }
+
+/* Переключатели и метки */
+.segmented { display: inline-flex; gap: 3px; width: fit-content; padding: 3px; background: var(--muted); border-radius: 12px; }
+.segmented button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted-foreground);
+  border-radius: 9px;
+  transition: background-color 0.25s, color 0.25s, box-shadow 0.25s;
+}
+.segmented button:hover { color: var(--foreground); }
+.segmented button[aria-checked="true"] { color: var(--ink); background: var(--surface); box-shadow: 0 2px 8px rgb(40 24 110 / 14%); }
+.segmented button:focus-visible, .chip:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+.inline { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--muted-foreground); }
+
+.oop { display: grid; gap: 10px; animation: reveal 0.45s var(--out); }
+@keyframes reveal { from { opacity: 0; transform: translateY(-6px); } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  min-height: 34px;
+  padding: 0 13px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 99px;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+.chip:hover { border-color: var(--border-strong); }
+.chip[aria-pressed="true"] { color: var(--ink); background: var(--primary-soft); border-color: var(--ink); }
+
+.notes, .select { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 13px; font-weight: 700; }
+.notes input, .select select {
+  height: 44px;
+  padding: 0 12px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.notes input::placeholder { color: var(--muted-foreground); }
+.notes input:focus, .select select:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 4px var(--primary-soft); }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+
+:global(.dark) .tile { --soft: color-mix(in srgb, var(--base) 22%, #1b1640); --softSide: color-mix(in srgb, var(--base) 38%, #120e2a); }
+:global(.dark) .gemFace { color: color-mix(in srgb, var(--hi) 80%, #fff); background: linear-gradient(150deg, color-mix(in srgb, var(--base) 34%, #2a2160), var(--soft)); box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%); }
+
+@media (max-width: 600px) {
+  .tile { gap: 9px; padding: 14px 6px 10px; }
+  .tileText b { font-size: 13px; }
+  .tileText small { font-size: 11.5px; }
+  .row { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile, .gem, .gem::after, .check, .oop { transition: none; animation: none; }
+  .tile[aria-pressed="true"] .gem { animation: none; }
+}

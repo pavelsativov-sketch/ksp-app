@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolCtx } from './index';
 import { kspToMarkdown, ktpToMarkdown, planLinks, slugForFile } from '@/lib/agents/deliverables';
+import { applyKitToContent, kitAnswersSchema, toLessonKit } from '@/lib/materials/kit';
 
 type Ctx = Partial<ToolCtx>;
 
@@ -10,6 +11,7 @@ const createKspSchema = z.object({
   topic: z.string().trim().min(1).max(2_000),
   language: z.enum(['ru', 'kz']).default('ru'),
   objectives: z.array(z.string().trim().min(1).max(1_000)).max(30).optional(),
+  kit: kitAnswersSchema.optional(),
 });
 
 const createKtpSchema = z.object({
@@ -44,6 +46,7 @@ export const productTools = {
       topic: args.topic,
       language: args.language ?? 'ru',
       objectives: args.objectives,
+      kit: args.kit,
     });
     if (!parsed.success) {
       return { success: false, error: `Некорректные параметры КСП: ${parsed.error.issues.map((i) => i.message).join(', ')}` };
@@ -67,7 +70,9 @@ export const productTools = {
       // Цели берутся из ГОСО по теме; ИИ получает их как обязательную привязку.
       const { matchObjectives } = await import('@/lib/goso/match');
       const autoObjectives = input.objectives?.length ? [] : matchObjectives({ subject: input.subject, grade: input.grade, topic: input.topic });
+      const kit = input.kit ? toLessonKit(input.kit, input.language) : undefined;
       const { payload } = await generateKspWithModel({
+        kit,
         grade: input.grade,
         subject: input.subject,
         topic: input.topic,
@@ -79,7 +84,9 @@ export const productTools = {
       base.topic = input.topic;
       base.learningObjectives = autoObjectives;
       if (typeof args.teacherName === 'string') base.header.teacherName = args.teacherName;
-      const content = mergeAiIntoKsp(base, payload);
+      const merged = mergeAiIntoKsp(base, payload);
+      // Комплект связывает этапы с материалами: действия со ссылками на места и «Ресурсы».
+      const content = kit ? applyKitToContent(merged, kit) : merged;
       const subject = await getSubjectByName(input.subject).catch(() => null);
       const title = `${input.subject}: ${input.topic}`.slice(0, 200);
 

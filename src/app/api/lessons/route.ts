@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { productTools } from "@/lib/agents/tools/product";
+import { kitAnswersSchema } from "@/lib/materials/kit";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -12,6 +13,8 @@ const bodySchema = z.object({
   subject: z.string().trim().min(1).max(200),
   topic: z.string().trim().min(1).max(2_000),
   language: z.enum(["ru", "kz"]).default("ru"),
+  /** Ответы учителя «Что будет на уроке»; без них КСП строится как раньше. */
+  kit: kitAnswersSchema.optional(),
 });
 
 /** Новый урок в один шаг: класс, предмет, тема. Цели из ГОСО, генератор и квоты те же, что у агента. */

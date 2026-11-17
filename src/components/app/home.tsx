@@ -11,6 +11,8 @@ import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { setActiveAgentTask } from "@/components/agents/agent-dock";
 import { ThreeStage } from "@/components/three/three-stage";
 import { appCopy, type AppCopy } from "./copy";
+import { LessonKitPicker, readLastKit, rememberKit } from "./lesson-kit-picker";
+import type { KitAnswers } from "@/lib/materials/kit";
 import s from "./home.module.css";
 
 export interface HomePlan {
@@ -58,7 +60,7 @@ function readLastLesson(): { grade: number; subject: string } {
   }
 }
 
-function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: () => void; subjects: HomeProps["subjects"]; c: AppCopy }) {
+function LessonDialog({ open, onClose, subjects, c, locale }: { open: boolean; onClose: () => void; subjects: HomeProps["subjects"]; c: AppCopy; locale: "ru" | "kz" }) {
   const router = useRouter();
   const ref = useRef<HTMLDialogElement | null>(null);
   const topicRef = useRef<HTMLInputElement | null>(null);
@@ -66,6 +68,7 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
   const [subject, setSubject] = useState(() => readLastLesson().subject);
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState<"ru" | "kz">("ru");
+  const [kit, setKit] = useState<KitAnswers>(() => readLastKit());
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
@@ -104,11 +107,12 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
     } catch {
       // Память о выборе необязательна.
     }
+    rememberKit(kit);
     try {
       const res = await fetch("/api/lessons", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ grade, subject: chosen, topic, language }),
+        body: JSON.stringify({ grade, subject: chosen, topic, language, kit }),
       });
       const data = (await res.json().catch(() => ({}))) as { planId?: string; error?: string };
       if (!res.ok || !data.planId) throw new Error(data.error ?? c.lessonError);
@@ -120,7 +124,7 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
   }
 
   return (
-    <dialog ref={ref} className={s.dialog} onClose={onClose} aria-labelledby="lesson-title">
+    <dialog ref={ref} className={`${s.dialog} ${s.dialogWide}`} onClose={onClose} aria-labelledby="lesson-title">
       {open && (
         <form onSubmit={submit} className={s.dialogBody}>
           <button type="button" className={s.dialogClose} onClick={onClose} aria-label={c.close}><X aria-hidden="true" /></button>
@@ -138,6 +142,7 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
           ) : (
             <>
               <p className={s.dialogLead}>{c.newLessonLead}</p>
+              <div className={s.dialogScroll}>
               <div className={s.fieldRow}>
                 <label className={s.field}>
                   <span>{c.classLabel}</span>
@@ -163,6 +168,8 @@ function LessonDialog({ open, onClose, subjects, c }: { open: boolean; onClose: 
                 <span>{c.topicLabel}</span>
                 <input ref={topicRef} value={topic} onChange={(e) => { setTopic(e.target.value); setError(""); }} placeholder={c.topicHint} maxLength={300} />
               </label>
+              <LessonKitPicker value={kit} onChange={setKit} locale={locale} lessonLanguage={language} />
+              </div>
               {error && <p role="alert" className={s.error}>{error}</p>}
               <div className={s.dialogActions}>
                 <Link href="/plans/new" className={s.quiet}>{c.manual}</Link>
@@ -403,7 +410,7 @@ export function Home({ startLesson = false, subjects, recent, favorites, bilimCo
 
       <AgentPanel c={c} bilimConnected={bilimConnected} agentOnline={agentOnline} />
 
-      <LessonDialog open={lessonOpen} onClose={() => setLessonOpen(false)} subjects={subjects} c={c} />
+      <LessonDialog open={lessonOpen} onClose={() => setLessonOpen(false)} subjects={subjects} c={c} locale={locale === "ru" ? "ru" : "kz"} />
       <PickDialog open={pickOpen} onClose={() => setPickOpen(false)} onNew={() => { setPickOpen(false); setLessonOpen(true); }} plans={recent} c={c} />
     </div>
   );
