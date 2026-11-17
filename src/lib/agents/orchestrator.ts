@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ObjectId, type Collection } from 'mongodb';
 import { after } from 'next/server';
 import { getDb, COL } from '@/lib/mongo';
@@ -22,7 +23,21 @@ import { MAX_CONTINUATIONS } from './continuation';
  * конкурирующих вызовов (поллер, триггер из GET, finish) только один получит
  * документ и исполнит задачу; остальные получат null и ничего не делают.
  */
-export type QueuedTask = { _id?: ObjectId; prompt?: string; user_id?: ObjectId };
+export type QueuedTask = { _id?: ObjectId; prompt?: string; user_id?: ObjectId; run_id?: string };
+
+/**
+ * Атомарно забрать running-задачу под новый прогон. Условие — тот же пульс,
+ * что прочитал вызывающий: из конкурентов (повторный клик, повтор продолжения)
+ * выигрывает один, а новая метка run_id выключает прежний раннер.
+ */
+async function claimRunningTask(tasks: Collection, task: { _id: ObjectId; heartbeat_at?: unknown }): Promise<string | null> {
+  const runId = randomUUID();
+  const claimed = await tasks.findOneAndUpdate(
+    { _id: task._id, status: 'running', heartbeat_at: task.heartbeat_at ?? null },
+    { $set: { heartbeat_at: new Date(), run_id: runId } },
+  );
+  return claimed ? runId : null;
+}
 
 /**
  * Атомарно захватывает следующую queued-задачу (queued → running).
@@ -50,7 +65,7 @@ export async function claimNextQueuedTask(agentTasks: Collection): Promise<Queue
       // mongodb >= 6 возвращает сам документ (без обёртки { value }).
       const claimed = await agentTasks.findOneAndUpdate(
         { _id: candidate._id, status: 'queued' },
-        { $set: { status: 'running', heartbeat_at: new Date(), updated_at: new Date() } },
+        { $set: { status: 'running', heartbeat_at: new Date(), updated_at: new Date(), run_id: randomUUID() } },
         { returnDocument: 'after', includeResultMetadata: false },
       );
       if (claimed?._id) {
@@ -130,7 +145,7 @@ function tryStartNextFromQueue(): void {
         } catch {
           // лог некритичен
         }
-      });
+      }, task.run_id);
     } catch (e) {
       console.error("[agent] tryStartNextFromQueue execute failed", e instanceof Error ? e.message : String(e));
       await db.collection(COL.agentTasks).updateOne(
@@ -199,6 +214,7 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
   await setControlOwner(userId, 'ai').catch(() => {});
 
   const now = new Date();
+  const runId = randomUUID();
   let taskId: string;
   try {
     const result = await agentTasks.insertOne({
@@ -210,6 +226,7 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
       created_at: now,
       updated_at: now,
       heartbeat_at: now,
+      run_id: runId,
     });
     taskId = result.insertedId.toString();
   } catch (error) {
@@ -243,7 +260,7 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
     } catch {
       // лог некритичен — выполнение не должно падать из-за журнала
     }
-  });
+  }, runId);
 
   // Vercel / Next.js uses after(); in Node dev, run in background.
   try {
@@ -265,12 +282,16 @@ export async function startAgentTask(userId: string, schoolId: string | null, pr
 export async function continueAgentTask(taskId: string): Promise<'started' | 'not_running' | 'limit'> {
   if (!/^[a-f\d]{24}$/i.test(taskId)) return 'not_running';
   const db = await getDb();
-  const task = await db.collection(COL.agentTasks).findOne(
+  const tasks = db.collection(COL.agentTasks);
+  const task = await tasks.findOne(
     { _id: new ObjectId(taskId), status: 'running' },
-    { projection: { prompt: 1, user_id: 1, continuations: 1 } },
+    { projection: { prompt: 1, user_id: 1, continuations: 1, heartbeat_at: 1 } },
   );
   if (!task || typeof task.prompt !== 'string' || !task.user_id) return 'not_running';
   if (Number(task.continuations ?? 0) > MAX_CONTINUATIONS) return 'limit';
+  // Повтор того же продолжения (или параллельное оживление) уже забрал задачу.
+  const runId = await claimRunningTask(tasks, task);
+  if (!runId) return 'not_running';
 
   const userId = String(task.user_id);
   const prompt = task.prompt;
@@ -287,7 +308,7 @@ export async function continueAgentTask(taskId: string): Promise<'started' | 'no
       // журнал не критичен
     }
   };
-  const execute = () => runAgentTask(taskId, prompt, userId, log);
+  const execute = () => runAgentTask(taskId, prompt, userId, log, runId);
   try {
     after(execute);
   } catch {
@@ -358,9 +379,10 @@ export async function resurrectStalePausedTask(userId: string): Promise<{ task: 
 
   const taskId = active._id.toString();
   const prompt = String(active.prompt ?? '').trim();
-  // Сразу фиксируем пульс: пока новый раннер поднимается, повторные клики
-  // по «Передать управление ИИ» не порождают второй подъём.
-  await tasks.updateOne({ _id: active._id }, { $set: { heartbeat_at: new Date() } });
+  // Атомарный захват: повторные клики «Передать управление ИИ» и параллельное
+  // продолжение не поднимают второй раннер.
+  const runId = await claimRunningTask(tasks, active);
+  if (!runId) return { task: taskId, action: 'alive' };
 
   const log = async (event: { type: string; message: string; data?: Record<string, unknown> }) => {
     try {
@@ -380,7 +402,7 @@ export async function resurrectStalePausedTask(userId: string): Promise<{ task: 
     message: 'Вас не было дольше, чем живёт сессия агента — задача перезапущена и продолжает работу.',
   });
 
-  const execute = () => runAgentTask(taskId, prompt, userId, log);
+  const execute = () => runAgentTask(taskId, prompt, userId, log, runId);
   try {
     after(execute);
   } catch {

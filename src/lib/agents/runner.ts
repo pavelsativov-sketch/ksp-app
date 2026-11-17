@@ -88,9 +88,15 @@ export async function runAgentTask(
   prompt: string,
   userId: string,
   log: (event: ExecutionEvent) => Promise<void>,
+  /** Метка прогона (run_id), выданная при захвате задачи в orchestrator. */
+  runId?: string,
 ): Promise<void> {
   const db = await getDb();
   const agentTasks = db.collection(COL.agentTasks);
+  // Пишем только поверх своего running-прогона: опоздавший раннер-зомби не
+  // превращает чужой failed/stopped в completed и не мешает новому прогону.
+  const ownRun = () => ({ _id: new ObjectId(taskId), status: 'running', ...(runId ? { run_id: runId } : {}) });
+  const superseded = (doc: { run_id?: unknown } | null | undefined) => !!runId && !!doc?.run_id && doc.run_id !== runId;
 
   // runAgentTask вызывается не только через startAgentTask: из очереди и при
   // оживлении зависшей задачи он стартует напрямую. В этих путях в Mongo мог
@@ -102,10 +108,12 @@ export async function runAgentTask(
   const finish = async (status: 'completed' | 'failed' | 'stopped', patch: Record<string, unknown> = {}) => {
     // Сессия браузера сохраняется в фоне: дожидаемся записи, пока функция ещё жива.
     await flushBrowserPersist(userId).catch(() => undefined);
-    await agentTasks.updateOne(
-      { _id: new ObjectId(taskId) },
+    const res = await agentTasks.updateOne(
+      ownRun(),
       { $set: { status, updated_at: new Date(), ...patch }, $unset: { heartbeat_at: 1, checkpoint: 1 } },
     );
+    // Задачу закрыл не учитель «Стопом», а кто-то другой — управление уже не наше.
+    if (res.matchedCount === 0 && status !== 'stopped') return;
     // Задача окончена — общая рабочая область возвращается учителю. Иначе
     // панель навсегда оставляла «AI РАБОТАЕТ» и кнопку «Забрать управление
     // себе», хотя управлять было уже некому.
@@ -126,10 +134,7 @@ export async function runAgentTask(
   // AGENT_TASK_ALREADY_RUNNING, и агент становился недоступен для учителя.
   const beat = async () => {
     try {
-      await agentTasks.updateOne(
-        { _id: new ObjectId(taskId), status: 'running' },
-        { $set: { heartbeat_at: new Date() } },
-      );
+      await agentTasks.updateOne(ownRun(), { $set: { heartbeat_at: new Date() } });
     } catch {
       // сбой записи не должен валить выполнение задачи
     }
@@ -141,8 +146,8 @@ export async function runAgentTask(
   const abortController = new AbortController();
   const watchdog = setInterval(async () => {
     try {
-      const t = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
-      if (t && t.status !== 'running') abortController.abort();
+      const t = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1, run_id: 1 } });
+      if (t && (t.status !== 'running' || superseded(t))) abortController.abort();
     } catch {
       // кратковременный сбой БД — пропускаем тик
     }
@@ -209,10 +214,7 @@ export async function runAgentTask(
     const saveCheckpoint = async (completedSteps = stepsUsed) => {
       if (!transcript) return;
       try {
-        await agentTasks.updateOne(
-          { _id: new ObjectId(taskId) },
-          { $set: { checkpoint: buildCheckpoint(completedSteps, transcript) } },
-        );
+        await agentTasks.updateOne(ownRun(), { $set: { checkpoint: buildCheckpoint(completedSteps, transcript) } });
       } catch {
         // точка — страховка; сбой записи не должен валить задачу
       }
@@ -286,7 +288,9 @@ export async function runAgentTask(
 
         // Пользователь мог нажать «Остановить» — статус в БД меняется на stopped.
         await beat(); // каждый виток цикла рапортует, что раннер жив
-        const current = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
+        const current = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1, run_id: 1 } });
+        // Задачу перехватил новый прогон — молча уступаем, ничего не пишем.
+        if (superseded(current)) return 'Прогон заменён';
         if (current && current.status !== 'running') {
           await log({ type: 'END', message: 'Остановлено пользователем' });
           await finish('stopped', { result: 'Остановлено пользователем' });
@@ -580,8 +584,8 @@ ${bilimClassInstructions(prompt)}` });
     // AbortError — пользователь остановил задачу (watchdog) или сервер оборвал
     // соединение: это не сбой, завершаем аккуратно статусом stopped.
     if (abortController.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-      const afterStop = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });
-      if (afterStop?.status !== 'stopped') {
+      const afterStop = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1, run_id: 1 } });
+      if (afterStop?.status !== 'stopped' && !superseded(afterStop)) {
         await finish('stopped', { result: 'Остановлено пользователем' });
       }
       return;

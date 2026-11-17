@@ -19,12 +19,15 @@ export async function POST(_req: Request, props: { params: Promise<{ id: string 
   if (!task || !owner || owner.toString() !== auth.user.id) {
     return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
   }
-  if (task.status !== "running") {
-    return NextResponse.json({ ok: true, status: task.status });
-  }
-  await db.collection(COL.agentTasks).updateOne(
-    { _id: new ObjectId(id), status: "running" },
+  // queued тоже останавливаем: иначе диспетчер очереди позже запускал
+  // задачу, которую учитель уже отменил. Условие по статусу делает смену атомарной.
+  const stopped = await db.collection(COL.agentTasks).updateOne(
+    { _id: new ObjectId(id), status: { $in: ["running", "queued"] } },
     { $set: { status: "stopped", result: "Остановлено пользователем", updated_at: new Date() } },
   );
+  if (stopped.matchedCount === 0) {
+    const current = await db.collection(COL.agentTasks).findOne({ _id: new ObjectId(id) }, { projection: { status: 1 } });
+    return NextResponse.json({ ok: true, status: current?.status ?? task.status });
+  }
   return NextResponse.json({ ok: true, status: "stopped" });
 }
