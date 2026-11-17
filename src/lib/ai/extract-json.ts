@@ -27,15 +27,18 @@ export function extractJson<T = unknown>(raw: string): T {
   if (start > 0) candidates.push(trimmed.slice(start));
 
   for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate) as T;
-    } catch {
-      const repaired = closeTruncatedJson(candidate);
-      if (repaired) {
+    // Сначала как есть, затем с починкой частых дефектов модели, затем ещё и с закрытием обрыва.
+    const fixed = fixCommonDefects(candidate);
+    for (const attempt of [candidate, fixed]) {
+      try {
+        return JSON.parse(attempt) as T;
+      } catch {
+        const repaired = closeTruncatedJson(attempt);
+        if (!repaired) continue;
         try {
           return JSON.parse(repaired) as T;
         } catch {
-          /* пробуем следующий кандидат */
+          /* пробуем следующий вариант */
         }
       }
     }
@@ -46,6 +49,38 @@ export function extractJson<T = unknown>(raw: string): T {
       .slice(0, 160)
       .replace(/\s+/g, " ")}`,
   );
+}
+
+/**
+ * Частые дефекты длинного JSON от моделей (так Mercury сорвал рабочий лист в проде):
+ * сырой перевод строки или табуляция внутри строки и висячая запятая перед `}`/`]`.
+ * Правится только вне строк: запятые внутри текста заданий не трогаются.
+ */
+export function fixCommonDefects(input: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i]!;
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      } else if (char === "\n" || char === "\r" || char === "\t") {
+        out += char === "\t" ? "\\t" : char === "\n" ? "\\n" : "";
+        continue;
+      }
+      out += char;
+      continue;
+    }
+    if (char === '"') inString = true;
+    if (char === "," && /^\s*[}\]]/.test(input.slice(i + 1))) continue;
+    out += char;
+  }
+  return out;
 }
 
 /**

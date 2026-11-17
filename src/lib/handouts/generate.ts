@@ -235,7 +235,7 @@ ${structure}
   // считается ошибкой попытки и переключает провайдера на следующего.
   let parsed: Omit<Worksheet, "kind">;
   try {
-    parsed = await chatJson("tasks", "worksheet", schema, user, 0.6, (content) =>
+    parsed = await chatJson("generation", "worksheet", schema, user, 0.6, (content) =>
       validateWorksheet(input, content),
     );
   } catch (err) {
@@ -400,7 +400,7 @@ export async function regenerateWorksheetTask(input: RegenTaskInput): Promise<Wo
   const user = `${input.language === "kz" ? "Барлық адам оқитын мәтінді қазақша жаз. Орысша тақырып берілсе, оны аудар." : ""}\nСоставь РОВНО ОДНО задание (tasks: массив из 1 элемента) типа "${input.type}" на ${lang} по теме «${input.topic}» для ${input.grade} класса (${input.subject}), этап урока "${input.stage}".
 Правила качества: только конкретные факты темы (термины, числа, примеры) — без заглушек вида «Понятие 1», «Описание А». Обязательно: prompt, criterion (проверяемое действие), descriptor (наблюдаемый результат), все ключи типа (expectedAnswer / correctIndex / correctChoice / correctFlags / options+pairs / wordBank / groups+items / situation — что применимо), imagePromptEn — null. Для "interactive": link — null. Для "reflection": reflectionOptions — ровно 3.${avoid.length ? `\nНе повторяй эти соседние задания:\n${avoid.map((p) => `• ${p.slice(0, 200)}`).join("\n")}` : ""}
 title/intro/metaLine — короткие нейтральные строки (не используются).`;
-  const parsed = await chatJson("tasks", "worksheet_single", worksheetSchema(), user, 0.7, (content) =>
+  const parsed = await chatJson("generation", "worksheet_single", worksheetSchema(), user, 0.7, (content) =>
     validateWorksheet(
       { kind: "worksheet", topic: input.topic, subject: input.subject, grade: input.grade, language: input.language, count: 1, kspContext: input.kspContext },
       content,
@@ -422,7 +422,7 @@ async function aiFlashcards(input: HandoutInput): Promise<FlashcardSet> {
 - example: один конкретный пример или образец решения;
 - checkQuestion: короткий вопрос для самопроверки.
 Карточки должны отличаться по роли: определение, пример, сравнение, правило, применение, частая ошибка, мини-задача. Не повторяй одну мысль разными словами. Не пиши «Понятие 1», «важный термин», «пример из жизни» без конкретики. Текст должен быть коротким, живым и понятным ученику ${input.grade} класса.${objectives.length ? `\nОпирайся на цели урока:\n${objectives.map((o) => `• ${o}`).join("\n")}` : ""}`;
-  const parsed = await chatJson("tasks", "flashcards", flashcardsSchema(), user, 0.5, (content) => validateFlashcards(content, input.language));
+  const parsed = await chatJson("generation", "flashcards", flashcardsSchema(), user, 0.5, (content) => validateFlashcards(content, input.language));
   return { kind: "flashcards", language: input.language, ...parsed };
 }
 
@@ -464,7 +464,7 @@ async function aiCrossword(input: HandoutInput): Promise<Crossword> {
   const user = `${input.language === "kz" ? "Кроссвордтың сөздері мен барлық анықтамаларын қазақша жаз. Қазақ әліпбиіндегі Ә, Ғ, Қ, Ң, Ө, Ұ, Ү, Һ, І әріптерін дұрыс сақта." : ""}\nПодбери ${input.count} ключевых слов по теме «${input.topic}» (${input.subject}, ${input.grade} класс) для кроссворда.
 Слова — ОДНО существительное в именительном падеже, длина 3–12 букв, БЕЗ пробелов и дефисов, не склеивай два слова. Желательно с общими буквами для пересечений.
 Для каждого — короткое определение-подсказка (clue) на ${input.language === "kz" ? "казахском" : "русском"}. В подсказке нет самого слова и однокоренных слов.${objectives.length ? `\nСлова должны отражать цели урока:\n${objectives.map((o) => `• ${o}`).join("\n")}` : ""}`;
-  const parsed = await chatJson("tasks", "crossword_words", crosswordSchema(), user, 0.5, (content) => validateCrossword(content, input.language));
+  const parsed = await chatJson("generation", "crossword_words", crosswordSchema(), user, 0.5, (content) => validateCrossword(content, input.language));
   // Подсказка «Приведение дробей» к слову ПРИВЕДЕНИЕ ничего не загадывает.
   const fair = parsed.words.filter((word) => !clueRevealsWord(word));
   return { ...layoutCrossword(fair.length >= 3 ? fair : parsed.words, parsed.title, parsed.intro), language: input.language };
@@ -834,9 +834,15 @@ function assertKazakhContent(value: unknown, language: "ru" | "kz", item: string
 
 /** Лист на шесть заданий модель пишет десятки секунд: общий таймаут задач в 12 с его обрывал. */
 const HANDOUT_TIMEOUT_MS = 45_000;
+/**
+ * Все попытки вместе укладываются в лимит функции (120 с): в проде Mercury вернул
+ * битый JSON, два MXR ушли в таймаут, и функцию убили без ответа учителю.
+ */
+const HANDOUT_BUDGET_MS = 95_000;
 
 async function chatJson<T>(
-  task: "tasks",
+  // Цепочка КСП: после Mercury быстрый Groq, а не медленный MXR цепочки агента.
+  task: "generation",
   name: string,
   schema: Record<string, unknown>,
   user: string,
@@ -857,7 +863,7 @@ async function chatJson<T>(
       // Валидация здесь → ошибка структуры срывает попытку этого провайдера
       // и запускает следующий, а не доходит до рендера как «успех».
       return validate(response.choices[0]?.message.content ?? "");
-    }, { timeoutMs: HANDOUT_TIMEOUT_MS });
+    }, { timeoutMs: HANDOUT_TIMEOUT_MS, budgetMs: HANDOUT_BUDGET_MS });
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
