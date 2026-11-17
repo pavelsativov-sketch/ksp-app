@@ -187,8 +187,6 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
   const aiUndoRef = useRef<KspContent | null>(null);
   const [aiApplied, setAiApplied] = useState(false);
   const [aiFilledCount, setAiFilledCount] = useState(0);
-  const [refundState, setRefundState] = useState<"idle" | "pending" | "done" | "error">("idle");
-  const [refundMessage, setRefundMessage] = useState("");
   // AI-результат, ожидающий подтверждения: показываем дифф до применения.
   const [pendingAi, setPendingAi] = useState<{ merged: KspContent; diff: ContentDiff } | null>(null);
   const {
@@ -575,28 +573,6 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
     setAiFilledCount(pendingAi.diff.length);
     setAiApplied(true);
     setPendingAi(null);
-    setRefundState("idle");
-    setRefundMessage("");
-  }
-
-  /** Возврат попытки: результат не подошёл — слот квоты возвращается. */
-  async function refundGeneration() {
-    setRefundState("pending");
-    setRefundMessage("");
-    try {
-      const res = await fetch("/api/ai/refund", { method: "POST" });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.ok) throw new Error(data?.error || pe.errors.refundFailed);
-      setRefundState("done");
-      setRefundMessage(
-        typeof data.remaining === "number"
-          ? fill(pe.errors.refundDoneCount, { n: data.remaining })
-          : pe.errors.refundDone,
-      );
-    } catch (e) {
-      setRefundState("error");
-      setRefundMessage(e instanceof Error ? e.message : pe.errors.refundFailed);
-    }
   }
 
   function undoAiGenerate() {
@@ -1009,21 +985,6 @@ export function PlanForm({ initialPlan, subjects, classes = [], exampleKey, init
             {aiApplied && !aiLoading && aiFilledCount > 0 && (
               <div className="text-xs text-emerald-700">
                 {fill(pe.goals.aiFilled, { n: aiFilledCount })}
-              </div>
-            )}
-            {aiApplied && !aiLoading && refundState !== "done" && (
-              <button
-                type="button"
-                onClick={() => void refundGeneration()}
-                disabled={refundState === "pending"}
-                className="text-xs text-muted-foreground underline hover:text-foreground disabled:opacity-50"
-              >
-                {refundState === "pending" ? pe.goals.refunding : pe.goals.refundPrompt}
-              </button>
-            )}
-            {refundMessage && (
-              <div className={`text-xs ${refundState === "error" ? "text-red-600" : "text-emerald-700"}`} role="status">
-                {refundMessage}
               </div>
             )}
             {aiLoading && (

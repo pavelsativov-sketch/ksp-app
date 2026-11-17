@@ -7,6 +7,7 @@ vi.mock("@/lib/api-auth", () => ({ requireApiAuth: mock.auth }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: mock.rate }));
 
 import { POST } from "@/app/api/ai/refund/route";
+import { aiEventsCollection } from "../helpers/ai-events-mock";
 
 const userId = "b".repeat(24);
 let events: Array<Record<string, unknown>>;
@@ -21,81 +22,39 @@ beforeEach(() => {
       if (name === "users") return {
         findOne: async () => ({ _id: new ObjectId(userId), email: "t@example.invalid" }),
       };
-      if (name === "ai_events") return {
-        countDocuments: async (filter: Record<string, unknown>) =>
-          events.filter((e) => Object.entries(filter).every(([k, v]) => {
-            if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
-            return e[k] === v;
-          })).length,
-        findOne: async (filter: Record<string, unknown>) =>
-          events.find((e) => Object.entries(filter).every(([k, v]) => {
-            if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
-            return e[k] === v;
-          })) ?? null,
-        findOneAndUpdate: async (filter: Record<string, unknown>, update: { $set: Record<string, unknown>; $unset?: Record<string, unknown> }) => {
-          const doc = events.find((e) => Object.entries(filter).every(([k, v]) => {
-            if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
-            return e[k] === v;
-          }));
-          if (!doc) return null;
-          const before = { ...doc };
-          Object.assign(doc, update.$set);
-          for (const k of Object.keys(update.$unset ?? {})) delete doc[k];
-          return before;
-        },
-        updateOne: async (filter: { _id: ObjectId }, update: { $set: Record<string, unknown> }) => {
-          const doc = events.find((e) => String(e._id) === String(filter._id));
-          if (doc) Object.assign(doc, update.$set);
-          return { modifiedCount: doc ? 1 : 0 };
-        },
-        deleteOne: async (filter: { _id: ObjectId }) => {
-          const i = events.findIndex((e) => String(e._id) === String(filter._id));
-          if (i >= 0) events.splice(i, 1);
-          return { deletedCount: i >= 0 ? 1 : 0 };
-        },
-        insertOne: async (doc: Record<string, unknown>) => {
-          events.push({ ...doc, _id: new ObjectId() });
-          return { insertedId: new ObjectId() };
-        },
-        aggregate: (pipeline: Array<Record<string, unknown>>) => ({
-          toArray: async () => {
-            let rows: Array<Record<string, unknown>> = [...events];
-            for (const stage of pipeline) {
-              const match = stage.$match as Record<string, unknown> | undefined;
-              if (match) {
-                rows = rows.filter((e) => {
-                  if (match.user_id && e.user_id !== match.user_id) return false;
-                  if (match.task && e.task !== match.task) return false;
-                  if (match.kind && e.kind !== match.kind) return false;
-                  const createdAt = match.createdAt as { $gte?: Date; $lt?: Date } | undefined;
-                  if (createdAt?.$gte && (e.createdAt as Date) < createdAt.$gte) return false;
-                  if (createdAt?.$lt && (e.createdAt as Date) >= createdAt.$lt) return false;
-                  return true;
-                });
-              }
-              const group = stage.$group as { _id: string } | undefined;
-              if (group) {
-                const keyPath = String(group._id).replace(/^\$/, "");
-                const byKey = new Map<string, number>();
-                for (const e of rows) {
-                  const key = String((e as Record<string, unknown>)[keyPath]);
-                  byKey.set(key, (byKey.get(key) ?? 0) + 1);
-                }
-                rows = Array.from(byKey, ([_id, count]) => ({ _id, count }));
-              }
-            }
-            return rows;
-          },
-        }),
-      };
+      if (name === "ai_events") return aiEventsCollection(() => events);
       throw new Error(`Unexpected ${name}`);
     },
   });
 });
 
+/** Слот генерации, которую платформа убила до finalize: pending и старше maxDuration. */
+function abandonedSlot(extra: Record<string, unknown> = {}) {
+  return { _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", ok: true, pending: true,
+    createdAt: new Date(Date.now() - 6 * 60_000), ...extra };
+}
+
 describe("POST /api/ai/refund", () => {
-  it("refunds a fresh generation and returns remaining", async () => {
-    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", month: "2026-11", seq: 1, createdAt: new Date() });
+  it("успешную генерацию (слот подтверждён) вернуть нельзя", async () => {
+    const { pending: _pending, ...finished } = abandonedSlot();
+    events.push(finished);
+    expect((await POST()).status).toBe(404);
+    expect(events.filter((e) => e.task === "generation_refund")).toHaveLength(0);
+  });
+
+  it("идущую генерацию (pending моложе maxDuration) вернуть нельзя", async () => {
+    events.push(abandonedSlot({ createdAt: new Date(Date.now() - 60_000) }));
+    expect((await POST()).status).toBe(404);
+  });
+
+  it("повторный возврат той же генерации — 404", async () => {
+    events.push(abandonedSlot());
+    expect((await POST()).status).toBe(200);
+    expect((await POST()).status).toBe(404);
+  });
+
+  it("refunds a generation whose slot was never finalized and returns remaining", async () => {
+    events.push(abandonedSlot({ month: "2026-11", seq: 1 }));
     const res = await POST();
     expect(res.status).toBe(200);
     // Без seq маркер возврата не конфликтует с уникальным индексом слотов.
@@ -116,13 +75,13 @@ describe("POST /api/ai/refund", () => {
     for (let i = 0; i < 3; i++) {
       events.push({ _id: new ObjectId(), user_id: userId, task: "generation_refund", kind: "refund", createdAt: new Date() });
     }
-    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
+    events.push(abandonedSlot());
     const res = await POST();
     expect(res.status).toBe(429);
   });
 
   it("один и тот же слот нельзя вернуть дважды параллельными запросами", async () => {
-    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
+    events.push(abandonedSlot());
     const statuses = (await Promise.all([POST(), POST()])).map((r) => r.status).sort();
     expect(statuses).toEqual([200, 404]);
     expect(events.filter((e) => e.task === "generation_refund")).toHaveLength(1);
@@ -133,7 +92,7 @@ describe("POST /api/ai/refund", () => {
       events.push({ _id: new ObjectId(), user_id: userId, task: "generation_refund", kind: "refund", createdAt: new Date() });
     }
     for (let i = 0; i < 2; i++) {
-      events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
+      events.push(abandonedSlot());
     }
     await Promise.all([POST(), POST()]);
     expect(events.filter((e) => e.task === "generation_refund").length).toBeLessThanOrEqual(3);

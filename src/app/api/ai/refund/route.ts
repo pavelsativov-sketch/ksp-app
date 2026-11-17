@@ -2,18 +2,21 @@ import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { COL, getDb } from "@/lib/mongo";
-import { getPlanForUser, utcMonthWindow } from "@/lib/billing/quota";
+import { getPlanForUser, STALE_PENDING_MS, utcMonthWindow } from "@/lib/billing/quota";
 
 export const runtime = "nodejs";
 
-const REFUND_WINDOW_MS = 10 * 60_000;
+/** Дольше maxDuration роутов генерации (300 с): после этого незавершённый слот точно брошен. */
+const REFUND_MIN_AGE_MS = 5 * 60_000;
 const REFUNDS_PER_MONTH = 3;
 
 /**
- * Возврат попытки генерации КСП: удаляет последнюю запись генерации
- * (не старше 10 минут) и возвращает слот квоты. Не более 3 возвратов в месяц.
- * Проверка «пользовался ли результатом» невозможна — лимит возвратов
- * сдерживает злоупотребления.
+ * Возврат попытки генерации КСП, которая не дала результата: слот остался
+ * pending (функцию убили до finalize). Успешные генерации снимают pending,
+ * неудачные удаляют слот сами — их вернуть нельзя и не нужно.
+ * Один слот (= одна генерация, его _id) возвращается один раз: слот атомарно
+ * превращается в маркер возврата. Не более 3 возвратов в месяц.
+ * «Результат не подошёл» — это отзыв, а не возврат квоты.
  */
 export async function POST() {
   const auth = await requireApiAuth();
@@ -49,15 +52,17 @@ export async function POST() {
         user_id: auth.user.id,
         task: "generation",
         kind: "slot",
-        createdAt: { $gte: new Date(now.getTime() - REFUND_WINDOW_MS) },
+        pending: true,
+        // Старше STALE_PENDING_MS слот уже не считается в квоте — возвращать нечего.
+        createdAt: { $lt: new Date(now.getTime() - REFUND_MIN_AGE_MS), $gte: new Date(now.getTime() - STALE_PENDING_MS) },
       },
       // month/seq снимаем: иначе второй возврат того же номера слота упрётся в уникальный индекс ai_events_quota_slot_unique.
-      { $set: { task: "generation_refund", kind: "refund", ok: true, createdAt: now }, $unset: { month: "", seq: "" } },
+      { $set: { task: "generation_refund", kind: "refund", ok: false, createdAt: now }, $unset: { month: "", seq: "", pending: "" } },
       { sort: { createdAt: -1 } },
     );
     if (!latest) {
       return NextResponse.json(
-        { error: "Нет свежей генерации для возврата (окно — 10 минут после создания)." },
+        { error: "Нет незавершённой генерации для возврата: успешные не возвращаются, неудачные возвращаются автоматически." },
         { status: 404 },
       );
     }
@@ -70,7 +75,7 @@ export async function POST() {
       // Слот возвращаем без seq: номер мог уже занять новый резерв, а учёт квоты идёт по kind: "slot".
       await events.updateOne(
         { _id: latest._id },
-        { $set: { task: "generation", kind: "slot", ok: latest.ok, createdAt: latest.createdAt } },
+        { $set: { task: "generation", kind: "slot", ok: latest.ok, pending: true, createdAt: latest.createdAt } },
       );
       return NextResponse.json(
         { error: "Лимит возвратов на месяц исчерпан (3). Напишите нам — разберёмся вручную." },
