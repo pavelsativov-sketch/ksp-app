@@ -89,30 +89,7 @@ export default async function PlanViewPage({
   }
   if (!plan) notFound();
 
-  // Resolve subject name for handouts (need plain text for AI prompt).
-  let subjectName = "—";
-  if (plan.subject_id) {
-    const subj = await getSubjectById(plan.subject_id);
-    if (subj?.name_ru) subjectName = subj.name_ru;
-  }
-
   const isOwner = user?.id === plan.owner_id;
-  const [approvalSchool, dict] = await Promise.all([
-    isOwner && user ? getActiveSchool(user.id) : Promise.resolve(null),
-    getDict(),
-  ]);
-  const approvalLocale = dict.locale;
-  const approvalCopy = schoolApprovalCopy[approvalLocale];
-  let approvalClassNames: string[] = [];
-  if (approvalSchool?._id && user && isOwner) {
-    const schoolId = approvalSchool._id.toString();
-    const member = await requireSchoolAccess(user.id, schoolId);
-    if (hasSchoolPermission(member.role, member.granted_permissions, "school:students:read_all")) {
-      approvalClassNames = await getSchoolClasses(schoolId);
-    } else if (hasSchoolPermission(member.role, member.granted_permissions, "school:students:read_assigned")) {
-      approvalClassNames = await getAssignedSchoolClassNames(schoolId, user.id);
-    }
-  }
 
   // Контекст урока для всех раздаточных (лист, памятки, кроссворд).
   const handoutKspContext = plan.content ? {
@@ -124,24 +101,6 @@ export default async function PlanViewPage({
       { stage: "end", activities: plan.content.stages?.end?.studentActions || "" },
     ],
   } : undefined;
-
-  // Лайки: счётчик + лайкнул ли текущий пользователь.
-  let likes = 0;
-  let liked = false;
-  try {
-    if (isMongoConfigured()) {
-      const db = await getDb();
-      const likesCollection = db.collection<PlanLikeDoc>(COL.planLikes);
-      likes = await likesCollection.countDocuments({ plan_id: plan.id });
-      if (user && !isOwner) {
-        liked = Boolean(
-          await likesCollection.findOne({ _id: `${user.id}:${plan.id}` }),
-        );
-      }
-    }
-  } catch {
-    // Счётчик лайков некритичен.
-  }
 
   // Комментарии и отзывы.
   interface CommentWithAuthor {
@@ -163,57 +122,107 @@ export default async function PlanViewPage({
     created_at: string;
     reviewer: { name: string; email: string };
   }
-  let comments: CommentWithAuthor[] = [];
-  let reviews: ReviewWithReviewer[] = [];
-  let reviewAverage = 0;
-  let reviewCount = 0;
-  try {
-    if (isMongoConfigured() && user) {
-      const rawComments = await getComments(plan.id);
-      const userIds = rawComments.map((c) => c.user_id);
-      const names = await getUserNames(userIds);
-      comments = rawComments.map((c) => ({
-        ...c,
-        author: names.get(c.user_id)
-          ? { name: names.get(c.user_id)!.fullName || names.get(c.user_id)!.email, email: names.get(c.user_id)!.email }
-          : { name: "Пользователь", email: "" },
-      }));
+  const named = (names: Awaited<ReturnType<typeof getUserNames>>, id: string) => {
+    const found = names.get(id);
+    return found ? { name: found.fullName || found.email, email: found.email } : { name: "Пользователь", email: "" };
+  };
 
-      const rawReviews = await getReviews(plan.id);
-      const reviewerIds = rawReviews.map((r) => r.reviewer_id);
-      const reviewerNames = await getUserNames(reviewerIds);
-      reviews = rawReviews.map((r) => ({
-        ...r,
-        reviewer: reviewerNames.get(r.reviewer_id)
-          ? { name: reviewerNames.get(r.reviewer_id)!.fullName || reviewerNames.get(r.reviewer_id)!.email, email: reviewerNames.get(r.reviewer_id)!.email }
-          : { name: "Пользователь", email: "" },
-      }));
-      reviewCount = reviews.length;
-      reviewAverage = reviewCount > 0
-        ? Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount) * 10) / 10
-        : 0;
+  // Всё ниже от плана зависит, а друг от друга нет. Раньше около 12 запросов к базе шли
+  // по очереди, и сервер отвечал за 3,7 с; теперь они идут одновременно.
+  const loadSubjectName = async () => {
+    if (!plan.subject_id) return "—";
+    const subj = await getSubjectById(plan.subject_id);
+    return subj?.name_ru || "—";
+  };
+  const loadApproval = async () => {
+    const [approvalSchool, dict] = await Promise.all([
+      isOwner && user ? getActiveSchool(user.id) : Promise.resolve(null),
+      getDict(),
+    ]);
+    let classNames: string[] = [];
+    if (approvalSchool?._id && user && isOwner) {
+      const schoolId = approvalSchool._id.toString();
+      const member = await requireSchoolAccess(user.id, schoolId);
+      if (hasSchoolPermission(member.role, member.granted_permissions, "school:students:read_all")) {
+        classNames = await getSchoolClasses(schoolId);
+      } else if (hasSchoolPermission(member.role, member.granted_permissions, "school:students:read_assigned")) {
+        classNames = await getAssignedSchoolClassNames(schoolId, user.id);
+      }
     }
-  } catch {
-    // Комментарии и отзывы некритичны.
-  }
+    return { approvalSchool, dict, classNames };
+  };
+  // Лайки: счётчик + лайкнул ли текущий пользователь. Некритичны: при сбое — нули.
+  const loadLikes = async () => {
+    try {
+      if (!isMongoConfigured()) return { likes: 0, liked: false };
+      const db = await getDb();
+      const likesCollection = db.collection<PlanLikeDoc>(COL.planLikes);
+      const [count, own] = await Promise.all([
+        likesCollection.countDocuments({ plan_id: plan.id }),
+        user && !isOwner ? likesCollection.findOne({ _id: `${user.id}:${plan.id}` }) : Promise.resolve(null),
+      ]);
+      return { likes: count, liked: Boolean(own) };
+    } catch {
+      return { likes: 0, liked: false };
+    }
+  };
+  // Комментарии и отзывы некритичны: при сбое показываем пустые списки.
+  const loadComments = async (): Promise<CommentWithAuthor[]> => {
+    try {
+      if (!isMongoConfigured() || !user) return [];
+      const rawComments = await getComments(plan.id);
+      const names = await getUserNames(rawComments.map((c) => c.user_id));
+      return rawComments.map((c) => ({ ...c, author: named(names, c.user_id) }));
+    } catch {
+      return [];
+    }
+  };
+  const loadReviews = async (): Promise<ReviewWithReviewer[]> => {
+    try {
+      if (!isMongoConfigured() || !user) return [];
+      const rawReviews = await getReviews(plan.id);
+      const names = await getUserNames(rawReviews.map((r) => r.reviewer_id));
+      return rawReviews.map((r) => ({ ...r, reviewer: named(names, r.reviewer_id) }));
+    } catch {
+      return [];
+    }
+  };
+  // КТП — фича Pro: флаг для билдера (сам роут тоже проверяет тариф).
+  const loadCanUseKtp = async () => {
+    if (!user) return true;
+    try {
+      const { getPlanForUser } = await import("@/lib/billing/quota");
+      return (await getPlanForUser(user.id)).limits.ktp === true;
+    } catch {
+      return true; // при сбое биллинга решает серверный роут
+    }
+  };
+
+  const [subjectName, approval, likeState, comments, reviews, printWatermark, canUseKtp] = await Promise.all([
+    loadSubjectName(),
+    loadApproval(),
+    loadLikes(),
+    loadComments(),
+    loadReviews(),
+    // Печатная версия (PDF через браузер) — с пометкой для Free/анонима.
+    resolveWatermark(user),
+    loadCanUseKtp(),
+  ]);
+  const { approvalSchool, dict } = approval;
+  const approvalClassNames = approval.classNames;
+  const approvalLocale = dict.locale;
+  const approvalCopy = schoolApprovalCopy[approvalLocale];
+  const { likes, liked } = likeState;
+  const reviewCount = reviews.length;
+  const reviewAverage = reviewCount > 0
+    ? Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount) * 10) / 10
+    : 0;
 
   const allTasks = [
     ...(plan.content?.stages?.beginning?.tasks || []),
     ...(plan.content?.stages?.middle?.tasks || []),
     ...(plan.content?.stages?.end?.tasks || [])
   ];
-  // Печатная версия (PDF через браузер) — с пометкой для Free/анонима.
-  const printWatermark = await resolveWatermark(user);
-  // КТП — фича Pro: флаг для билдера (сам роут тоже проверяет тариф).
-  let canUseKtp = true;
-  if (user) {
-    try {
-      const { getPlanForUser } = await import("@/lib/billing/quota");
-      canUseKtp = (await getPlanForUser(user.id)).limits.ktp === true;
-    } catch {
-      canUseKtp = true; // при сбое биллинга решает серверный роут
-    }
-  }
   return (
     <div className="mx-auto max-w-[1200px] space-y-5 px-4 py-4 md:px-6">
       <header className={`${l.banner} no-print`}>
