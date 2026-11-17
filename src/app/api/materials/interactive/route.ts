@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const quota = await reserveQuotaOrResponse(auth.user, "generation");
+  const quota = await reserveQuotaOrResponse(auth.user, "assist");
   if (!quota.ok) return quota.response;
 
   try {

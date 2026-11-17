@@ -46,7 +46,7 @@ export interface GroupWorkInput {
   count: number;
   learningObjectives?: string[];
   values?: string;
-  quota?: { reserve(kind: "generation"): Promise<{ ok: boolean; finalize?(success: boolean): Promise<void> }> };
+  quota?: { reserve(kind: "assist"): Promise<{ ok: boolean; finalize?(success: boolean): Promise<void> }> };
 }
 
 /** Время одного провайдера: ответ длинный, но Mercury пишет его за секунды. */
@@ -99,7 +99,7 @@ export function parseGroupWork(raw: string, input: Pick<GroupWorkInput, "count" 
 }
 
 export async function generateGroupWork(input: GroupWorkInput): Promise<GroupWork> {
-  const slot = input.quota ? await input.quota.reserve("generation") : { ok: true as const };
+  const slot = input.quota ? await input.quota.reserve("assist") : { ok: true as const };
   if (!slot.ok) throw new HandoutQuotaError();
   try {
     // Цепочка КСП, а не агента: после Mercury там быстрый Groq. На прогоне в проде Mercury

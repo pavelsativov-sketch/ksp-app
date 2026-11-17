@@ -43,7 +43,7 @@ export interface SlotResult {
  */
 export function handoutQuota(userId: string) {
   return {
-    reserve: async (kind: "generation" | "image"): Promise<SlotResult> => {
+    reserve: async (kind: QuotaKind): Promise<SlotResult> => {
       const quota = await reserveQuotaOrResponse({ id: userId }, kind);
       if (!quota.ok) return { ok: false };
       return { ok: true, finalize: quota.reservation.finalize };

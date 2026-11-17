@@ -327,7 +327,7 @@ export interface HandoutInput {
    * квотой, а каждый вызов стоит денег на стороне провайдера.
    */
   quota?: {
-    reserve(kind: "generation" | "image"): Promise<{ ok: boolean; finalize?(success: boolean): Promise<void> }>;
+    reserve(kind: "assist" | "image"): Promise<{ ok: boolean; finalize?(success: boolean): Promise<void> }>;
   };
   /**
    * Контекст из КСП для привязки рабочего листа к уроку.

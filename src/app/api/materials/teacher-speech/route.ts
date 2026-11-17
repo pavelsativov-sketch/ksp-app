@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const plan = await getAccessiblePlan(parsed.data.planId, auth.user.id);
   if (!plan) return NextResponse.json({ error: "План не найден" }, { status: 404 });
 
-  const quota = await reserveQuotaOrResponse(auth.user, "generation");
+  const quota = await reserveQuotaOrResponse(auth.user, "assist");
   if (!quota.ok) return quota.response;
 
   try {

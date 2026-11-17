@@ -59,7 +59,7 @@ export async function generateHandout(input: HandoutInput): Promise<Handout> {
     return puzzle;
   }
   // Слот за текстовую генерацию — до обращения к провайдерам.
-  const genSlot = input.quota ? await input.quota.reserve("generation") : { ok: true as const };
+  const genSlot = input.quota ? await input.quota.reserve("assist") : { ok: true as const };
   if (!genSlot.ok) {
     throw new HandoutQuotaError();
   }

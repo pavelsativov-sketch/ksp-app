@@ -7,6 +7,7 @@ import { generateHandout } from "@/lib/handouts/generate";
 import { buildCombinedDocx } from "@/lib/handouts/docx";
 import { resolveWatermark } from "@/lib/billing/watermark";
 import { handoutQuota, quotaErrorResponse } from "@/lib/ai/quota-bridge";
+import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 
 export const runtime = "nodejs";
 
@@ -56,9 +57,15 @@ export async function POST(request: Request) {
     );
   }
 
-  // Общий контекст квоты: комплект — это две генерации, слоты резервируются
-  // раздельно внутри generateHandout.
-  const quota = handoutQuota(auth.user.id);
+  // Комплект — одна AI-операция для учителя: один слот assist на весь запрос.
+  // Внутренние generateHandout текст не резервируют, только картинки.
+  const textSlot = await reserveQuotaOrResponse(auth.user, "assist");
+  if (!textSlot.ok) return textSlot.response;
+  const imageQuota = handoutQuota(auth.user.id);
+  const quota = {
+    reserve: async (kind: "assist" | "image") => (kind === "image" ? imageQuota.reserve(kind) : { ok: true }),
+  };
+  let delivered = false;
   try {
     const { topic, subject, grade, language, worksheetCount, memosCount, withImages, kspContext } = parsed.data;
     const [worksheet, memos] = await Promise.all([
@@ -70,6 +77,7 @@ export async function POST(request: Request) {
     }
     const watermark = await resolveWatermark(auth.user);
     const buffer = await buildCombinedDocx([worksheet, memos], { watermark });
+    delivered = true;
     return NextResponse.json(
       { worksheet, memos, docxBase64: buffer.toString("base64") },
       { headers: { "Cache-Control": "no-store" } },
@@ -79,5 +87,7 @@ export async function POST(request: Request) {
     if (quotaResponse) return quotaResponse;
     console.error("Combined handout generation failed", error);
     return NextResponse.json({ error: "Не удалось создать комплект. Повторите попытку позже." }, { status: 500 });
+  } finally {
+    await textSlot.reservation.finalize(delivered).catch(() => {});
   }
 }
