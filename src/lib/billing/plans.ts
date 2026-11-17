@@ -48,6 +48,27 @@ export const PLANS: Readonly<Record<Plan, PlanDocument>> = {
 export interface UserBillingFields {
   plan?: Plan;
   plan_expires_at?: Date | null;
+  /** Бонус администратора: +N КСП к месячному лимиту каждый месяц. */
+  bonus_generations?: number;
+  /** Бонус администратора только на указанный месяц UTC ("YYYY-MM"). */
+  bonus_generations_month?: { month: string; count: number } | null;
+}
+
+const nonNegative = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+
+/** Сколько дополнительных КСП выдано администратором на месяц `now` (UTC). */
+export function bonusGenerations(user: UserBillingFields | null, now = new Date()): number {
+  const month = now.toISOString().slice(0, 7);
+  const monthly = user?.bonus_generations_month?.month === month ? nonNegative(user.bonus_generations_month.count) : 0;
+  return nonNegative(user?.bonus_generations) + monthly;
+}
+
+/** Лимиты тарифа с учётом бонуса администратора (безлимит остаётся безлимитом). */
+export function effectiveLimits(user: UserBillingFields | null, now = new Date()): Readonly<PlanLimits> {
+  const limits = PLANS[effectivePlan(user, now)].limits;
+  const bonus = bonusGenerations(user, now);
+  return bonus && limits.kspPerMonth !== null ? { ...limits, kspPerMonth: limits.kspPerMonth + bonus } : limits;
 }
 
 export function effectivePlan(user: UserBillingFields | null, now = new Date()): Plan {

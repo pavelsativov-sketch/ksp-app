@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { COL, getDb, toObjectId } from "@/lib/mongo";
-import { effectivePlan, PLANS, type Plan, type PlanLimits, type UserBillingFields } from "./plans";
+import { effectiveLimits, effectivePlan, type Plan, type PlanLimits, type UserBillingFields } from "./plans";
 
 export interface UserPlanUsage {
   plan: Plan;
@@ -47,7 +47,7 @@ export async function getPlanForUser(userId: string): Promise<UserPlanUsage> {
   const assistUsed = usageMap["assist"] ?? 0;
   const imagesUsed = usageMap["image"] ?? 0;
   const plan = effectivePlan(user, now);
-  const limits = PLANS[plan].limits;
+  const limits = effectiveLimits(user, now);
   const left = (limit: number | null, usedCount: number) =>
     limit === null ? null : Math.max(0, limit - usedCount);
   return {

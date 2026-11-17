@@ -6,6 +6,8 @@ import { getAdminDashboard, type AdminSearchParams } from "@/lib/admin/queries";
 import { listModerationQueue, type ModerationQueueItem } from "@/lib/moderation";
 import { BulkCodesForm, CreateCodeForm, GrantProForm, RevokeCodeButton } from "@/components/admin/code-controls";
 import { ModerationQueue } from "@/components/admin/moderation-controls";
+import { AdminOverviewPanel } from "@/components/admin/admin-overview";
+import { getAdminOverview, type AdminOverview } from "@/lib/admin/users";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +19,13 @@ const statuses = { active: "Активен", redeemed: "Использован",
 export default async function AdminPage({ searchParams }: { searchParams: Promise<AdminSearchParams> }) {
   let data: Awaited<ReturnType<typeof getAdminDashboard>>;
   let queue: ModerationQueueItem[] = [];
+  let overview: AdminOverview | null = null;
   try {
     data = await getAdminDashboard(await searchParams);
-    try {
-      queue = await listModerationQueue();
-    } catch {
-      queue = [];
-    }
+    [queue, overview] = await Promise.all([
+      listModerationQueue().catch(() => []),
+      getAdminOverview().catch(() => null),
+    ]);
   } catch (error) {
     if (error instanceof AdminError && error.status === 401) redirect("/login?next=/admin");
     if (error instanceof AdminError && error.status === 403) notFound();
@@ -40,7 +42,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   </nav>;
   return <main className="mx-auto max-w-[1400px] space-y-10 px-4 py-12 md:px-6">
     <header><p className="editorial-kicker">Mekty</p><h1 className="editorial-display mt-3 text-4xl">Администрирование</h1>
-      <p className="mt-3 text-sm text-muted-foreground">Просмотр пользователей и использования, модерация библиотеки, коды и ручная выдача Pro. Назначение прав недоступно.</p></header>
+      <p className="mt-3 text-sm text-muted-foreground">Просмотр пользователей и использования, модерация библиотеки, коды и ручная выдача Pro. Назначение прав недоступно.</p>
+      <nav aria-label="Разделы администрирования" className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
+        <Link prefetch={false} href="/admin/users" className="underline">Пользователи, КСП и подписки</Link>
+        <Link prefetch={false} href="/admin/analytics" className="underline">Аналитика событий</Link>
+      </nav></header>
+    {overview ? <AdminOverviewPanel data={overview} /> : <p role="alert" className="text-sm">Обзор временно недоступен.</p>}
     <section aria-labelledby="stats-title" className="space-y-4">
       <h2 id="stats-title" className="text-2xl font-semibold">Статистика</h2>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[

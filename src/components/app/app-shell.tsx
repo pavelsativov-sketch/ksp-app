@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  Bell, BookOpen, Bot, ChartLine, ChevronDown, FileText, CalendarDays, CircleHelp, Home, Menu, MonitorSmartphone, Search, Settings, Star, X,
+  Bell, BookOpen, Bot, ChartLine, ChevronDown, FileText, CalendarDays, CircleHelp, Home, Menu, MonitorSmartphone, Search, Settings, ShieldCheck, Star, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
@@ -31,11 +31,14 @@ function initials(name: string): string {
 export function AppShell({
   userName,
   userEmail,
+  isAdmin = false,
   account,
   children,
 }: {
   userName: string;
   userEmail: string;
+  /** Решает сервер (ADMIN_USER_IDS); ссылка только прячет пункт, доступ проверяет /admin. */
+  isAdmin?: boolean;
   account: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -58,6 +61,7 @@ export function AppShell({
   const foot: NavItem[] = [
     { href: "/feedback", label: c.nav.help, icon: CircleHelp, active: (p) => p.startsWith("/feedback") },
     { href: "/profile", label: c.nav.settings, icon: Settings, active: (p) => p.startsWith("/profile") },
+    ...(isAdmin ? [{ href: "/admin", label: "Админ", icon: ShieldCheck, active: (p: string) => p === "/admin" || p.startsWith("/admin/") }] : []),
   ];
 
   const renderItem = (item: NavItem) => {

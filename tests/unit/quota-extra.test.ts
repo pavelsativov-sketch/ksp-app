@@ -173,6 +173,20 @@ describe("getPlanForUser: невалидный пользователь", () => 
   });
 });
 
+describe("admin bonus generations", () => {
+  it("raises the Free monthly KSP limit by permanent and current-month bonuses", async () => {
+    user = { _id: new ObjectId(userId), bonus_generations: 1, bonus_generations_month: { month: "2026-09", count: 2 } };
+    expect((await getPlanForUser(userId)).limits.kspPerMonth).toBe(6);
+    for (let i = 0; i < 6; i++) expect((await reserveQuota({ id: userId }, "generation")).ok).toBe(true);
+    expect(await reserveQuota({ id: userId }, "generation")).toMatchObject({ ok: false, code: "KSP_QUOTA_EXCEEDED" });
+  });
+
+  it("ignores a bonus granted for another month", async () => {
+    user = { _id: new ObjectId(userId), bonus_generations_month: { month: "2026-08", count: 10 } };
+    expect((await getPlanForUser(userId)).limits.kspPerMonth).toBe(3);
+  });
+});
+
 describe("utcMonthWindow", () => {
   it("returns the first and last millisecond of the UTC month", () => {
     expect(utcMonthWindow(new Date("2026-09-17T12:30:00.000Z"))).toEqual({

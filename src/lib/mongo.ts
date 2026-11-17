@@ -116,6 +116,8 @@ export const COL = {
   connectors: "connectors",
   auditLog: "audit_log",
   browserCredentials: "browser_credentials",
+  // Аудит действий администратора: выдача КСП и подписок.
+  adminActions: "admin_actions",
 } as const;
 
 async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
@@ -172,6 +174,10 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.billingCodes).createIndex({ codeHash: 1 }, { unique: true, name: "billing_codes_codehash_unique" }),
     db.collection(COL.billingCodes).createIndex({ status: 1 }, { name: "billing_codes_status" }),
     db.collection(COL.planEvents).createIndex({ user_id: 1, created_at: -1 }, { name: "plan_events_user_created" }),
+    // Админка: новые пользователи и КСП по датам, аудит по пользователю.
+    db.collection(COL.users).createIndex({ created_at: -1 }, { name: "users_created" }),
+    db.collection(COL.plans).createIndex({ created_at: -1 }, { name: "plans_created" }),
+    db.collection(COL.adminActions).createIndex({ target_user_id: 1, at: -1 }, { name: "admin_actions_target_at" }),
     // Модерация библиотеки: жалобы на планы и скрытие.
     db.collection(COL.planReports).createIndex({ plan_id: 1, created_at: -1 }, { name: "plan_reports_plan_created" }),
     db.collection(COL.planReports).createIndex({ status: 1, created_at: -1 }, { name: "plan_reports_status_created" }),

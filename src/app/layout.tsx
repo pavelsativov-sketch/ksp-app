@@ -6,6 +6,7 @@ import Image from "next/image";
 import "./globals.css";
 import { isMongoConfigured } from "@/lib/mongo";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdminUserId } from "@/lib/admin/auth";
 import { logoutAction } from "./actions/auth";
 import { SITE_NAME, SITE_DESCRIPTION, siteUrl } from "@/lib/site";
 import { getDict } from "@/lib/i18n/server";
@@ -146,6 +147,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <AppShell
                 userName={user.fullName ?? ""}
                 userEmail={user.email}
+                isAdmin={isAdminUserId(user.id)}
                 account={<>
                   <div className="flex items-center justify-between gap-2 px-1"><LocaleSwitcher locale={locale} /><ThemeToggle /></div>
                   <Link className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-muted" href="/profile">{t.nav.profile}</Link>
