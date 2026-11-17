@@ -102,7 +102,9 @@ export async function generateGroupWork(input: GroupWorkInput): Promise<GroupWor
   const slot = input.quota ? await input.quota.reserve("generation") : { ok: true as const };
   if (!slot.ok) throw new HandoutQuotaError();
   try {
-    const work = await executeWithFallback("tasks", async (client, model, config) => {
+    // Цепочка КСП, а не агента: после Mercury там быстрый Groq. На прогоне в проде Mercury
+    // вернул пустой ответ, и цепочка агента отдала карточки медленному MXR (70 с).
+    const work = await executeWithFallback("generation", async (client, model, config) => {
       const response = await client.chat.completions.create({
         model,
         temperature: 0.6,
