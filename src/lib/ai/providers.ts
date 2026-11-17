@@ -35,6 +35,13 @@ export interface ProviderConfig {
    * Ключи перебираются по одному на каждый сбой авторизации или лимита.
    */
   apiKeys?: string[];
+  /**
+   * Дополнительные поля тела запроса у этого провайдера. Mercury 3 по умолчанию
+   * рассуждает и тратил на это 6–8 тыс. из 8192 токенов ответа: презентация и
+   * рабочий лист обрывались (finish: length). С reasoning_effort "instant" те же
+   * 19 слайдов приходят за 4 с.
+   */
+  extraBody?: Record<string, unknown>;
 }
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/";
@@ -43,6 +50,8 @@ const CEREBRAS_BASE = "https://api.cerebras.ai/v1";
 const MXR_BASE = "https://mxr.one/v1";
 const MERCURY_BASE = "https://api.inceptionlabs.ai/v1";
 const KENARI_BASE = "https://kenari.id/v1";
+/** Mercury без рассуждений: весь бюджет ответа уходит на сам ответ (см. extraBody). */
+const MERCURY_FAST = { reasoning_effort: "instant" };
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const OPENAI_BASE = "https://api.openai.com/v1";
 const XAI_BASE = "https://api.x.ai/v1";
@@ -110,7 +119,7 @@ function configured(config: ProviderConfig): boolean {
 export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
   generation: () => [
     // Mercury первым: КСП — длинный JSON, а Mercury пишет его за секунды (см. tasks).
-    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (KSP Primary)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (KSP Primary)", temperature: 0.4, maxTokens: 8192, extraBody: MERCURY_FAST }),
     // Apinex (Apinex/Bond) — проверено живым бенчмарком 2026-10-28:
     // kimi-k3 даёт самый полный валидный КСП; glm-5.3 — быстрый запасной;
     // gpt-6-luna — ещё один резерв.
@@ -143,7 +152,7 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
     // Без минутного лимита бесплатного Groq (8000 токенов). Замер 2026-11-16: Mercury
     // пишет ~470 токенов/с и вызывает инструменты за 0,9 с, MXR — ~50 токенов/с, поэтому
     // длинный рабочий лист у MXR упирался в таймаут 45 с. Без ключей пропускаются.
-    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (Primary)", temperature: 0.2, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (Primary)", temperature: 0.2, maxTokens: 8192, extraBody: MERCURY_FAST }),
     withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6.1-terra", supportsJsonSchema: false, label: "MXR GPT 6.1 Terra (Agent Primary)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna (Agent Fallback)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.kenari(), baseURL: KENARI_BASE, model: "nemotron-3-ultra-550b-a55b:free", supportsJsonSchema: false, label: "Kenari Nemotron 3 Ultra (Fallback)", temperature: 0.2, maxTokens: 8192 }),
@@ -340,6 +349,12 @@ export async function executeWithFallback<T>(
           timeout: Math.min(opts.timeoutMs ?? PROVIDER_TIMEOUT_MS[task], remaining),
           maxRetries: 0,
         });
+        if (config.extraBody) {
+          // Поля провайдера добавляются ко всем запросам: вызывающий код о них не знает.
+          const create = client.chat.completions.create.bind(client.chat.completions);
+          client.chat.completions.create = ((body: Record<string, unknown>, options?: unknown) =>
+            create({ ...body, ...config.extraBody } as never, options as never)) as unknown as typeof client.chat.completions.create;
+        }
         // Ключ из обрыва ответа модели (`apiKey` в конфиге) — для промптов,
         // которые печатают ключ в текст ошибки.
         const withKey = apiKey === config.apiKey ? config : { ...config, apiKey };
