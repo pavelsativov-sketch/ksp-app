@@ -1,6 +1,7 @@
 /**
  * Минимальная in-memory имитация коллекции MongoDB для модульных тестов:
- * равенство, $gt/$ne, $set, $push с $each/$slice, upsert, сортировка и лимит.
+ * равенство, $gt/$gte/$lt/$lte/$ne/$in/$exists, $or, $set/$unset/$inc,
+ * $push с $each/$slice, upsert, уникальные поля, findOneAndUpdate, сортировка и лимит.
  * Этого хватает для проверки логики хранения без настоящей базы.
  */
 type Doc = Record<string, unknown>;
@@ -13,13 +14,22 @@ function same(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
+const time = (v: unknown) => (v instanceof Date ? v.getTime() : typeof v === "number" ? v : NaN);
+
 function matches(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([key, expected]) => {
+    if (key === "$or") return (expected as Doc[]).some((sub) => matches(doc, sub));
     const actual = doc[key];
+    if (expected === null) return actual === null || actual === undefined;
     if (expected && typeof expected === "object" && !(expected instanceof Date) && !(expected as { _bsontype?: string })._bsontype) {
       const ops = expected as Record<string, unknown>;
-      if ("$gt" in ops) return actual instanceof Date && ops.$gt instanceof Date && actual.getTime() > ops.$gt.getTime();
+      if ("$gt" in ops) return time(actual) > time(ops.$gt);
+      if ("$gte" in ops) return time(actual) >= time(ops.$gte);
+      if ("$lt" in ops) return time(actual) < time(ops.$lt);
+      if ("$lte" in ops) return time(actual) <= time(ops.$lte);
       if ("$ne" in ops) return !same(actual, ops.$ne);
+      if ("$in" in ops) return (ops.$in as unknown[]).some((v) => same(actual, v));
+      if ("$exists" in ops) return (actual !== undefined) === Boolean(ops.$exists);
     }
     return same(actual, expected);
   });
@@ -28,6 +38,10 @@ function matches(doc: Doc, filter: Doc): boolean {
 function applyUpdate(doc: Doc, update: Doc): void {
   const set = update.$set as Doc | undefined;
   if (set) Object.assign(doc, set);
+  for (const key of Object.keys((update.$unset as Doc | undefined) ?? {})) delete doc[key];
+  for (const [key, by] of Object.entries((update.$inc as Record<string, number> | undefined) ?? {})) {
+    doc[key] = Number(doc[key] ?? 0) + by;
+  }
   const push = update.$push as Record<string, { $each: unknown[]; $slice?: number }> | undefined;
   if (push) {
     for (const [key, spec] of Object.entries(push)) {
@@ -39,8 +53,19 @@ function applyUpdate(doc: Doc, update: Doc): void {
 
 export class FakeCollection {
   docs: Doc[] = [];
+  /** Поля с уникальным индексом: вставка дубля бросает E11000, как в Mongo. */
+  unique: string[] = [];
+
+  private assertUnique(doc: Doc, except?: Doc) {
+    for (const key of this.unique) {
+      if (this.docs.some((d) => d !== except && same(d[key], doc[key]))) {
+        throw Object.assign(new Error("E11000 duplicate key error"), { code: 11000 });
+      }
+    }
+  }
 
   async insertOne(doc: Doc) {
+    this.assertUnique(doc);
     this.docs.push({ ...doc });
     return { insertedId: doc._id };
   }
@@ -81,10 +106,18 @@ export class FakeCollection {
     if (options.upsert) {
       const created: Doc = { ...Object.fromEntries(Object.entries(filter).filter(([, v]) => typeof v !== "object" || v instanceof Date)) };
       applyUpdate(created, update);
+      this.assertUnique(created);
       this.docs.push(created);
       return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
     }
     return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+  }
+
+  async findOneAndUpdate(filter: Doc, update: Doc) {
+    const found = this.docs.find((d) => matches(d, filter));
+    if (!found) return null;
+    applyUpdate(found, update);
+    return { ...found };
   }
 
   async updateMany(filter: Doc, update: Doc) {
@@ -94,14 +127,18 @@ export class FakeCollection {
   }
 }
 
-/** getDb-подмена: одна коллекция на каждое имя. */
-export function fakeDb() {
+/** getDb-подмена: одна коллекция на каждое имя; unique — уникальные индексы как в mongo.ts. */
+export function fakeDb(unique: Record<string, string[]> = {}) {
   const collections = new Map<string, FakeCollection>();
   return {
     collections,
     getDb: async () => ({
       collection: (name: string) => {
-        if (!collections.has(name)) collections.set(name, new FakeCollection());
+        if (!collections.has(name)) {
+          const created = new FakeCollection();
+          created.unique = unique[name] ?? [];
+          collections.set(name, created);
+        }
         return collections.get(name)!;
       },
     }),
