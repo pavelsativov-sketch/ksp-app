@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useFormDraft } from "@/lib/use-form-draft";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -14,11 +15,24 @@ interface PageProps {
 
 export default function NewMediumTermPage({ params }: PageProps) {
   const router = useRouter();
+  const { id } = use(params);
   const [quarter, setQuarter] = useState("1");
   const [title, setTitle] = useState("");
   const [topics, setTopics] = useState([{ title: "", hours: 1, kspIds: [] as string[] }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const isDirty = Boolean(title.trim()) || topics.some((t) => t.title.trim());
+  const clearDraft = useFormDraft(
+    `draft:mediumterm:new:${id}`,
+    { quarter, title, topics },
+    isDirty,
+    (d) => {
+      setQuarter(d.quarter ?? "1");
+      setTitle(d.title ?? "");
+      if (Array.isArray(d.topics) && d.topics.length > 0) setTopics(d.topics);
+    },
+  );
 
   const addTopic = () => {
     setTopics([...topics, { title: "", hours: 1, kspIds: [] }]);
@@ -40,7 +54,6 @@ export default function NewMediumTermPage({ params }: PageProps) {
     setError("");
 
     try {
-      const { id } = await params;
       const res = await fetch("/api/mediumterm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -58,6 +71,7 @@ export default function NewMediumTermPage({ params }: PageProps) {
       }
 
       const { plan } = await res.json();
+      clearDraft();
       router.push(`/longterm/${id}/medium/${plan.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка создания");

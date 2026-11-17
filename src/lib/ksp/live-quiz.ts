@@ -180,17 +180,35 @@ export function generateStudentId(): string {
   return `s_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 }
 
-/** API polling: отправить событие в комнату. */
+const QUIZ_FETCH_TIMEOUT_MS = 8000;
+const QUIZ_POST_RETRY_DELAYS_MS = [500, 1500];
+
+/** API polling: отправить событие в комнату; бросает ошибку, если не удалось после повторов. */
 export async function postQuizEvent(
   code: string,
   event: string,
   payload: unknown,
+  retryDelaysMs: readonly number[] = QUIZ_POST_RETRY_DELAYS_MS,
 ): Promise<void> {
-  await fetch(`/api/quiz/${code}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event, payload }),
-  });
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, retryDelaysMs[attempt - 1]));
+    try {
+      const res = await fetch(`/api/quiz/${code}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event, payload }),
+        signal: AbortSignal.timeout(QUIZ_FETCH_TIMEOUT_MS),
+      });
+      if (res.ok) return;
+      lastError = new Error(`HTTP ${res.status}`);
+      // 4xx (кроме 429) повтор не исправит — сразу сдаёмся.
+      if (res.status < 500 && res.status !== 429) break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Не удалось отправить событие");
 }
 
 export interface QuizEvent {
@@ -202,7 +220,10 @@ export interface QuizEvent {
 
 /** API polling: забрать события комнаты после seq. */
 export async function fetchQuizEvents(code: string, since: number): Promise<QuizEvent[]> {
-  const res = await fetch(`/api/quiz/${code}?since=${since}`, { cache: "no-store" });
+  const res = await fetch(`/api/quiz/${code}?since=${since}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(QUIZ_FETCH_TIMEOUT_MS),
+  });
   if (!res.ok) return [];
   const data = (await res.json()) as { events?: QuizEvent[] };
   return data.events ?? [];

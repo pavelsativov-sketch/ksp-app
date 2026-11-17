@@ -42,6 +42,10 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   const [revealText, setRevealText] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LiveLeaderboardEntry[]>([]);
 
+  const [joining, setJoining] = useState(false);
+  const [sendState, setSendState] = useState<"sending" | "sent" | "failed">("sent");
+  const lastAnswerRef = useRef<{ index: number; answer: TaskAnswer; ms: number } | null>(null);
+
   const lastSeqRef = useRef(0);
 
   // При смене кода на экране входа пересоздаём идентификатор под новый код.
@@ -120,15 +124,27 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
       return;
     }
     setError(null);
-    void postQuizEvent(code, "student:join", { studentId, name: name.trim() });
-    setPhase("lobby");
+    setJoining(true);
+    postQuizEvent(code, "student:join", { studentId, name: name.trim() })
+      .then(() => setPhase("lobby"))
+      .catch(() => setError("Не удалось войти: нет связи с сервером. Попробуйте ещё раз."))
+      .finally(() => setJoining(false));
+  }
+
+  function sendAnswer(msg: { index: number; answer: TaskAnswer; ms: number }) {
+    setSendState("sending");
+    postQuizEvent(code, "student:answer", { studentId, ...msg })
+      .then(() => setSendState("sent"))
+      .catch(() => setSendState("failed"));
   }
 
   function submit(answer: TaskAnswer) {
     if (!currentQ) return;
     const ms = Date.now() - (questionStartedAt ?? Date.now());
-    void postQuizEvent(code, "student:answer", { studentId, index: currentQ.index, answer, ms });
+    const msg = { index: currentQ.index, answer, ms };
+    lastAnswerRef.current = msg;
     setPhase("submitted");
+    sendAnswer(msg);
   }
 
   // ---------- render ----------
@@ -167,8 +183,8 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button onClick={join} className="w-full">
-            Войти
+          <Button onClick={join} disabled={joining} className="w-full">
+            {joining ? "Входим…" : "Войти"}
           </Button>
         </div>
       </div>
@@ -181,6 +197,27 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
         <Loader2 className="w-10 h-10 animate-spin text-violet-600 mb-3" />
         <p className="text-lg font-medium">Привет, {name}!</p>
         <p className="text-sm text-muted-foreground">Ждём начала квиза…</p>
+      </CenterScreen>
+    );
+  }
+
+  if (phase === "submitted" && sendState === "sending") {
+    return (
+      <CenterScreen>
+        <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-3" />
+        <p className="text-lg font-medium">Отправляем ответ…</p>
+      </CenterScreen>
+    );
+  }
+
+  if (phase === "submitted" && sendState === "failed") {
+    return (
+      <CenterScreen>
+        <p role="alert" className="text-lg font-medium text-red-700">Ответ не отправлен</p>
+        <p className="mb-3 text-sm text-slate-500">Проверьте интернет и повторите.</p>
+        <Button onClick={() => lastAnswerRef.current && sendAnswer(lastAnswerRef.current)}>
+          Повторить
+        </Button>
       </CenterScreen>
     );
   }

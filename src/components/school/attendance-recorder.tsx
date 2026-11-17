@@ -30,15 +30,26 @@ export function AttendanceRecorder({ schoolId, students }: { schoolId: string; s
   const [notice, setNotice] = useState("");
   const visible = students.filter((student) => student.className === className);
 
+  const unmarked = visible.filter((student) => !marks[student.id]).length;
+
+  // Неотмеченные больше не считаются присутствующими молча: это искажало журнал.
+  function markAllPresent() {
+    setMarks((previous) => ({ ...Object.fromEntries(visible.map((student) => [student.id, "present" as Status])), ...previous }));
+  }
+
   async function save() {
     if (!className || visible.length === 0) return;
+    if (unmarked > 0) {
+      setNotice(`Не отмечено учеников: ${unmarked}. Отметьте каждого или нажмите «Отметить всех присутствующими».`);
+      return;
+    }
     setPending(true);
     setNotice("");
     try {
       const response = await fetch(`/api/school/${schoolId}/attendance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, className, marks: visible.map((student) => ({ studentId: student.id, status: marks[student.id] ?? "present" })) }),
+        body: JSON.stringify({ date, className, marks: visible.map((student) => ({ studentId: student.id, status: marks[student.id] })) }),
       });
       const data = await response.json() as { error?: string; saved?: number };
       if (!response.ok) throw new Error(data.error ?? "Не удалось сохранить отметки.");
@@ -63,10 +74,10 @@ export function AttendanceRecorder({ schoolId, students }: { schoolId: string; s
           <div className="max-h-80 divide-y divide-border overflow-y-auto rounded-lg border border-border">
             {visible.map((student) => <div key={student.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
               <span className="text-sm font-medium">{student.name}</span>
-              <select aria-label={`Посещаемость: ${student.name}`} className="h-9 max-w-full rounded-lg border border-border bg-surface px-2 text-sm" value={marks[student.id] ?? "present"} onChange={(event) => setMarks((previous) => ({ ...previous, [student.id]: event.target.value as Status }))}>{statuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+              <select aria-label={`Посещаемость: ${student.name}`} className="h-9 max-w-full rounded-lg border border-border bg-surface px-2 text-sm" value={marks[student.id] ?? ""} onChange={(event) => setMarks((previous) => ({ ...previous, [student.id]: event.target.value as Status }))}><option value="" disabled>— не отмечен —</option>{statuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
             </div>)}
           </div>
-          <div className="flex flex-wrap items-center gap-3"><Button onClick={() => void save()} disabled={pending || !date}>{pending ? "Сохраняю…" : "Сохранить отметки"}</Button>{notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}</div>
+          <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" onClick={markAllPresent} disabled={pending || unmarked === 0}>Отметить всех присутствующими</Button><Button onClick={() => void save()} disabled={pending || !date}>{pending ? "Сохраняю…" : "Сохранить отметки"}</Button>{notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}</div>
         </>}
       </CardContent>
     </Card>

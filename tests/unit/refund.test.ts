@@ -32,6 +32,21 @@ beforeEach(() => {
             if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
             return e[k] === v;
           })) ?? null,
+        findOneAndUpdate: async (filter: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+          const doc = events.find((e) => Object.entries(filter).every(([k, v]) => {
+            if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
+            return e[k] === v;
+          }));
+          if (!doc) return null;
+          const before = { ...doc };
+          Object.assign(doc, update.$set);
+          return before;
+        },
+        updateOne: async (filter: { _id: ObjectId }, update: { $set: Record<string, unknown> }) => {
+          const doc = events.find((e) => String(e._id) === String(filter._id));
+          if (doc) Object.assign(doc, update.$set);
+          return { modifiedCount: doc ? 1 : 0 };
+        },
         deleteOne: async (filter: { _id: ObjectId }) => {
           const i = events.findIndex((e) => String(e._id) === String(filter._id));
           if (i >= 0) events.splice(i, 1);
@@ -101,6 +116,26 @@ describe("POST /api/ai/refund", () => {
     events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
     const res = await POST();
     expect(res.status).toBe(429);
+  });
+
+  it("один и тот же слот нельзя вернуть дважды параллельными запросами", async () => {
+    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
+    const statuses = (await Promise.all([POST(), POST()])).map((r) => r.status).sort();
+    expect(statuses).toEqual([200, 404]);
+    expect(events.filter((e) => e.task === "generation_refund")).toHaveLength(1);
+  });
+
+  it("параллельные возвраты не превышают месячный лимит", async () => {
+    for (let i = 0; i < 2; i++) {
+      events.push({ _id: new ObjectId(), user_id: userId, task: "generation_refund", kind: "refund", createdAt: new Date() });
+    }
+    for (let i = 0; i < 2; i++) {
+      events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
+    }
+    await Promise.all([POST(), POST()]);
+    expect(events.filter((e) => e.task === "generation_refund").length).toBeLessThanOrEqual(3);
+    // Откаченный слот снова считается расходом квоты.
+    expect(events.filter((e) => e.task === "generation" && e.kind === "slot").length).toBeGreaterThanOrEqual(1);
   });
 
   it("401 without auth", async () => {

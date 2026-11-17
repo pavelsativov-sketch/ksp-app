@@ -53,6 +53,30 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
   const [endsAt, setEndsAt] = useState<number | null>(resume?.endsAt ?? null);
   const lastSeqRef = useRef(0);
   const [joinUrl, setJoinUrl] = useState("");
+  // Неотправленные события хоста: показываем баннер с повтором, чтобы ученики не зависли.
+  const [failedEvents, setFailedEvents] = useState<Array<{ event: string; payload: unknown }>>([]);
+
+  function send(event: string, payload: unknown) {
+    postQuizEvent(code, event, payload).catch(() =>
+      setFailedEvents((prev) => [...prev, { event, payload }]),
+    );
+  }
+
+  function retryFailed() {
+    const pending = failedEvents;
+    setFailedEvents([]);
+    // Порядок важен (question → reveal → state), поэтому шлём последовательно.
+    void pending.reduce<Promise<void>>(
+      (chain, ev, i) =>
+        chain.then(() =>
+          postQuizEvent(code, ev.event, ev.payload).catch((err: unknown) => {
+            setFailedEvents((prev) => [...pending.slice(i), ...prev]);
+            throw err;
+          }),
+        ),
+      Promise.resolve(),
+    ).catch(() => {});
+  }
 
   // tick for countdown
   useEffect(() => {
@@ -71,7 +95,7 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
   // генерировал новый код, а ученики оставались в старой комнате.
   useEffect(() => {
     if (resume) return;
-    void postQuizEvent(code, "host:state", {
+    send("host:state", {
       phase: "lobby",
       currentIndex: -1,
       leaderboard: [],
@@ -162,7 +186,7 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
       setCurrentIndex(idx);
       void confetti({ particleCount: 200, spread: 100, origin: { y: 0.4 } });
       const leaderboard = Array.from(students.values()).sort((a, b) => b.score - a.score);
-      void postQuizEvent(code, "host:end", { leaderboard });
+      send("host:end", { leaderboard });
       return;
     }
     setCurrentIndex(idx);
@@ -179,7 +203,7 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
       secret: task,
       planId,
     };
-    void postQuizEvent(code, "host:question", msg);
+    send("host:question", msg);
   }
 
   function reveal() {
@@ -187,12 +211,12 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
     if (!task) return;
     setPhase("reveal");
     setEndsAt(null);
-    void postQuizEvent(code, "host:reveal", {
+    send("host:reveal", {
       index: currentIndex,
       correctSummary: correctSummary(task),
     });
     const leaderboard = Array.from(students.values()).sort((a, b) => b.score - a.score);
-    void postQuizEvent(code, "host:state", {
+    send("host:state", {
       phase: "reveal",
       currentIndex,
       total: tasks.length,
@@ -229,6 +253,13 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
           </div>
           <div className="text-right"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-[#b9cce8]">Код для входа</p><p className="mt-1 tabular-nums text-4xl font-bold tracking-[0.16em] text-white">{code}</p></div>
         </div>
+
+        {failedEvents.length > 0 && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-400 bg-red-950/60 px-4 py-3 text-sm">
+            <span>Часть событий не дошла до учеников ({failedEvents.length}) — проверьте интернет.</span>
+            <Button size="sm" variant="secondary" onClick={retryFailed}>Повторить</Button>
+          </div>
+        )}
 
         {phase === "lobby" && (
           <Lobby

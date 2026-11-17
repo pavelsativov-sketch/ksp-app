@@ -52,7 +52,7 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
 
   // Shuffle right column in matching once per task instance (for student view).
   const shuffledRightOrder = useMemo(
-    () => (task.type === "MATCHING" ? shuffleIndices(task.right.length) : []),
+    () => (task.type === "MATCHING" ? shuffleIndices(task.right.length, `${task.id}:right`) : []),
     [task],
   );
 
@@ -60,7 +60,7 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
   const mcqOrder = useMemo(() => {
     if (task.type !== "MCQ") return [] as number[];
     if (!task.shuffle) return task.options.map((_, i) => i);
-    return shuffleIndices(task.options.length);
+    return shuffleIndices(task.options.length, `${task.id}:mcq`);
   }, [task]);
 
   // Timer countdown: auto-submit on zero.
@@ -293,7 +293,7 @@ function initialAnswer(task: InteractiveTask): TaskAnswer {
     case "ORDERING": {
       // Start student with items shuffled (but not accidentally the correct order)
       const n = task.correctOrder.length;
-      let order = shuffleIndices(n);
+      let order = shuffleIndices(n, `${task.id}:order`);
       if (order.every((v, i) => v === task.correctOrder[i]) && n > 1) {
         order = [...order];
         [order[0], order[1]] = [order[1], order[0]];
@@ -305,10 +305,20 @@ function initialAnswer(task: InteractiveTask): TaskAnswer {
   }
 }
 
-function shuffleIndices(n: number): number[] {
+// Перемешивание от id задачи, а не Math.random: иначе HTML сервера и клиента расходятся (hydration mismatch).
+export function shuffleIndices(n: number, seed: string): number[] {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  const random = () => {
+    // mulberry32
+    h = (h + 0x6d2b79f5) | 0;
+    let t = Math.imul(h ^ (h >>> 15), 1 | h);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
   const arr = Array.from({ length: n }, (_, i) => i);
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;

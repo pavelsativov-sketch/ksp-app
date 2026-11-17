@@ -7,6 +7,7 @@ import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useFormDraft } from "@/lib/use-form-draft";
 
 export default function NewLongTermPage() {
   const router = useRouter();
@@ -16,6 +17,21 @@ export default function NewLongTermPage() {
   const [sections, setSections] = useState([{ title: "", topics: [{ title: "", hours: 1, objectives: "" }] }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const isDirty =
+    Boolean(subject || grade || year) ||
+    sections.some((s) => s.title.trim() || s.topics.some((t) => t.title.trim() || t.objectives.trim()));
+  const clearDraft = useFormDraft(
+    "draft:longterm:new",
+    { subject, grade, year, sections },
+    isDirty,
+    (d) => {
+      setSubject(d.subject ?? "");
+      setGrade(d.grade ?? "");
+      setYear(d.year ?? "");
+      if (Array.isArray(d.sections) && d.sections.length > 0) setSections(d.sections);
+    },
+  );
 
   const addSection = () => {
     setSections([...sections, { title: "", topics: [{ title: "", hours: 1, objectives: "" }] }]);
@@ -83,6 +99,7 @@ export default function NewLongTermPage() {
       }
 
       const { plan } = await res.json();
+      clearDraft();
       router.push(`/longterm/${plan.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка создания");

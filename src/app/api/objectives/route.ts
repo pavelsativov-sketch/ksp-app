@@ -113,8 +113,8 @@ export async function GET(request: Request) {
   // 2. Mongo не настроена/ошибка → локальный JSON
   if (!subject) {
     return NextResponse.json(
-      { objectives: [], error: "subject (name) is required without MongoDB" },
-      { status: 200 },
+      { objectives: [], error: "Укажите название предмета: без базы данных цели ищутся по нему." },
+      { status: 400 },
     );
   }
   return NextResponse.json({

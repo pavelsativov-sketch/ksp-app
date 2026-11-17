@@ -34,7 +34,17 @@ export async function GET(
 
   // Бесплатный тариф (и анонимный просмотр публичного плана) — с пометкой.
   const watermark = await resolveWatermark(user);
-  const buffer = await buildKspDocx(plan, { watermark });
+  // Без перехвата сбой сборки уходил пустым 500, и учитель не понимал, что делать.
+  let buffer: Buffer;
+  try {
+    buffer = await buildKspDocx(plan, { watermark });
+  } catch (err) {
+    console.error("[export/docx] сборка не удалась", err);
+    return NextResponse.json(
+      { error: "Не удалось собрать документ Word. Попробуйте ещё раз." },
+      { status: 500 },
+    );
+  }
   const filename = `${plan.title || "ksp"}.docx`.replace(/[^\p{L}\p{N}_\-. ]/gu, "_");
 
   return new NextResponse(new Uint8Array(buffer), {

@@ -41,13 +41,17 @@ export async function POST() {
 
     // Возвращаем именно слот квоты (kind: "slot"), а не запись истории —
     // иначе расход считался бы дважды (история + слот) и возврат был бы неполным.
-    const latest = await db.collection(COL.aiEvents).findOne(
+    // Атомарно: слот превращается в маркер возврата одной операцией,
+    // поэтому параллельные запросы не вернут один и тот же слот дважды.
+    const events = db.collection(COL.aiEvents);
+    const latest = await events.findOneAndUpdate(
       {
         user_id: auth.user.id,
         task: "generation",
         kind: "slot",
         createdAt: { $gte: new Date(now.getTime() - REFUND_WINDOW_MS) },
       },
+      { $set: { task: "generation_refund", kind: "refund", ok: true, createdAt: now } },
       { sort: { createdAt: -1 } },
     );
     if (!latest) {
@@ -57,10 +61,20 @@ export async function POST() {
       );
     }
 
-    await db.collection(COL.aiEvents).deleteOne({ _id: latest._id });
-    await db.collection(COL.aiEvents).insertOne({
-      user_id: auth.user.id, task: "generation_refund", kind: "refund", ok: true, createdAt: now,
+    // Параллельные возвраты разных слотов могли проскочить проверку выше — перепроверяем и откатываем свой.
+    const refundsAfter = await events.countDocuments({
+      user_id: auth.user.id, task: "generation_refund", createdAt: { $gte: start, $lt: end },
     });
+    if (refundsAfter > REFUNDS_PER_MONTH) {
+      await events.updateOne(
+        { _id: latest._id },
+        { $set: { task: "generation", kind: "slot", ok: latest.ok, createdAt: latest.createdAt } },
+      );
+      return NextResponse.json(
+        { error: "Лимит возвратов на месяц исчерпан (3). Напишите нам — разберёмся вручную." },
+        { status: 429 },
+      );
+    }
 
     const usage = await getPlanForUser(auth.user.id);
     return NextResponse.json(

@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   computeAnswerScore,
   correctSummary,
   generateRoomCode,
   generateStudentId,
+  postQuizEvent,
   speedBonus,
   toPublicTask,
 } from "@/lib/ksp/live-quiz";
@@ -109,5 +110,34 @@ describe("live-quiz helpers", () => {
         correct: false,
       }),
     ).toMatch(/неверно/i);
+  });
+});
+
+describe("postQuizEvent", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("повторяет при сетевой ошибке и 5xx, затем успевает", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("offline"))
+      .mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(postQuizEvent("123456", "student:join", {}, [0, 0])).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("бросает ошибку, когда все попытки провалились", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(postQuizEvent("123456", "student:answer", {}, [0, 0])).rejects.toThrow("offline");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("не повторяет 4xx", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(postQuizEvent("123456", "host:state", {}, [0, 0])).rejects.toThrow("HTTP 403");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

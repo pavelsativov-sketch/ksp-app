@@ -35,23 +35,33 @@ export async function GET(
   }
 
   const zip = new JSZip();
-
-  // plan.docx
   const watermark = await resolveWatermark(user);
-  const docxBuffer = await buildKspDocx(plan, { watermark });
-  zip.file("plan.docx", new Uint8Array(docxBuffer));
 
-  // interactive.html (self-contained, works via file://)
-  zip.file("interactive.html", buildInteractiveHtml(plan, { watermark }));
+  // Без перехвата сбой сборки уходил пустым 500, и учитель не понимал, что делать.
+  let zipBuffer: Buffer;
+  try {
+    // plan.docx
+    const docxBuffer = await buildKspDocx(plan, { watermark });
+    zip.file("plan.docx", new Uint8Array(docxBuffer));
 
-  // README.txt
-  zip.file("README.txt", buildReadme(plan));
+    // interactive.html (self-contained, works via file://)
+    zip.file("interactive.html", buildInteractiveHtml(plan, { watermark }));
 
-  const zipBuffer = await zip.generateAsync({
-    type: "nodebuffer",
-    compression: "DEFLATE",
-    compressionOptions: { level: 6 },
-  });
+    // README.txt
+    zip.file("README.txt", buildReadme(plan));
+
+    zipBuffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+  } catch (err) {
+    console.error("[export/zip] сборка не удалась", err);
+    return NextResponse.json(
+      { error: "Не удалось собрать архив. Попробуйте ещё раз или скачайте документ Word." },
+      { status: 500 },
+    );
+  }
 
   const filename = `${plan.title || "ksp"}.zip`.replace(/[^\p{L}\p{N}_\-. ]/gu, "_");
 
