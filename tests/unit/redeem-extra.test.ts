@@ -134,6 +134,20 @@ describe("redeemActivationCode: отказы", () => {
     expect(codes[0].status).toBe("active"); // откат транзакции
   });
 
+  it("логирует понятную причину, если MongoDB без replica set", async () => {
+    addCode();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    mock.getDb.mockRejectedValue(Object.assign(
+      new Error("Transaction numbers are only allowed on a replica set member or mongos"),
+      { code: 20, name: "MongoServerError" },
+    ));
+    const res = await redeemActivationCode(userId, "test-code");
+    expect(res).toMatchObject({ ok: false, status: 503 });
+    expect(String(log.mock.calls[0]?.[0])).toMatch(/replica set/);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(hashActivationCode("TEST-CODE"));
+    log.mockRestore();
+  });
+
   it("does not leak the code hash in the error message", async () => {
     addCode();
     mock.getDb.mockRejectedValue(new Error(`secret codeHash ${hashActivationCode("TEST-CODE")}`));

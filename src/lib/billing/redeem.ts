@@ -84,8 +84,16 @@ export async function redeemActivationCode(userId: string, code: unknown): Promi
     } finally {
       await session.endSession();
     }
-  } catch {
-    // Не логируем код и не раскрываем состояние документа при сбое.
+  } catch (err) {
+    // Не логируем код и не раскрываем состояние документа при сбое — только тип ошибки для диагностики.
+    const e = err as { name?: string; code?: unknown; message?: string };
+    const standalone = e.code === 20 || /replica set member or mongos/i.test(e.message ?? "");
+    console.error(
+      standalone
+        ? "[billing/redeem] транзакции недоступны: MongoDB запущена без replica set (нужен Atlas или rs)"
+        : "[billing/redeem] активация не удалась",
+      { name: e.name, code: e.code },
+    );
     return { ok: false, error: "Активация временно недоступна. Попробуйте позже.", status: 503 };
   }
 }

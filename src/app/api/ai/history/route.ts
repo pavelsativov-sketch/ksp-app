@@ -31,34 +31,40 @@ export async function GET(request: Request) {
     return NextResponse.json({ items: [], cutoff: retentionCutoff().toISOString(), ttlDays: AI_HISTORY_TTL_DAYS });
   }
 
-  const db = await getDb();
-  const cutoff = retentionCutoff();
+  // Сбой БД/генерации должен давать JSON-ошибку с текстом, а не пустой 500.
+  try {
+    const db = await getDb();
+    const cutoff = retentionCutoff();
 
-  const filter: Record<string, unknown> = {
-    user_id: requestedUserId,
-    createdAt: { $gte: cutoff },
-    // history entries have schema_version; skip quota slots (seq)
-    schema_version: { $exists: true },
-  };
+    const filter: Record<string, unknown> = {
+      user_id: requestedUserId,
+      createdAt: { $gte: cutoff },
+      // history entries have schema_version; skip quota slots (seq)
+      schema_version: { $exists: true },
+    };
 
-  const docs = await db
-    .collection<AiHistoryDoc>(COL.aiEvents)
-    .find(filter)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .toArray();
+    const docs = await db
+      .collection<AiHistoryDoc>(COL.aiEvents)
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
 
-  const items = docs
-    .filter((d) => d._id instanceof ObjectId)
-    .map((d) => toPublicHistory(d as AiHistoryDoc & { _id: ObjectId }));
+    const items = docs
+      .filter((d) => d._id instanceof ObjectId)
+      .map((d) => toPublicHistory(d as AiHistoryDoc & { _id: ObjectId }));
 
-  // total — общее число записей пользователя (не размер страницы), иначе
-  // пагинация в UI считала бы «всё» по первой странице.
-  const total = await db.collection<AiHistoryDoc>(COL.aiEvents).countDocuments(filter);
+    // total — общее число записей пользователя (не размер страницы), иначе
+    // пагинация в UI считала бы «всё» по первой странице.
+    const total = await db.collection<AiHistoryDoc>(COL.aiEvents).countDocuments(filter);
 
-  return NextResponse.json(
-    { items, cutoff: cutoff.toISOString(), ttlDays: AI_HISTORY_TTL_DAYS, total },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+    return NextResponse.json(
+      { items, cutoff: cutoff.toISOString(), ttlDays: AI_HISTORY_TTL_DAYS, total },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (err) {
+    console.error("[ai/history] запрос не удался", err);
+    return NextResponse.json({ error: "Не удалось загрузить историю. Попробуйте позже." }, { status: 500 });
+  }
 }

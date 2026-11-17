@@ -92,6 +92,8 @@ export function StudentsClient({ schoolId }: { schoolId: string }) {
   async function setStudentStatus(student: Student) {
       const active = !student.status || student.status === "active";
       const status = active ? "transferred" : "active";
+      // Архивация убирает ученика из журналов и посещаемости — подтверждаем, чтобы не сделать это случайно.
+      if (active && !window.confirm(`Перевести в архив: ${student.full_name}? Ученик пропадёт из списков класса; вернуть можно через «Показать архив».`)) return;
     setSavingId(student._id); setNotice(null);
     try {
       const response = await fetch(`/api/school/${schoolId}/students/${student._id}`, {

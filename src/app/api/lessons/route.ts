@@ -28,9 +28,15 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Укажите класс, предмет и тему." }, { status: 400 });
 
-  const result = await productTools.createKsp({ ...parsed.data, saveCopy: false, teacherName: auth.user.fullName ?? undefined }, { userId: auth.user.id, taskId: "site" });
-  if (!result.success || !("planId" in result)) {
-    return NextResponse.json({ error: result.error ?? "Не удалось создать урок." }, { status: 503 });
+  // Сбой БД/генерации должен давать JSON-ошибку с текстом, а не пустой 500.
+  try {
+    const result = await productTools.createKsp({ ...parsed.data, saveCopy: false, teacherName: auth.user.fullName ?? undefined }, { userId: auth.user.id, taskId: "site" });
+    if (!result.success || !("planId" in result)) {
+      return NextResponse.json({ error: result.error ?? "Не удалось создать урок." }, { status: 503 });
+    }
+    return NextResponse.json({ planId: result.planId });
+  } catch (err) {
+    console.error("[lessons] запрос не удался", err);
+    return NextResponse.json({ error: "Не удалось создать урок. Попробуйте ещё раз." }, { status: 500 });
   }
-  return NextResponse.json({ planId: result.planId });
 }

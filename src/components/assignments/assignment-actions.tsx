@@ -16,6 +16,8 @@ export function AssignmentActions({ id, code, status }: { id: string; code: stri
   const [copied, setCopied] = useState(false);
 
   async function act(action: "repeat" | "close") {
+    // Закрытие сразу отрезает учеников от сдачи — случайный клик не должен этого делать.
+    if (action === "close" && !window.confirm(a.closeConfirm)) return;
     setPending(action);
     setError(null);
     try {

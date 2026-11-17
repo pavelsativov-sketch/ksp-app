@@ -38,36 +38,42 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
   const rl = await checkRateLimitAsync(`quiz:results:${user.id}`, 20, 3600_000);
   if (!rl.ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
-  const db = await getDb();
-  const room = await db.collection<RoomDoc>(COL.quizRooms).findOne({ code });
-  if (!room) return NextResponse.json({ error: "Комната не найдена" }, { status: 404 });
-  if (room.ownerId !== user.id) {
-    return NextResponse.json({ error: "Доступ только для ведущего квиза" }, { status: 403 });
+  // Сбой БД/генерации должен давать JSON-ошибку с текстом, а не пустой 500.
+  try {
+    const db = await getDb();
+    const room = await db.collection<RoomDoc>(COL.quizRooms).findOne({ code });
+    if (!room) return NextResponse.json({ error: "Комната не найдена" }, { status: 404 });
+    if (room.ownerId !== user.id) {
+      return NextResponse.json({ error: "Доступ только для ведущего квиза" }, { status: 403 });
+    }
+
+    const rows = Object.entries(room.students ?? {})
+      .map(([studentId, s]) => ({
+        name: s.name || "Ученик",
+        score: s.score ?? 0,
+        answered: s.answered ?? 0,
+        studentId,
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    const lines = [
+      ["Место", "Имя", "Очки", "Ответов"].map(csvCell).join(";"),
+      ...rows.map((r, i) =>
+        [i + 1, r.name, r.score, r.answered].map(csvCell).join(";"),
+      ),
+    ];
+    // BOM для корректного открытия кириллицы в Excel.
+    const csv = "\uFEFF" + lines.join("\r\n");
+
+    return new Response(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="quiz-${code}-results.csv"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err) {
+    console.error("[quiz/results] запрос не удался", err);
+    return NextResponse.json({ error: "Не удалось выгрузить результаты. Попробуйте позже." }, { status: 500 });
   }
-
-  const rows = Object.entries(room.students ?? {})
-    .map(([studentId, s]) => ({
-      name: s.name || "Ученик",
-      score: s.score ?? 0,
-      answered: s.answered ?? 0,
-      studentId,
-    }))
-    .sort((a, b) => b.score - a.score);
-
-  const lines = [
-    ["Место", "Имя", "Очки", "Ответов"].map(csvCell).join(";"),
-    ...rows.map((r, i) =>
-      [i + 1, r.name, r.score, r.answered].map(csvCell).join(";"),
-    ),
-  ];
-  // BOM для корректного открытия кириллицы в Excel.
-  const csv = "\uFEFF" + lines.join("\r\n");
-
-  return new Response(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="quiz-${code}-results.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
 }

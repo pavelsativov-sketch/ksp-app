@@ -256,7 +256,7 @@ function AgentPanel({ c, bilimConnected, agentOnline }: { c: AppCopy; bilimConne
         </div>
       </div>
       <p className={s.agentLead}>{c.agentLead}</p>
-      <Link href={bilimConnected ? "/school?os=browser" : "/school?os=browser"} className={s.bilim}>
+      <Link href="/school?os=browser" className={s.bilim}>
         <span className={s.bilimMark}>B</span>
         <span className={s.bilimName}>BilimClass</span>
         <span className={bilimConnected ? s.bilimOn : s.bilimOff}>{bilimConnected ? c.connected : c.notConnected}</span>
