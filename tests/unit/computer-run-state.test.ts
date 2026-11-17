@@ -27,7 +27,7 @@ import {
 const USER = "u1";
 
 beforeEach(() => {
-  db.current = fakeDb();
+  db.current = fakeDb({ agent_computer_runs: ["user_id"] });
 });
 
 describe("состояние запуска", () => {
@@ -35,6 +35,11 @@ describe("состояние запуска", () => {
     expect(await beginRun(USER, "Открой сайт")).toBe(true);
     expect(await beginRun(USER, "Ещё одно")).toBe(false);
     expect((await getRunState(USER))?.goal).toBe("Открой сайт");
+  });
+
+  it("два одновременных запуска: слот получает ровно один", async () => {
+    const results = await Promise.all([beginRun(USER, "A"), beginRun(USER, "B")]);
+    expect(results.filter(Boolean)).toHaveLength(1);
   });
 
   it("слот освобождается после завершения", async () => {

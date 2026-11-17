@@ -12,6 +12,7 @@ const mock = vi.hoisted(() => ({
   rate: vi.fn(),
   runLoop: vi.fn(),
   setControl: vi.fn(),
+  releaseControl: vi.fn(async () => {}),
   db: null as unknown as ReturnType<typeof import("../helpers/fake-mongo").fakeDb>,
 }));
 
@@ -31,6 +32,7 @@ vi.mock("@/lib/agents/ssrf", () => ({
 vi.mock("@/lib/agents/session", () => ({
   getControlOwner: vi.fn(async () => "ai"),
   setControlOwner: mock.setControl,
+  releaseControlToUser: mock.releaseControl,
 }));
 vi.mock("@/lib/agents/computer/loop", () => ({ runComputerUse: mock.runLoop }));
 vi.mock("@/lib/logger", () => ({ log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() } }));
@@ -58,7 +60,7 @@ const isRunning = async () => (await (await GET(new Request("http://x/api/agents
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mock.db = fakeDb();
+  mock.db = fakeDb({ agent_computer_runs: ["user_id"] });
   mock.apiAuth.mockResolvedValue({ user: { id: userId } });
   mock.rate.mockResolvedValue({ ok: true });
   mock.setControl.mockResolvedValue(undefined);
@@ -106,5 +108,16 @@ describe("остановка агента «Работа с компьютеро
     expect(second.status).toBe(409);
     await DELETE();
     await first;
+  });
+
+  it("после конца цикла (успех или сбой) управление возвращается учителю", async () => {
+    mock.runLoop.mockResolvedValueOnce("готово");
+    expect((await POST(post())).status).toBe(200);
+    expect(mock.releaseControl).toHaveBeenCalledWith(userId);
+
+    mock.releaseControl.mockClear();
+    mock.runLoop.mockRejectedValueOnce(new Error("boom"));
+    expect((await POST(post())).status).toBe(502);
+    expect(mock.releaseControl).toHaveBeenCalledWith(userId);
   });
 });

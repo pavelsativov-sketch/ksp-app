@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
-import { getControlOwner, setControlOwner } from "@/lib/agents/session";
+import { getControlOwner, releaseControlToUser, setControlOwner } from "@/lib/agents/session";
 import { runComputerUse, type AgentPage, type LoopEvent } from "@/lib/agents/computer/loop";
 import {
   cancelAll,
@@ -147,6 +147,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message, events, detail: reason.slice(0, 300) }, { status: failure.status === 429 ? 429 : 502 });
   } finally {
     await endRun(userId).catch(() => {});
+    // Цикл окончен (успех, ошибка, ранний return) — рабочая область снова у учителя.
+    await releaseControlToUser(userId).catch(() => {});
   }
 }
 

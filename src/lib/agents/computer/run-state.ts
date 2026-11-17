@@ -39,15 +39,23 @@ async function runs() {
 
 /** Занять слот запуска. false — у пользователя уже работает живой агент. */
 export async function beginRun(userId: string, goal: string, now = new Date()): Promise<boolean> {
-  const collection = await runs();
-  const existing = await collection.findOne({ user_id: userId });
-  if (existing?.active && now.getTime() - existing.heartbeat_at.getTime() < RUN_STALE_MS) return false;
-  await collection.updateOne(
-    { user_id: userId },
-    { $set: { active: true, goal: goal.slice(0, 200), started_at: now, heartbeat_at: now, events: [], auth_barrier: null, stop_requested: false } },
-    { upsert: true },
-  );
-  return true;
+  // Одна атомарная операция: занимаем слот, только если он свободен или протух.
+  // Занятый живой слот не совпадёт с фильтром, и upsert упрётся в уникальный
+  // индекс по user_id (E11000) — это и есть «уже работает».
+  try {
+    await (await runs()).updateOne(
+      {
+        user_id: userId,
+        $or: [{ active: { $ne: true } }, { heartbeat_at: { $lte: new Date(now.getTime() - RUN_STALE_MS) } }],
+      },
+      { $set: { active: true, goal: goal.slice(0, 200), started_at: now, heartbeat_at: now, events: [], auth_barrier: null, stop_requested: false } },
+      { upsert: true },
+    );
+    return true;
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) return false;
+    throw error;
+  }
 }
 
 export async function pushRunEvent(userId: string, event: LoopEvent): Promise<void> {
