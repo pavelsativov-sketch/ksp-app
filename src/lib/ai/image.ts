@@ -215,17 +215,17 @@ export async function generateImage(
     if (result) return result;
   }
 
-  // 2. FLUX.2 [dev] через Cloudflare — второе по качеству.
+  // 2. FLUX.1 schnell через Cloudflare первым: бесплатных 10 000 «нейронов» в сутки
+  //    FLUX.2 [dev] съел за несколько десятков картинок, а schnell в разы дешевле,
+  //    и для иллюстрации задания без текста его качества хватает (проверено вживую).
+  //    Принимает JSON-тело и не принимает width/height.
   if (accountId && token) {
-    const result = await attempt("FLUX.2", () => generateWithFlux(input, accountId, token));
-    if (result) return result;
-
-    // 3. FLUX.1 schnell — быстрый и дешёвый резерв. Проверен живой пробой:
-    //    в отличие от FLUX.2 принимает JSON-тело и не принимает width/height.
-    //    Без него единственный рабочий провайдер оставался единственным: при
-    //    его лимите иллюстрации не создавались вовсе.
     const fast = await attempt("FLUX.1 schnell", () => generateWithFluxFast(input, accountId, token));
     if (fast) return fast;
+
+    // 3. FLUX.2 [dev] — резерв, если schnell не ответил.
+    const result = await attempt("FLUX.2", () => generateWithFlux(input, accountId, token));
+    if (result) return result;
   }
 
   // 4. DALL-E 3 — последний резерв.
@@ -430,7 +430,8 @@ async function generateWithFluxFast(
       "Content-Type": "application/json",
     },
     // width/height здесь не передаются: модель их не принимает.
-    body: JSON.stringify({ prompt, steps: 4, num_steps: 4 }),
+    // Только steps: поле num_steps модель отвергает (5006 «unevaluated properties '/num_steps'»).
+    body: JSON.stringify({ prompt, steps: 4 }),
     signal: AbortSignal.timeout(60_000),
   });
 

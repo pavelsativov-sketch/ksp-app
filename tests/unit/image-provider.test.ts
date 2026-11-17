@@ -57,15 +57,28 @@ const PNG_BYTES = (() => {
 })();
 const success = () => Response.json({ result: { image: PNG_BYTES } });
 
+/**
+ * FLUX.1 schnell первый и без повторов; повторы с паузой есть у FLUX.2. Чтобы проверить их,
+ * schnell в этих тестах недоступен (400), а ответы FLUX.2 идут из очереди.
+ */
+function flux2Responses(...responses: Array<() => Response>) {
+  const queue = [...responses];
+  fetchMock.mockImplementation(async (url: string) => {
+    if (String(url).includes(FLUX_SCHNELL)) return Response.json({ errors: [{ code: 5006, message: "down" }] }, { status: 400 });
+    return (queue.length > 1 ? queue.shift()! : queue[0]!)();
+  });
+}
+
 describe("Cloudflare image requests", () => {
   it("returns a successful image without retrying", async () => {
     fetchMock.mockResolvedValue(success());
     expect((await generateImage({ prompt: "Apple" })).base64).toBe(PNG_BYTES);
-    expect(callsTo(FLUX2)).toBe(1);
+    expect(callsTo(FLUX_SCHNELL)).toBe(1);
+    expect(callsTo(FLUX2)).toBe(0);
     expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
-  it.each([429, 500, 503])("retries a transient HTTP %s only once", async (status) => {
-    fetchMock.mockResolvedValueOnce(new Response("Temporary", { status, headers: { "Retry-After": "1" } })).mockResolvedValueOnce(success());
+  it.each([429, 500, 503])("FLUX.2 retries a transient HTTP %s only once", async (status) => {
+    flux2Responses(() => new Response("Temporary", { status, headers: { "Retry-After": "1" } }), success);
     const promise = generateImage({ prompt: "Apple" });
     await vi.runAllTimersAsync();
     expect((await promise).base64).toBe(PNG_BYTES);
@@ -75,24 +88,22 @@ describe("Cloudflare image requests", () => {
     fetchMock.mockResolvedValue(new Response("secret-test-token", { status: 401 }));
     await expect(generateImage({ prompt: "Apple" })).rejects.toThrow("Cloudflare API error 401");
     expect(callsTo(FLUX2)).toBe(1);
+    expect(callsTo(FLUX_SCHNELL)).toBe(1);
   });
   it("does not retry a 400 and surfaces sanitized provider error codes", async () => {
-    fetchMock.mockResolvedValue(Response.json(
-      { errors: [{ code: 7001, message: "prompt validation failed" }] },
-      { status: 400 },
-    ));
+    flux2Responses(() => Response.json({ errors: [{ code: 7001, message: "prompt validation failed" }] }, { status: 400 }));
     await expect(generateImage({ prompt: "Apple" })).rejects.toThrow("Cloudflare API error 400 [7001: prompt validation failed]");
     expect(callsTo(FLUX2)).toBe(1);
   });
   it("caps retries when the provider remains unavailable", async () => {
-    fetchMock.mockImplementation(async () => new Response("Temporary", { status: 503 }));
+    flux2Responses(() => new Response("Temporary", { status: 503 }));
     const assertion = expect(generateImage({ prompt: "Apple" })).rejects.toThrow("Cloudflare API error 503");
     await vi.runAllTimersAsync();
     await assertion;
     expect(callsTo(FLUX2)).toBe(2);
   });
   it("waits about a minute before the retry on 429", async () => {
-    fetchMock.mockResolvedValueOnce(new Response("Limited", { status: 429 })).mockResolvedValueOnce(success());
+    flux2Responses(() => new Response("Limited", { status: 429 }), success);
     const promise = generateImage({ prompt: "Apple" });
     await vi.advanceTimersByTimeAsync(59_999);
     expect(callsTo(FLUX2)).toBe(1);
@@ -114,26 +125,23 @@ describe("ротация провайдеров", () => {
     return promise;
   }
 
-  it("при отказе FLUX.2 берёт картинку у резервного FLUX.1 schnell", async () => {
-    // Без резерва единственный рабочий провайдер оставался единственным:
-    // при его лимите иллюстрации не создавались вообще.
+  it("при отказе дешёвого FLUX.1 schnell берёт картинку у резервного FLUX.2", async () => {
+    // Schnell первый: FLUX.2 съедал суточный бесплатный лимит Cloudflare за десятки картинок.
     fetchMock.mockImplementation(async (url: string) =>
-      String(url).includes(FLUX2)
+      String(url).includes(FLUX_SCHNELL)
         ? new Response("busy", { status: 503 })
         : success(),
     );
     const result = await generateWithTimers({ prompt: "Apple" });
-    expect(result.model).toBe("FLUX.1 schnell");
+    expect(result.model).toBe("FLUX.2 [dev]");
     expect(result.base64).toBe(PNG_BYTES);
-    expect(callsTo(FLUX_SCHNELL)).toBe(1);
+    expect(callsTo(FLUX2)).toBe(1);
   });
 
   it("FLUX.1 schnell получает JSON без width/height: модель их не принимает", async () => {
     // Проверено живым запросом: с width/height Cloudflare отвечает 5006,
     // с multipart — 6003. Ошибка стоила бы всех иллюстраций.
-    fetchMock.mockImplementation(async (url: string) =>
-      String(url).includes(FLUX2) ? new Response("busy", { status: 503 }) : success(),
-    );
+    fetchMock.mockResolvedValue(success());
     await generateWithTimers({ prompt: "Apple" });
     const schnellCall = fetchMock.mock.calls.find((call) => String(call[0]).includes(FLUX_SCHNELL));
     expect(schnellCall).toBeTruthy();
@@ -142,6 +150,8 @@ describe("ротация провайдеров", () => {
     const body = JSON.parse(String(init.body));
     expect(body.width).toBeUndefined();
     expect(body.height).toBeUndefined();
+    // num_steps модель отвергает с 400 (5006), из-за этого schnell не работал вовсе.
+    expect(body.num_steps).toBeUndefined();
     expect(body.prompt).toBeTruthy();
   });
 
