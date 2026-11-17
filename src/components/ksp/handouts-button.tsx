@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import type { FlashcardSet, Handout, Worksheet } from "@/lib/handouts/types";
 import { HandoutPreview } from "./handout-preview";
 import { menuSide } from "@/lib/ui/menu-side";
-import { fetchPlanMaterial } from "@/lib/materials/plan-material-client";
+import { announceMaterialSaved, fetchPlanMaterial } from "@/lib/materials/plan-material-client";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import type { Dict } from "@/lib/i18n/dictionaries";
 
@@ -298,6 +298,7 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
         setPreview(next);
         setCached(next);
         saveCache(cacheKey, next);
+        announceMaterialSaved();
       }
       setOpen(false);
     } catch (e) {

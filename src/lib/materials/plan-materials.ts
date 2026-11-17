@@ -1,6 +1,7 @@
 import { COL, getDb } from "@/lib/mongo";
 import { getPlanById } from "@/lib/plans-repo";
 import type { MaterialKind, StageKey } from "@/lib/types/ksp";
+import type { WorksheetTask } from "@/lib/handouts/types";
 
 /**
  * Материалы урока на сервере (docs/lesson-kit-design.md, шаг 1). Раньше лист, ООП,
@@ -79,6 +80,16 @@ export async function listPlanMaterials(planId: string, ownerId: string): Promis
 
 export async function getPlanMaterial(planId: string, ownerId: string, kind: MaterialKind): Promise<PlanMaterialDoc | null> {
   return (await collection()).findOne({ _id: materialId(planId, kind), owner_id: ownerId });
+}
+
+/** Задания рабочего листа без картинок и Word-файла: для баллов в «Оценивании». */
+export async function getWorksheetTasks(planId: string, ownerId: string): Promise<{ stage: StageKey; tasks: WorksheetTask[] } | null> {
+  const doc = await (await collection()).findOne(
+    { _id: materialId(planId, "worksheet"), owner_id: ownerId },
+    { projection: { stage: 1, "payload.handout.tasks.descriptor": 1, "payload.handout.tasks.criterion": 1, "payload.handout.tasks.points": 1 } },
+  );
+  const tasks = (doc?.payload as { handout?: { tasks?: WorksheetTask[] } } | undefined)?.handout?.tasks;
+  return doc && Array.isArray(tasks) ? { stage: doc.stage, tasks } : null;
 }
 
 export async function deletePlanMaterial(planId: string, ownerId: string, kind: MaterialKind): Promise<boolean> {

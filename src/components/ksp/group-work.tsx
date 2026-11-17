@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { GroupCard, GroupMode, GroupWork } from "@/lib/handouts/group-work";
 import { downloadSheetImages } from "@/lib/handouts/sheet-export";
 import { menuSide } from "@/lib/ui/menu-side";
-import { fetchPlanMaterial } from "@/lib/materials/plan-material-client";
+import { announceMaterialSaved, fetchPlanMaterial } from "@/lib/materials/plan-material-client";
 import s from "./group-work.module.css";
 
 /** Цвета кружков-номеров заданий, как на образце: оранжевый, зелёный, розовый, синий, фиолетовый. */
@@ -153,6 +153,7 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
       if (!res.ok || !data?.work) throw new Error(data?.error || "Не удалось составить карточки");
       setWork(data.work);
       setOpen(false);
+      announceMaterialSaved();
       try {
         localStorage.setItem(cacheKey(planId), JSON.stringify(data.work));
       } catch {

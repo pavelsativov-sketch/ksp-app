@@ -57,10 +57,11 @@ const PLACEMENT: Record<MaterialKind, { stage: StageKey; form: WorkForm | null }
 };
 
 /** Порядок на этапе: сначала пары и группы, потом самостоятельная работа. */
-const ORDER: MaterialKind[] = ["deck", "crossword", "pair_cards", "group_cards", "worksheet", "oop_sheet", "interactive", "flashcards"];
+export const ORDER: MaterialKind[] = ["deck", "crossword", "pair_cards", "group_cards", "worksheet", "oop_sheet", "interactive", "flashcards"];
 
-function slotTitle(kind: MaterialKind, answers: KitAnswers, language: "ru" | "kz"): string {
-  const n = answers.groups;
+/** Как материал назван в КСП. groups — число групп для карточек групповой работы. */
+export function slotTitle(kind: MaterialKind, groups: number, language: "ru" | "kz"): string {
+  const n = groups;
   const ru: Record<MaterialKind, string> = {
     worksheet: "Рабочий лист (индивидуальная работа, 10 баллов)",
     oop_sheet: "Лист для ученика с ООП",
@@ -103,7 +104,7 @@ export function planKitSlots(answers: KitAnswers, language: "ru" | "kz"): Materi
     kind,
     stage: PLACEMENT[kind].stage,
     status: "planned",
-    title: slotTitle(kind, answers, language),
+    title: slotTitle(kind, answers.groups, language),
   }));
 }
 
@@ -183,7 +184,8 @@ export function applyKitToContent(content: KspContent, kit: LessonKit): KspConte
     if (deck) resources = withResource(resources, deck.title);
     for (const slot of own) resources = withResource(resources, slot.title);
     const activities = own.map(activityFor).filter((activity): activity is LessonActivity => activity !== null);
-    stages[stage] = { ...current, resources, ...(activities.length ? { activities } : {}) };
+    // Действия этапа целиком из комплекта: материал, перенесённый на другой этап, здесь не остаётся.
+    stages[stage] = { ...current, resources, activities: activities.length ? activities : undefined };
   }
   return { ...content, stages, kit };
 }

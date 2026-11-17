@@ -263,7 +263,7 @@ export default async function PlanViewPage({
 
       <section id="materials" aria-labelledby="materials-title" className={`${l.section} no-print`}>
         <h2 id="materials-title" className={l.sectionTitle}>Материалы урока</h2>
-        {isOwner && plan.content?.kit?.slots?.length ? (
+        {isOwner && plan.content ? (
           <KitPanel
             kit={plan.content.kit}
             ctx={{ planId: plan.id, topic: plan.content.topic || plan.title, subject: subjectName, grade: plan.grade, language: plan.language, kspContext: handoutKspContext ?? undefined, values: plan.content.values }}
