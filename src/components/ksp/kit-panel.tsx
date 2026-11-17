@@ -179,12 +179,15 @@ export function KitPanel({ kit: kitProp, ctx, footer }: { kit?: LessonKit; ctx: 
     void refresh().then((kinds) => {
       if (!autostart || !kinds) return;
       const fresh = readRuns(planId);
-      for (const slot of kit.slots) {
-        if (DERIVED_KINDS[slot.kind] || kinds.has(slot.kind)) continue;
+      const todo = kit.slots.filter((slot) => {
+        if (DERIVED_KINDS[slot.kind] || kinds.has(slot.kind)) return false;
         const startedAt = fresh[slot.kind];
-        if (startedAt && Date.now() - startedAt < RUN_WINDOW_MS) continue;
-        void start(slot);
-      }
+        return !(startedAt && Date.now() - startedAt < RUN_WINDOW_MS);
+      });
+      // Презентация после остальных: её слайды «Групповая работа» и «Оценивание» берутся из готовых карточек и листа.
+      const deck = todo.find((slot) => slot.kind === "deck");
+      const rest = todo.filter((slot) => slot !== deck);
+      void Promise.allSettled(rest.map((slot) => start(slot))).then(() => (deck ? start(deck) : undefined));
     });
   }, [kit.slots, planId, refresh, start]);
 

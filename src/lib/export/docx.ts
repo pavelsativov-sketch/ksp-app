@@ -13,6 +13,7 @@ import {
   Footer,
 } from "docx";
 import type { LessonPlanRow, LessonStage } from "@/lib/types/ksp";
+import { activityLine, kitSummaryRows } from "@/lib/materials/kit";
 import { type InteractiveTask, taskTypeLabel } from "@/lib/ksp/tasks";
 
 function pluralPoints(n: number): string {
@@ -170,6 +171,10 @@ function studentCellChildren(stage: LessonStage): Paragraph[] {
         .filter((s) => s.trim())
         .map((line) => new Paragraph({ text: line })),
     );
+  }
+  // Комплект урока: форма работы и материал этапа, как их выбрал учитель.
+  for (const activity of stage.activities ?? []) {
+    out.push(new Paragraph({ children: [new TextRun({ text: activityLine(activity), bold: true })], spacing: { before: 80 } }));
   }
   return out;
 }
@@ -396,6 +401,7 @@ export async function buildKspDocx(
         `${c.header.studentsPresent ?? "—"} / ${c.header.studentsAbsent ?? "—"}`,
       ),
       labelRow("Тема урока", c.topic),
+      ...(c.kit ? kitSummaryRows(c.kit).map(([label, value]) => labelRow(label, value)) : []),
     ],
   });
 

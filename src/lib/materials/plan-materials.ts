@@ -92,6 +92,25 @@ export async function getWorksheetTasks(planId: string, ownerId: string): Promis
   return doc && Array.isArray(tasks) ? { stage: doc.stage, tasks } : null;
 }
 
+/** Карточки групп или пар без картинок: названия и задания для слайда «Групповая работа». */
+export async function getGroupCardsSummary(planId: string, ownerId: string): Promise<{ mode: "group" | "pair"; cards: Array<{ title: string; tasks: string[] }> } | null> {
+  const docs = await (await collection())
+    .find(
+      { _id: { $in: [materialId(planId, "group_cards"), materialId(planId, "pair_cards")] }, owner_id: ownerId },
+      { projection: { kind: 1, updated_at: 1, "payload.cards.title": 1, "payload.cards.tasks.text": 1 } },
+    )
+    .sort({ updated_at: -1 })
+    .limit(1)
+    .toArray();
+  const doc = docs[0];
+  const cards = (doc?.payload as { cards?: Array<{ title?: string; tasks?: Array<{ text?: string }> }> } | undefined)?.cards;
+  if (!doc || !Array.isArray(cards) || cards.length === 0) return null;
+  return {
+    mode: doc.kind === "pair_cards" ? "pair" : "group",
+    cards: cards.map((card) => ({ title: card.title ?? "", tasks: (card.tasks ?? []).map((task) => task.text ?? "").filter(Boolean) })),
+  };
+}
+
 export async function deletePlanMaterial(planId: string, ownerId: string, kind: MaterialKind): Promise<boolean> {
   const result = await (await collection()).deleteOne({ _id: materialId(planId, kind), owner_id: ownerId });
   return result.deletedCount > 0;

@@ -160,6 +160,26 @@ export function kitPromptSection(kit: LessonKit): string {
   return lines.join("\n");
 }
 
+const FORM_TITLE: Record<WorkForm, string> = { individual: "Индивидуальная", pair: "Парная", group: "Групповая", frontal: "Фронтальная" };
+
+/** Строки шапки КСП в Word: формы работы, ученики с ООП, длительность. */
+export function kitSummaryRows(kit: LessonKit): Array<[string, string]> {
+  const forms = kit.workForms
+    .map((form) => (form === "group" && kit.groups ? `${FORM_NAME[form]} (${kit.groups} группы)` : FORM_NAME[form]))
+    .join(", ");
+  const oop = kit.oop?.present ? `есть${kit.oop.notes ? `: ${kit.oop.notes}` : ""}` : "нет";
+  return [
+    ["Формы работы", forms.charAt(0).toUpperCase() + forms.slice(1)],
+    ["Ученики с ООП", oop],
+    ["Длительность урока", `${kit.minutes} мин`],
+  ];
+}
+
+/** «Групповая работа: Карточки групповой работы (3 группы)» — строка действия этапа. */
+export function activityLine(activity: LessonActivity): string {
+  return `${FORM_TITLE[activity.form]} работа: ${activity.title}`;
+}
+
 function activityFor(slot: MaterialSlot): LessonActivity | null {
   const form = PLACEMENT[slot.kind].form;
   return form ? { form, title: slot.title, slotId: slot.id } : null;

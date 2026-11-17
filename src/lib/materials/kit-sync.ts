@@ -37,6 +37,15 @@ export function worksheetAssessmentLines(tasks: Array<Pick<WorksheetTask, "descr
     });
 }
 
+/** Те же баллы для слайда «Оценивание»: «Задание 1. Находит числитель — 2 балла». */
+export function worksheetDeckPoints(tasks: Array<Pick<WorksheetTask, "descriptor" | "criterion" | "points">>, language: Lang): string[] {
+  const word = language === "kz" ? "Тапсырма" : "Задание";
+  return tasks
+    .map((task, i) => ({ task, n: i + 1 }))
+    .filter(({ task }) => task.points > 0)
+    .map(({ task, n }) => `${word} ${n}. ${(task.descriptor || task.criterion || "").trim().replace(/[.;]+$/, "")} — ${task.points} ${pointsWord(task.points, language)}`);
+}
+
 /**
  * Баллы листа становятся шкалой урока на 10 баллов: на этапе листа прежние строки
  * с баллами заменяются строками листа, на других этапах дескрипторы остаются без баллов.

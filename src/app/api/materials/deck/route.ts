@@ -3,8 +3,9 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 import { getPlanById } from "@/lib/plans-repo";
-import { deckRequestSchema, generateDeckOutline } from "@/lib/materials/deck";
-import { saveToOwnedPlan } from "@/lib/materials/plan-materials";
+import { deckFactsFromPlan, deckRequestSchema, generateDeckOutline } from "@/lib/materials/deck";
+import { getGroupCardsSummary, getWorksheetTasks, saveToOwnedPlan } from "@/lib/materials/plan-materials";
+import { worksheetDeckPoints } from "@/lib/materials/kit-sync";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -27,7 +28,17 @@ export async function POST(request: Request) {
   if (!quota.ok) return quota.response;
 
   try {
-    const { slides, fromAi } = await generateDeckOutline(plan);
+    // Слайды групп и оценивания берутся из готовых материалов урока; без них решает модель.
+    const [sheet, groups] = await Promise.all([
+      getWorksheetTasks(plan.id, auth.user.id).catch(() => null),
+      getGroupCardsSummary(plan.id, auth.user.id).catch(() => null),
+    ]);
+    const language = plan.language === "kz" ? "kz" : "ru";
+    const facts = deckFactsFromPlan(plan, {
+      ...(groups ? { groups } : {}),
+      ...(sheet ? { assessment: worksheetDeckPoints(sheet.tasks, language) } : {}),
+    });
+    const { slides, fromAi } = await generateDeckOutline(plan, facts);
     await quota.reservation.finalize(fromAi);
     // Черновик слайдов хранится в уроке: конструктор откроет его на любом устройстве.
     await saveToOwnedPlan({ planId: plan.id, ownerId: auth.user.id, kind: "deck", stage: "beginning", title: "Презентация к уроку", payload: { slides, fromAi } });
