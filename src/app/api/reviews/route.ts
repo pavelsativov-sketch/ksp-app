@@ -4,7 +4,7 @@ import { getDb, COL, isMongoConfigured, toObjectId } from "@/lib/mongo";
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
 import { addReview, getReviews, getUserNames } from "@/lib/comments";
-import type { ReviewRow, UserNameRow } from "@/lib/comments";
+import type { UserNameRow } from "@/lib/comments";
 
 export const runtime = "nodejs";
 

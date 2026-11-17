@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Loader2, Plus, Presentation, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Loader2, Plus, Presentation, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DECK_PALETTES, DECK_THEMES, SLIDE_FIELDS, SLIDE_KINDS, SLIDE_KIND_LABELS, descriptorPoints, parseBranch, splitThesis, type DeckSlide, type DeckTheme, type SlideKind } from "@/lib/materials/deck-types";
-import { fetchPlanMaterial } from "@/lib/materials/plan-material-client";
+import { fetchPlanMaterial, savePlanMaterialClient } from "@/lib/materials/plan-material-client";
+import { MathText } from "@/lib/math/render-math";
+import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import s from "./deck-builder.module.css";
 
 const THEME_LABELS: Record<DeckTheme, string> = { network: "Сеть", lavender: "Лаванда", ocean: "Океан", sunset: "Закат" };
@@ -34,52 +36,52 @@ function SlideView({ slide, theme, play = false }: { slide: DeckSlide; theme: De
   const p = DECK_PALETTES[theme];
   const tone = (i: number) => hex(p.tones[i % p.tones.length]!);
   const light = { background: hex(p.soft), color: hex(p.ink) };
-  const title = <div className={s.sTitle}>{slide.title}</div>;
-  const centerTitle = <div className={`${s.sTitle} ${s.center}`}>{slide.title}</div>;
-  const band = slide.takeaway ? <div className={s.band} style={{ background: hex(p.band) }}>{slide.takeaway}</div> : null;
+  const title = <div className={s.sTitle}><MathText text={slide.title} /></div>;
+  const centerTitle = <div className={`${s.sTitle} ${s.center}`}><MathText text={slide.title} /></div>;
+  const band = slide.takeaway ? <div className={s.band} style={{ background: hex(p.band) }}><MathText text={slide.takeaway} /></div> : null;
   const picture = slide.imagePrompt ? <div className={s.picture}>Картинка ИИ: {slide.imagePrompt}</div> : null;
   let body;
   switch (slide.kind) {
     case "title":
-      body = <><div className={s.grow} style={{ justifyContent: "center" }}><div className={s.sTitle} style={{ fontSize: "5.4cqw", maxWidth: "62%" }}>{slide.title}</div><div className={s.sLead} style={{ color: hex(p.accent), fontWeight: 700, fontSize: "3cqw" }}>{slide.lead}</div></div></>;
+      body = <><div className={s.grow} style={{ justifyContent: "center" }}><div className={s.sTitle} style={{ fontSize: "5.4cqw", maxWidth: "62%" }}><MathText text={slide.title} /></div><div className={s.sLead} style={{ color: hex(p.accent), fontWeight: 700, fontSize: "3cqw" }}><MathText text={slide.lead} /></div></div></>;
       break;
     case "mood":
-      body = <>{centerTitle}<div className={s.grid2}>{slide.points.map((point, i) => <div key={i} className={s.box} style={{ background: tone(i) }}>{point}</div>)}</div></>;
+      body = <>{centerTitle}<div className={s.grid2}>{slide.points.map((point, i) => <div key={i} className={s.box} style={{ background: tone(i) }}><MathText text={point} /></div>)}</div></>;
       break;
     case "guess":
-      body = <>{centerTitle}{picture}<div className={s.row}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={light}>{point}</div>)}</div></>;
+      body = <>{centerTitle}{picture}<div className={s.row}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={light}><MathText text={point} /></div>)}</div></>;
       break;
     case "goals":
-      body = <>{title}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={s.row}><div className={s.box} style={{ flex: "0 0 7cqw", background: tone(i) }}>{i + 1}</div><div className={`${s.box} ${s.boxLight}`} style={light}>{point}</div></div>)}</div></>;
+      body = <>{title}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={s.row}><div className={s.box} style={{ flex: "0 0 7cqw", background: tone(i) }}>{i + 1}</div><div className={`${s.box} ${s.boxLight}`} style={light}><MathText text={point} /></div></div>)}</div></>;
       break;
     case "flow":
-      body = <>{title}<div className={s.sLead} style={{ color: hex(p.muted) }}>{slide.lead}</div>
-        <div className={s.row}>{slide.steps.flatMap((step, i) => [<div key={i} className={`${s.box} ${s.tall}`} style={{ background: tone(i) }}>{step}</div>, i < slide.steps.length - 1 ? <span key={`a${i}`} className={s.arrow} style={{ color: hex(p.accent) }}>➜</span> : null])}</div>
-        <div className={s.row} style={{ flex: 1, alignItems: "stretch" }}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={{ background: "#fff", color: hex(p.ink), border: `1px solid ${tone(i)}` }}>{point}</div>)}</div></>;
+      body = <>{title}<div className={s.sLead} style={{ color: hex(p.muted) }}><MathText text={slide.lead} /></div>
+        <div className={s.row}>{slide.steps.flatMap((step, i) => [<div key={i} className={`${s.box} ${s.tall}`} style={{ background: tone(i) }}><MathText text={step} /></div>, i < slide.steps.length - 1 ? <span key={`a${i}`} className={s.arrow} style={{ color: hex(p.accent) }}>➜</span> : null])}</div>
+        <div className={s.row} style={{ flex: 1, alignItems: "stretch" }}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={{ background: "#fff", color: hex(p.ink), border: `1px solid ${tone(i)}` }}><MathText text={point} /></div>)}</div></>;
       break;
     case "list":
-      body = <>{title}<div className={s.split} style={{ paddingBottom: slide.takeaway ? "7cqw" : 0 }}><div className={s.grow} style={{ justifyContent: "space-around" }}>{slide.points.map((point, i) => <div key={i} className={s.bullet}>•  {point}</div>)}</div>{picture}</div>{band}</>;
+      body = <>{title}<div className={s.split} style={{ paddingBottom: slide.takeaway ? "7cqw" : 0 }}><div className={s.grow} style={{ justifyContent: "space-around" }}>{slide.points.map((point, i) => <div key={i} className={s.bullet}>•  <MathText text={point} /></div>)}</div>{picture}</div>{band}</>;
       break;
     case "cards":
-      body = <>{title}<div className={slide.points.length <= 4 ? s.grid2 : s.grid3} style={{ marginBottom: slide.takeaway ? "7cqw" : 0 }}>{slide.points.map((point, i) => <div key={i} className={s.box} style={{ background: tone(i), fontSize: "2.5cqw" }}>{point}</div>)}</div>{band}</>;
+      body = <>{title}<div className={slide.points.length <= 4 ? s.grid2 : s.grid3} style={{ marginBottom: slide.takeaway ? "7cqw" : 0 }}>{slide.points.map((point, i) => <div key={i} className={s.box} style={{ background: tone(i), fontSize: "2.5cqw" }}><MathText text={point} /></div>)}</div>{band}</>;
       break;
     case "question":
-      body = <><div className={s.bubble} style={{ background: hex(p.accent) }}>{slide.title}</div><div className={s.row} style={{ flex: 1, alignItems: "stretch" }}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={light}>{point}</div>)}</div></>;
+      body = <><div className={s.bubble} style={{ background: hex(p.accent) }}><MathText text={slide.title} /></div><div className={s.row} style={{ flex: 1, alignItems: "stretch" }}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={light}><MathText text={point} /></div>)}</div></>;
       break;
     case "quiz":
-      body = <>{title}<div className={s.grid2}>{slide.options.map((option, i) => <div key={i} className={s.box} style={{ ...light, border: `0.4cqw solid ${i === slide.correctIndex ? "#2fa45f" : tone(i)}`, fontSize: "2.6cqw" }}>{"АБВГ"[i]}. {option}</div>)}</div></>;
+      body = <>{title}<div className={s.grid2}>{slide.options.map((option, i) => <div key={i} className={s.box} style={{ ...light, border: `0.4cqw solid ${i === slide.correctIndex ? "#2fa45f" : tone(i)}`, fontSize: "2.6cqw" }}>{"АБВГ"[i]}. <MathText text={option} /></div>)}</div></>;
       break;
     case "activity":
-      body = <>{centerTitle}<div className={`${s.sLead} ${s.center}`} style={{ color: hex(p.accent), fontWeight: 700 }}>{slide.lead}</div><div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={s.box} style={{ background: tone(i), textAlign: "left", placeItems: "center start" }}>{i + 1}. {point}</div>)}</div></>;
+      body = <>{centerTitle}<div className={`${s.sLead} ${s.center}`} style={{ color: hex(p.accent), fontWeight: 700 }}><MathText text={slide.lead} /></div><div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={s.box} style={{ background: tone(i), textAlign: "left", placeItems: "center start" }}>{i + 1}. <MathText text={point} /></div>)}</div></>;
       break;
     case "reflection":
-      body = <>{centerTitle}<div className={s.grid3}>{slide.points.slice(0, 3).map((point, i) => <div key={i} className={s.center} style={{ fontSize: "2.6cqw", fontWeight: 700 }}><div className={s.light} style={{ background: ["#35b34a", "#2f7bf0", "#e5352d"][i] }} />{point}</div>)}</div></>;
+      body = <>{centerTitle}<div className={s.grid3}>{slide.points.slice(0, 3).map((point, i) => <div key={i} className={s.center} style={{ fontSize: "2.6cqw", fontWeight: 700 }}><div className={s.light} style={{ background: ["#35b34a", "#2f7bf0", "#e5352d"][i] }} /><MathText text={point} /></div>)}</div></>;
       break;
     case "homework":
-      body = <>{centerTitle}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={light}>{point}</div>)}</div></>;
+      body = <>{centerTitle}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={`${s.box} ${s.boxLight}`} style={light}><MathText text={point} /></div>)}</div></>;
       break;
     case "review":
-      body = <>{centerTitle}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={s.row}><div className={s.box} style={{ flex: "0 0 7cqw", background: tone(i) }}>?</div><div className={`${s.box} ${s.boxLight}`} style={light}>{point}</div></div>)}</div></>;
+      body = <>{centerTitle}<div className={s.grow}>{slide.points.map((point, i) => <div key={i} className={s.row}><div className={s.box} style={{ flex: "0 0 7cqw", background: tone(i) }}>?</div><div className={`${s.box} ${s.boxLight}`} style={light}><MathText text={point} /></div></div>)}</div></>;
       break;
     case "infographic": {
       const [main, accent] = splitThesis(slide.title);
@@ -150,12 +152,18 @@ function SlideForm({ slide, onChange }: { slide: DeckSlide; onChange: (patch: Pa
   );
 }
 
+function makeSlideId(): string {
+  return `n${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function clean(slide: DeckSlide): DeckSlide {
   return { ...slide, steps: lines(slide.steps.join("\n")), points: lines(slide.points.join("\n")), options: slide.options.map((option) => option.trim()).filter(Boolean) };
 }
 
 /** Конструктор: ИИ разбирает КСП и предлагает слайды, учитель правит, затем собирается PowerPoint. */
 export function DeckBuilder({ planId, topic }: { planId: string; topic: string }) {
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
   const key = `deck:${planId}`;
   const [slides, setSlides] = useState<DeckSlide[]>([]);
   const [theme, setTheme] = useState<DeckTheme>("network");
@@ -165,28 +173,52 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [newKind, setNewKind] = useState<SlideKind>("list");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Черновик живёт в браузере: читаем после гидратации, иначе разметка не совпадёт с серверной.
+  // Черновик живёт в браузере и на сервере: подгружаем асинхронно после монтирования.
   useEffect(() => {
-    const draft = loadDraft(key);
-    if (draft?.slides?.length) {
-      /* eslint-disable react-hooks/set-state-in-effect -- localStorage недоступен при серверной отрисовке */
-      setSlides(draft.slides);
-      setTheme(draft.theme);
-      /* eslint-enable react-hooks/set-state-in-effect */
-      return;
-    }
-    // В браузере черновика нет: слайды, разобранные заранее (комплект урока или другое устройство).
     let cancelled = false;
-    void fetchPlanMaterial<{ slides?: DeckSlide[] }>(planId, "deck").then((saved) => {
-      if (!cancelled && saved?.slides?.length) setSlides(saved.slides);
-    });
-    return () => { cancelled = true; };
+    void (async () => {
+      await Promise.resolve();
+      const draft = loadDraft(key);
+      if (draft?.slides?.length) {
+        if (!cancelled) {
+          setSlides(draft.slides);
+          setTheme(draft.theme);
+        }
+        return;
+      }
+      const saved = await fetchPlanMaterial<{ slides?: DeckSlide[]; theme?: DeckTheme }>(planId, "deck");
+      if (!cancelled && saved?.slides?.length) {
+        setSlides(saved.slides);
+        if (saved.theme) setTheme(saved.theme);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
   }, [key, planId]);
+
+  function scheduleServerSave(nextSlides: DeckSlide[], nextTheme: DeckTheme) {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveState("saving");
+    saveTimerRef.current = setTimeout(() => {
+      void savePlanMaterialClient(planId, "deck", {
+        title: `Презентация: ${topic}`,
+        stage: "middle",
+        payload: { slides: nextSlides.map(clean), theme: nextTheme },
+      }).then((ok) => {
+        setSaveState(ok ? "saved" : "idle");
+      });
+    }, 800);
+  }
 
   function update(next: DeckSlide[], nextTheme = theme) {
     setSlides(next);
     saveDraft(key, { slides: next, theme: nextTheme });
+    scheduleServerSave(next, nextTheme);
   }
 
   async function analyze() {
@@ -257,7 +289,7 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
   }
 
   function add() {
-    const slide: DeckSlide = { id: `n${Date.now().toString(36)}`, kind: newKind, title: SLIDE_KIND_LABELS[newKind], lead: "", steps: [], points: [], takeaway: "", options: [], correctIndex: null, notes: "", imagePrompt: "" };
+    const slide: DeckSlide = { id: makeSlideId(), kind: newKind, title: SLIDE_KIND_LABELS[newKind], lead: "", steps: [], points: [], takeaway: "", options: [], correctIndex: null, notes: "", imagePrompt: "" };
     const next = [...slides];
     next.splice(selected + 1, 0, slide);
     update(next);
@@ -268,37 +300,79 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
     <div className={s.page}>
       <header className={s.head}>
         <div>
-          <h1>Конструктор презентации</h1>
+          <h1>{isKk ? "Презентация конструкторы" : "Конструктор презентации"}</h1>
           <p>{topic}</p>
         </div>
-        <Link className={s.back} href={`/plans/${planId}#materials`}>Вернуться к уроку</Link>
+        <Link className={s.back} href={`/plans/${planId}#materials`}>
+          {isKk ? "Сабаққа оралу" : "Вернуться к уроку"}
+        </Link>
       </header>
 
       {slides.length === 0 ? (
         <section className={s.start}>
           <div className={s.startSteps}>
-            <div className={s.startStep}><b>1. Анализ КСП</b>ИИ читает цели, ход урока и задания и предлагает слайды.</div>
-            <div className={s.startStep}><b>2. Конструктор</b>Вы меняете текст, макеты и порядок, выбираете тему.</div>
-            <div className={s.startStep}><b>3. PowerPoint</b>Файл с картинками, переходами и появлением элементов.</div>
+            <div className={s.startStep}>
+              <b>{isKk ? "1. ҚМЖ талдауы" : "1. Анализ КСП"}</b>
+              {isKk
+                ? "ЖИ мақсаттарды, сабақ барысын және тапсырмаларды оқып, слайдтар ұсынады."
+                : "ИИ читает цели, ход урока и задания и предлагает слайды."}
+            </div>
+            <div className={s.startStep}>
+              <b>{isKk ? "2. Конструктор" : "2. Конструктор"}</b>
+              {isKk
+                ? "Мәтінді, макеттерді және слайдтар ретін өзіңізге ыңғайлап өзгертесіз."
+                : "Вы меняете текст, макеты и порядок, выбираете тему."}
+            </div>
+            <div className={s.startStep}>
+              <b>3. PowerPoint</b>
+              {isKk
+                ? "Суреттері, ауысулары және анимациясы бар дайын .pptx файлы."
+                : "Файл с картинками, переходами и появлением элементов."}
+            </div>
           </div>
           <Button onClick={analyze} disabled={analyzing}>
-            {analyzing ? <><Loader2 className="animate-spin" /> Разбираем план…</> : <><Sparkles /> Разобрать план и предложить слайды</>}
+            {analyzing ? (
+              <>
+                <Loader2 className="animate-spin" />{" "}
+                {isKk ? "Жоспар талдануда…" : "Разбираем план…"}
+              </>
+            ) : (
+              <>
+                <Sparkles />{" "}
+                {isKk ? "ҚМЖ негізінде слайдтар ұсыну" : "Разобрать план и предложить слайды"}
+              </>
+            )}
           </Button>
           {error && <p role="alert" className={s.error}>{error}</p>}
         </section>
       ) : (
         <>
           <div className={s.toolbar}>
-            <div className={s.themes} role="radiogroup" aria-label="Тема презентации">
-              Тема:
+            <div className={s.themes} role="radiogroup" aria-label={isKk ? "Безендіру тақырыбы" : "Тема презентации"}>
+              {isKk ? "Безендіру:" : "Тема:"}
               {DECK_THEMES.map((name) => (
-                <button key={name} type="button" role="radio" aria-checked={theme === name} className={`${s.theme} ${theme === name ? s.themeOn : ""}`} onClick={() => { setTheme(name); saveDraft(key, { slides, theme: name }); }}>
+                <button key={name} type="button" role="radio" aria-checked={theme === name} className={`${s.theme} ${theme === name ? s.themeOn : ""}`} onClick={() => { setTheme(name); saveDraft(key, { slides, theme: name }); scheduleServerSave(slides, name); }}>
                   <span className={s.swatch} style={{ background: hex(DECK_PALETTES[name].accent) }} />{THEME_LABELS[name]}
                 </button>
               ))}
             </div>
-            <Button variant="outline" onClick={analyze} disabled={analyzing || building}>{analyzing ? <Loader2 className="animate-spin" /> : <Sparkles />} Заново из плана</Button>
-            <Button onClick={build} disabled={building || analyzing}>{building ? <><Loader2 className="animate-spin" /> Собираем…</> : <><Presentation /> Создать презентацию</>}</Button>
+            {saveState !== "idle" && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                {saveState === "saving" ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    {isKk ? "Сақталуда…" : "Сохранение черновика…"}
+                  </>
+                ) : (
+                  <>
+                    <Check className="size-3.5 text-emerald-600" />
+                    {isKk ? "Жоба сақталды" : "Черновик сохранён"}
+                  </>
+                )}
+              </span>
+            )}
+            <Button variant="outline" onClick={analyze} disabled={analyzing || building}>{analyzing ? <Loader2 className="animate-spin" /> : <Sparkles />} {isKk ? "Жоспардан қайта жинау" : "Заново из плана"}</Button>
+            <Button onClick={build} disabled={building || analyzing}>{building ? <><Loader2 className="animate-spin" /> {isKk ? "Жиналуда…" : "Собираем…"}</> : <><Presentation /> {isKk ? "Презентацияны жүктеу (.pptx)" : "Создать презентацию"}</>}</Button>
           </div>
           {message && <p role="status" className={s.note}>{message}</p>}
           {error && <p role="alert" className={s.error}>{error}</p>}

@@ -20,6 +20,8 @@
  * - Кэширование для избежания повторной генерации
  */
 
+import { parseApiKeys } from "./providers";
+
 export interface GenerateImageInput {
   /** Промпт для генерации. */
   prompt: string;
@@ -171,12 +173,12 @@ export async function generateImage(
     return cached;
   }
 
-  const geminiKey = process.env.GEMINI_API_KEY;
+  const geminiKeys = parseApiKeys(process.env.GEMINI_API_KEY);
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKeys = parseApiKeys(process.env.OPENAI_API_KEY);
 
-  const configured = Boolean(geminiKey || (accountId && token) || openaiKey);
+  const configured = Boolean(geminiKeys.length || (accountId && token) || openaiKeys.length);
   if (!configured) {
     throw new Error(
       "Не настроены ключи для генерации изображений (GEMINI_API_KEY, OPENAI_API_KEY или CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN)",
@@ -209,9 +211,10 @@ export async function generateImage(
     }
   };
 
-  // 1. Gemini — основная модель, лучшее качество и яркие цвета.
-  if (geminiKey) {
-    const result = await attempt("Gemini", () => generateWithGemini(input, geminiKey));
+  // 1. Gemini — основная модель, лучшее качество и яркие цвета (перебираем все ключи из GEMINI_API_KEY).
+  for (const [idx, gKey] of geminiKeys.entries()) {
+    const label = geminiKeys.length > 1 ? `Gemini #${idx + 1}` : "Gemini";
+    const result = await attempt(label, () => generateWithGemini(input, gKey));
     if (result) return result;
   }
 
@@ -229,8 +232,9 @@ export async function generateImage(
   }
 
   // 4. DALL-E 3 — последний резерв.
-  if (openaiKey) {
-    const result = await attempt("DALL-E 3", () => generateWithDallE(input, openaiKey));
+  for (const [idx, oKey] of openaiKeys.entries()) {
+    const label = openaiKeys.length > 1 ? `DALL-E 3 #${idx + 1}` : "DALL-E 3";
+    const result = await attempt(label, () => generateWithDallE(input, oKey));
     if (result) return result;
   }
 
@@ -362,6 +366,12 @@ async function generateWithFlux(
     const retryable = response.status === 429 || response.status >= 500;
     if (!retryable || attempt === 1) {
       throw new Error(`Cloudflare API error ${response.status}${await describeCloudflareError(response)}`);
+    }
+    if (response.status === 429) {
+      const clonedText = await response.clone().text().catch(() => "");
+      if (/daily free allocation/i.test(clonedText)) {
+        throw new Error(`Cloudflare API error 429${await describeCloudflareError(response)}`);
+      }
     }
     const retryAfter = Number(response.headers.get("retry-after"));
     // Если заголовок retry-after отсутствует — ждём дефолтные 30 секунд.

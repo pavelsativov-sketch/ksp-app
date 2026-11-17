@@ -8,6 +8,8 @@ import {
   getVskSummary,
 } from "@/lib/school-analytics";
 import { NoSchool } from "@/components/school/no-school";
+import { PersonalReportsView } from "@/components/school/personal-school-views";
+import { getTeacherJournalAnalytics } from "@/lib/journal";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download } from "lucide-react";
 import { PrintReportButton } from "@/components/school/print-report-button";
@@ -22,8 +24,12 @@ export const dynamic = "force-dynamic";
 /** Отчёты школы формируются из фактических записей, без тестовых наборов. */
 export default async function SchoolReportsPage() {
   const user = await getCurrentUser();
-  const school = user ? await getActiveSchool(user.id) : null;
-  if (!school) return <NoSchool />;
+  if (!user) return <NoSchool />;
+  const school = await getActiveSchool(user.id);
+  if (!school) {
+    const personal = await getTeacherJournalAnalytics(user.id);
+    return <PersonalReportsView data={personal} />;
+  }
 
   const { locale } = await getDict();
   const copy = schoolReportCopy[locale];

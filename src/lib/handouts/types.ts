@@ -149,7 +149,7 @@ export interface WorksheetTask {
    * Генерируется через Cloudflare FLUX.1 при withImages; без ключа поле отсутствует.
    */
   imageBase64?: string;
-  imageMime?: "image/jpeg" | "image/png";
+  imageMime?: "image/jpeg" | "image/png" | "image/svg+xml";
   imageAlt?: string;
   /** Промпт для генерации картинки на английском (создается AI для визуальных заданий) */
   imagePromptEn?: string | null;
@@ -230,7 +230,7 @@ export interface Flashcard {
    * Генерируется через Cloudflare FLUX.1 при withImages; без ключей поле отсутствует.
    */
   imageBase64?: string;
-  imageMime?: "image/jpeg" | "image/png";
+  imageMime?: "image/jpeg" | "image/png" | "image/svg+xml";
   /** Альт-текст к иллюстрации. */
   imageAlt?: string;
 }

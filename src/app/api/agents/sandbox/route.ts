@@ -93,3 +93,23 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось удалить файл" }, { status: 503 });
   }
 }
+
+/** Rename a workspace file without downloading its contents to the browser. */
+export async function PATCH(req: Request) {
+  const auth = await requireApiAuth();
+  if (auth.response) return auth.response;
+  let body: { from?: unknown; to?: unknown };
+  try { body = await req.json() as typeof body; }
+  catch { return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 }); }
+  if (typeof body.from !== "string" || typeof body.to !== "string") {
+    return NextResponse.json({ error: "Укажите исходное и новое имя файла" }, { status: 400 });
+  }
+  try {
+    await (await getWorkspaceRuntime(auth.user.id)).renameFile(body.from, body.to);
+    return NextResponse.json({ ok: true, name: body.to }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Не удалось переименовать файл";
+    const status = /некорректный|существует/i.test(message) ? 400 : 503;
+    return NextResponse.json({ error: message }, { status });
+  }
+}

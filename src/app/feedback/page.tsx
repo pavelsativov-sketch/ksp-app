@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { FeedbackForm } from "@/components/feedback/feedback-form";
+import { PublicSupportForm } from "@/components/pricing/pricing-lead-modal";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -49,13 +50,19 @@ export default async function FeedbackPage() {
         {user ? (
           <FeedbackForm userId={user.id} />
         ) : (
-          <div className="text-center">
-            <p className="text-muted-foreground">
-              Войдите, чтобы оставить отзыв.
-            </p>
-            <Button asChild className="mt-4">
-              <Link href="/login?next=/feedback">Войти</Link>
-            </Button>
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+              <div>
+                <h2 className="text-lg font-semibold">Написать без входа в аккаунт</h2>
+                <p className="text-xs text-muted-foreground">
+                  Для заявок от школ, вопросов по оплате или восстановления доступа.
+                </p>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/login?next=/feedback">Войти в аккаунт</Link>
+              </Button>
+            </div>
+            <PublicSupportForm />
           </div>
         )}
       </section>

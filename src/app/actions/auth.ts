@@ -329,7 +329,21 @@ export async function deleteAccountAction(
         await db.collection(COL.quizRooms).deleteMany({ ownerId: user.id }, { session });
         if (planIds.length) {
           await db.collection(COL.analyticsEvents).deleteMany({ planId: { $in: planIds } }, { session });
+          await db.collection(COL.planMaterials).deleteMany({ plan_id: { $in: planIds } }, { session });
         }
+        await db.collection(COL.planMaterials).deleteMany({ owner_id: user.id }, { session });
+        await db.collection(COL.planTrash).deleteMany({ owner_id: user.id }, { session });
+        await db.collection(COL.notifications).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.browserCredentials).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.agentComputerRuns).deleteMany({ user_id: user.id }, { session });
+        await db.collection(COL.agentComputerConfirms).deleteMany({ user_id: user.id }, { session });
+
+        // Личный электронный журнал учителя, список учеников (ФИО несовершеннолетних),
+        // сгенерированные характеристики / ИОМ / ВШК и работы СОР/СОЧ.
+        await db.collection(COL.journalEntries).deleteMany({ owner_id: user.id }, { session });
+        await db.collection(COL.journalStudents).deleteMany({ owner_id: user.id }, { session });
+        await db.collection(COL.schoolAiDocs).deleteMany({ owner_id: user.id }, { session });
+        await db.collection(COL.sorSochWorks).deleteMany({ owner_id: user.id }, { session });
 
         // Учеников школы намеренно НЕ удаляем: в StudentDoc полей owner_id
         // нет, такие записи — собственность школы, а не учителя.
@@ -382,39 +396,66 @@ export async function requestPasswordResetAction(
   try {
     const user = await findUserByEmail(email);
     if (user) {
-      const base = process.env.APP_URL;
-      if (!base || !process.env.RESEND_API_KEY) {
-        return { info: "Если такой email зарегистрирован, письмо со ссылкой отправлено." };
-      }
-      const resetUrl = new URL("/reset-password", base);
-      if (resetUrl.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && resetUrl.protocol === "http:")) {
-        throw new Error("APP_URL must use HTTPS in production");
-      }
-      const token = randomBytes(32).toString("hex");
       const db = await getDb();
-      await db.collection(COL.passwordResets).insertOne({
-        userId: user._id.toString(),
-        sessionVersion: user.session_version ?? 0,
-        tokenHash: hashToken(token),
-        expiresAt: new Date(Date.now() + RESET_TTL_MS),
-        createdAt: new Date(),
-      });
-      resetUrl.searchParams.set("token", token);
-      const link = resetUrl.toString();
-      const sent = await sendEmail(
-        email,
-        "Сброс пароля — Mekty",
-        `<p>Чтобы задать новый пароль, перейдите по ссылке (действует 1 час):</p><p><a href="${link}">${link}</a></p>`,
-      );
-      if (!sent) {
-        await db.collection(COL.passwordResets).deleteOne({ tokenHash: hashToken(token) });
+      const base = process.env.APP_URL;
+      let emailDelivered = false;
+
+      if (base && process.env.RESEND_API_KEY) {
+        const resetUrl = new URL("/reset-password", base);
+        if (resetUrl.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && resetUrl.protocol === "http:")) {
+          throw new Error("APP_URL must use HTTPS in production");
+        }
+        const token = randomBytes(32).toString("hex");
+        await db.collection(COL.passwordResets).insertOne({
+          userId: user._id.toString(),
+          sessionVersion: user.session_version ?? 0,
+          tokenHash: hashToken(token),
+          expiresAt: new Date(Date.now() + RESET_TTL_MS),
+          createdAt: new Date(),
+        });
+        resetUrl.searchParams.set("token", token);
+        const link = resetUrl.toString();
+        emailDelivered = await sendEmail(
+          email,
+          "Сброс пароля — Mekty",
+          `<p>Чтобы задать новый пароль, перейдите по ссылке (действует 1 час):</p><p><a href="${link}">${link}</a></p>`,
+        );
+        if (!emailDelivered) {
+          await db.collection(COL.passwordResets).deleteOne({ tokenHash: hashToken(token) });
+        }
+      }
+
+      // Если почтовый провайдер не настроен или не доставил письмо, автоматически
+      // создаём обращение для администратора (не чаще 1 раза в час), чтобы учитель
+      // мог получить одноразовую ссылку сброса через поддержку.
+      if (!emailDelivered) {
+        const recentTicket = await db.collection(COL.feedback).findOne({
+          user_id: user._id.toString(),
+          category: "password_reset",
+          created_at: { $gt: new Date(Date.now() - RESET_TTL_MS) },
+        });
+        if (!recentTicket) {
+          const now = new Date();
+          await db.collection(COL.feedback).insertOne({
+            user_id: user._id.toString(),
+            rating: 5,
+            category: "password_reset",
+            status: "new",
+            contact_info: email,
+            comment: `Запрос на сброс пароля для ${email}. Автоматическая отправка письма недоступна — сгенерируйте одноразовую ссылку сброса кнопкой в этой карточке и передайте пользователю.`,
+            created_at: now,
+            updated_at: now,
+          });
+        }
       }
     }
   } catch (error) {
     log.error("requestPasswordResetAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось создать запрос. Повторите попытку позже." };
   }
-  return { info: "Если такой email зарегистрирован, письмо со ссылкой отправлено." };
+  return {
+    info: "Если такой email зарегистрирован, запрос принят: проверьте почту (включая «Спам»). Если письмо не придёт в течение 5 минут, заявка уже передана администратору поддержки.",
+  };
 }
 
 const confirmPasswordSchema = z.object({

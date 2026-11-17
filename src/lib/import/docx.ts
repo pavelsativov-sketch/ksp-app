@@ -119,43 +119,6 @@ const TEACHER_MARKERS = {
 // XML parsing helpers
 // ---------------------------------------------------------------------------
 
-function extractTextFromXml(xml: string): string {
-  const textMatches = xml.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [];
-  return textMatches
-    .map((m) => m.replace(/<w:t[^>]*>/, "").replace(/<\/w:t>/, ""))
-    .join("");
-}
-
-function extractStyleFromXml(xml: string): string {
-  const styleMatch = xml.match(/<w:pStyle\s+w:val="([^"]+)"/);
-  return styleMatch ? styleMatch[1] : "";
-}
-
-function parseTableRows(tableXml: string): string[][] {
-  const rows: string[][] = [];
-  const rowRegex = /<w:tr[^>]*>([\s\S]*?)<\/w:tr>/g;
-  let rowMatch;
-  while ((rowMatch = rowRegex.exec(tableXml)) !== null) {
-    const rowXml = rowMatch[1];
-    const cells: string[] = [];
-    const cellRegex = /<w:tc[^>]*>([\s\S]*?)<\/w:tc>/g;
-    let cellMatch;
-    while ((cellMatch = cellRegex.exec(rowXml)) !== null) {
-      const cellXml = cellMatch[1];
-      const paraRegex = /<w:p[^>]*>([\s\S]*?)<\/w:p>/g;
-      let paraMatch;
-      const cellTexts: string[] = [];
-      while ((paraMatch = paraRegex.exec(cellXml)) !== null) {
-        const text = extractTextFromXml(paraMatch[1]);
-        if (text.trim()) cellTexts.push(text);
-      }
-      cells.push(cellTexts.join("\n"));
-    }
-    rows.push(cells);
-  }
-  return rows;
-}
-
 /**
  * Разбор `w:body` на элементы верхнего уровня.
  *

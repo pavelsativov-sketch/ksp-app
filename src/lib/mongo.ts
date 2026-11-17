@@ -118,6 +118,12 @@ export const COL = {
   browserCredentials: "browser_credentials",
   // Аудит действий администратора: выдача КСП и подписок.
   adminActions: "admin_actions",
+  // Единая база учеников и электронный журнал учителя (1–10 баллов, УП/НП/Б).
+  journalStudents: "journal_students",
+  journalEntries: "journal_entries",
+  // Сохранённые документы школьных ИИ-конструкторов и генератора СОР/СОЧ.
+  schoolAiDocs: "school_ai_documents",
+  sorSochWorks: "sor_soch_works",
 } as const;
 
 async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
@@ -285,6 +291,10 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.connectors).createIndex({ school_id: 1, type: 1 }, { name: "connectors_school_type" }),
     db.collection(COL.auditLog).createIndex({ school_id: 1, created_at: -1 }, { name: "audit_log_school_created" }),
     db.collection(COL.auditLog).createIndex({ created_at: 1 }, { expireAfterSeconds: 180 * 24 * 3600, name: "audit_log_ttl" }),
+    db.collection(COL.journalStudents).createIndex({ owner_id: 1, class_name: 1, normalized_name: 1 }, { unique: true, name: "journal_students_owner_class_name_unique" }),
+    db.collection(COL.journalEntries).createIndex({ owner_id: 1, class_name: 1, subject: 1, date: 1 }, { name: "journal_entries_owner_class_subject_date" }),
+    db.collection(COL.schoolAiDocs).createIndex({ owner_id: 1, created_at: -1 }, { name: "school_ai_docs_owner_created" }),
+    db.collection(COL.sorSochWorks).createIndex({ owner_id: 1, created_at: -1 }, { name: "sor_soch_works_owner_created" }),
   ]);
 }
 

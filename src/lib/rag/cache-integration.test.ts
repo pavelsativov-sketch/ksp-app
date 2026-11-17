@@ -3,7 +3,7 @@
  * провайдера, ни обращаться к базе.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId } from "mongodb";
 
 const mocks = vi.hoisted(() => ({ getDb: vi.fn(), embedQuery: vi.fn() }));
 vi.mock("@/lib/mongo", () => ({

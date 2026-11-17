@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MathText, formatMathPlain } from "@/lib/math/render-math";
 
 import {
   fetchQuizEvents,
@@ -237,7 +238,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
       <CenterScreen>
         <p className="text-sm text-muted-foreground mb-2">Ответ</p>
         <p className="text-lg font-semibold text-center text-emerald-700 max-w-md">
-          {revealText ?? "—"}
+          {revealText ? <MathText text={revealText} /> : "—"}
         </p>
       </CenterScreen>
     );
@@ -304,7 +305,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
             </span>
           )}
         </div>
-        <div className="border-b border-border bg-surface p-5"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-ink">Вопрос в работе</p><p className="mt-2 text-xl font-bold leading-7">{currentQ.task.question}</p></div>
+        <div className="border-b border-border bg-surface p-5"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-ink">Вопрос в работе</p><p className="mt-2 text-xl font-bold leading-7"><MathText text={currentQ.task.question} /></p></div>
         <AnswerForm key={`${currentQ.index}-${currentQ.endsAt}`} task={currentQ.task} onSubmit={submit} />
       </div>
     </div>
@@ -355,7 +356,7 @@ function AnswerForm({
               <span className="font-bold text-violet-600 mr-2">
                 {String.fromCharCode(0x0410 + i)}.
               </span>
-              {opt}
+              <MathText text={opt} />
             </Button>
           ))}
         </div>
@@ -426,7 +427,7 @@ function AnswerForm({
     case "FILL_BLANK":
       return (
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground italic">{task.template}</p>
+          <p className="text-sm text-muted-foreground italic"><MathText text={task.template} /></p>
           {fillers.map((v, i) => (
             <Input
               key={i}
@@ -450,7 +451,7 @@ function AnswerForm({
         <div className="space-y-3">
           {task.left.map((l, li) => (
             <div key={li} className="flex items-center gap-2">
-              <span className="w-1/2 truncate text-sm">{l}</span>
+              <span className="w-1/2 truncate text-sm"><MathText text={l} /></span>
               <select
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 value={pairs[li]?.rightIndex ?? 0}
@@ -464,7 +465,7 @@ function AnswerForm({
               >
                 {task.right.map((r, ri) => (
                   <option key={ri} value={ri}>
-                    {r}
+                    {formatMathPlain(r)}
                   </option>
                 ))}
               </select>
@@ -484,7 +485,7 @@ function AnswerForm({
           {order.map((idx, pos) => (
             <div key={pos} className="flex items-center gap-2 bg-surface p-2 rounded border">
               <span className="text-sm font-bold text-muted-foreground w-6">{pos + 1}.</span>
-              <span className="flex-1 text-sm truncate">{task.items[idx]}</span>
+              <span className="flex-1 text-sm truncate"><MathText text={task.items[idx] ?? ""} /></span>
               <Button
                 variant="ghost"
                 size="sm"

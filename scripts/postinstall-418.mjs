@@ -83,12 +83,12 @@ const rdomGate =
   "}\n" +
   "function canHydrateTextInstance(instance, text, inRootOrSingleton) {";
 
-// 3/4) app-index: hydrate() ждёт окончания парсинга документа.
+// 3/4) app-index: hydrate() ждёт окончания парсинга документа (Next 16.4+: hydrate(instrumentationModules)).
 const appIdxAnchor =
-  "async function hydrate(instrumentationModules, assetPrefix) {\n" +
+  "async function hydrate(instrumentationModules) {\n" +
   "    let staticIndicatorState;";
 const appIdxGate =
-  "async function hydrate(instrumentationModules, assetPrefix) {\n" +
+  "async function hydrate(instrumentationModules) {\n" +
   "    // " + FIX + "): гидрация не должна стартовать, пока HTML ещё\n" +
   "    // парсится: иначе claim-проход может наткнуться на оборванный чанк между\n" +
   "    // <body> и первым элементом и бросить ложный fatal #418 (args[]=HTML).\n" +
@@ -141,12 +141,14 @@ const failed = results.filter((r) => r.state === "anchor-fail").length;
    устаревшего скомпилированного артефакта). Воркараунды ставятся в
    postinstall — к моменту билда кэш нужно получить чистым. */
 let purged = 0;
-const nextCache = path.join(root, ".next");
-try {
-  rmSync(nextCache, { recursive: true, force: true });
-  purged = 1;
-} catch (e) {
-  console.warn("postinstall-418: не удалось удалить .next:", String(e).slice(0, 120));
+if (patched > 0) {
+  const nextCache = path.join(root, ".next");
+  try {
+    rmSync(nextCache, { recursive: true, force: true });
+    purged = 1;
+  } catch (e) {
+    console.warn("postinstall-418: не удалось удалить .next:", String(e).slice(0, 120));
+  }
 }
 
 for (const r of results) {

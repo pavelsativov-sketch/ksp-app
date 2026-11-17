@@ -66,20 +66,22 @@ const nextConfig: NextConfig = {
     "openai",
     "@respan/respan",
   ],
-  webpack(config, { isServer }) {
+  webpack(config, { isServer, webpack }) {
+    // На Node 22+/24 встроенный WasmHash (xxhash64) в webpack падает с
+    // TypeError: Cannot read properties of undefined (reading 'length') at WasmHash._updateWithBuffer.
+    // Нативный sha256 через OpenSSL устраняет сбой сборки локально и на Vercel (Node 24.x).
+    config.output = {
+      ...config.output,
+      hashFunction: "sha256",
+    };
     // Инструментация (src/instrumentation.ts) импортирует @respan/respan →
     // @opentelemetry/sdk-node → @grpc/grpc-js, который требует Node-билтины
     // (stream, net, dns, …). В браузерном бандле их нет, и сборка клиента
     // падала с «Can't resolve 'stream'», из-за чего в dev React не монтировался
     // (мёртвые страницы). Серверные модули в клиенте не используются — исключаем.
     if (!isServer) {
-      // IgnorePlugin — исключение серверных пакетов из клиентского бандла.
-      // webpack присутствует как транзитивная зависимость Next; в tsconfig его
-      // нет, поэтому берём через require с приведением к unknown.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IgnorePlugin } = require("webpack") as { IgnorePlugin: new (options: { resourceRegExp: RegExp }) => unknown };
       config.plugins.push(
-        new IgnorePlugin({
+        new webpack.IgnorePlugin({
           resourceRegExp: /@respan|@opentelemetry|@grpc|@traceloop/,
         }),
       );

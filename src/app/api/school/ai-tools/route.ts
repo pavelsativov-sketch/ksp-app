@@ -2,9 +2,43 @@ import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { executeWithFallback } from "@/lib/ai/providers";
+import { COL, getDb, isMongoConfigured } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function GET(req: Request) {
+  const auth = await requireApiAuth();
+  if (auth.response) return auth.response;
+  if (!isMongoConfigured()) return NextResponse.json({ docs: [] });
+
+  const url = new URL(req.url);
+  const tool = url.searchParams.get("tool") || undefined;
+
+  try {
+    const db = await getDb();
+    const docs = await db
+      .collection(COL.schoolAiDocs)
+      .find({ owner_id: auth.user.id, ...(tool ? { tool } : {}) })
+      .sort({ created_at: -1 })
+      .limit(10)
+      .toArray();
+    return NextResponse.json(
+      {
+        docs: docs.map((d) => ({
+          id: String(d._id),
+          tool: d.tool,
+          title: d.title,
+          content: d.content,
+          createdAt: d.created_at instanceof Date ? d.created_at.toISOString() : "",
+        })),
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch {
+    return NextResponse.json({ docs: [] });
+  }
+}
 
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
@@ -200,6 +234,12 @@ ${agendaCustom ? `- Дополнительные вопросы: ${agendaCustom}
     return NextResponse.json({ error: "Неизвестный инструмент" }, { status: 400 });
   }
 
+  const lang = params.language === "kz" || params.language === "kk" ? "kz" : "ru";
+  if (lang === "kz") {
+    systemPrompt += "\nМАҢЫЗДЫ ТАЛАП: Бүкіл ресми құжатты тек қана ҚАЗАҚ ТІЛІНДЕ (ресми педагогикалық-іскери стильде) құрастыр.";
+    userPrompt += "\n\nҚұжатты толығымен қазақ тілінде жаз.";
+  }
+
   try {
     const completion = await executeWithFallback("enhance", async (client, model) => {
       const response = await client.chat.completions.create({
@@ -212,6 +252,25 @@ ${agendaCustom ? `- Дополнительные вопросы: ${agendaCustom}
       });
       return response.choices[0]?.message?.content || "";
     });
+
+    if (isMongoConfigured() && completion.trim()) {
+      try {
+        const db = await getDb();
+        const title = String(
+          params.studentName || params.topic || params.target || params.workType || tool,
+        ).slice(0, 140);
+        await db.collection(COL.schoolAiDocs).insertOne({
+          owner_id: auth.user.id,
+          tool,
+          title,
+          content: completion,
+          language: lang,
+          created_at: new Date(),
+        });
+      } catch {
+        // Ошибка сохранения истории не должна блокировать выдачу документа учителю
+      }
+    }
 
     return NextResponse.json({
       ok: true,

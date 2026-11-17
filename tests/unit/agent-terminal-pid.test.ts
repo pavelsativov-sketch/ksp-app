@@ -54,4 +54,12 @@ describe("PID-файл запуска терминала", () => {
     await stopPOST(post("http://x/api/agents/terminal/stop", { runId: "$(reboot)" }));
     expect(String(mock.runCommand.mock.calls[0]![0])).not.toContain("reboot");
   });
+
+  it("составная команда (&&, кавычки) передаётся в exec bash -lc без обрезки", async () => {
+    await runPOST(post("http://x/api/agents/terminal", { command: "uname -s && echo 'SANDBOX_OK'" }));
+    const command = String(mock.runCommand.mock.calls[0]![0]);
+    expect(command).toContain("exec bash -lc ");
+    expect(command).toContain("uname -s && echo");
+    expect(command).toContain("SANDBOX_OK");
+  });
 });

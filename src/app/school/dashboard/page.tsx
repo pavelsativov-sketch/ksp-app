@@ -2,7 +2,8 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { getSchoolOverview } from "@/lib/school-analytics";
-import { NoSchool } from "@/components/school/no-school";
+import { getTeacherJournalAnalytics } from "@/lib/journal";
+import { PersonalSchoolDashboard } from "@/components/school/personal-school-views";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, AlertTriangle, GraduationCap, School, Users, ClipboardCheck, BookOpen } from "lucide-react";
 
@@ -11,12 +12,16 @@ export const dynamic = "force-dynamic";
 /**
  * Дашборд школы на реальных данных: посещаемость, качество знаний,
  * прогресс КТП и ВШК агрегируются из коллекций (см. getSchoolOverview).
+ * Если школа не подключена — показывается личная сводка учителя по его классам и Электронному журналу.
  */
 export default async function SchoolDashboardPage() {
   const user = await getCurrentUser();
   if (!user) return null;
   const school = await getActiveSchool(user.id);
-  if (!school) return <NoSchool />;
+  if (!school) {
+    const personal = await getTeacherJournalAnalytics(user.id);
+    return <PersonalSchoolDashboard data={personal} />;
+  }
 
   const schoolId = school._id!.toString();
   const overview = await getSchoolOverview(schoolId);
@@ -91,6 +96,9 @@ export default async function SchoolDashboardPage() {
                 <Tile href="/school/vsk" label="ВШК" />
                 <Tile href="/school/students" label="Ученики" />
                 <Tile href="/school/classes" label="Классы" />
+                <Tile href="/school/teachers" label="Педагоги" />
+                <Tile href="/school/approvals" label="Согласование" />
+                <Tile href="/school/reports" label="Отчёты" />
               </CardContent>
             </Card>
           </div>

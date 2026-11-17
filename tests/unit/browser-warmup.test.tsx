@@ -8,7 +8,7 @@ vi.mock("@/components/three/three-stage", () => ({ ThreeStage: () => null }));
 
 import { AppShell } from "@/components/app/app-shell";
 
-const fetchMock = vi.fn((..._args: unknown[]) => Promise.resolve(new Response("{}")));
+const fetchMock = vi.fn<(...args: unknown[]) => Promise<Response>>(() => Promise.resolve(new Response("{}")));
 
 beforeEach(() => {
   sessionStorage.clear();

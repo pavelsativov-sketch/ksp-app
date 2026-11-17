@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { parseToolCalls, pruneImages, trimHistory } from "@/lib/agents/computer/loop";
 import {

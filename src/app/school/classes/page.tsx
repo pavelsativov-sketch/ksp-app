@@ -8,6 +8,8 @@ import { getDict } from "@/lib/i18n/server";
 import { schoolPermissionCopy } from "@/lib/school-permission-copy";
 import { schoolApprovalCopy } from "@/lib/school-approval-copy";
 import { ClassAssignmentManager } from "@/components/school/class-assignment-manager";
+import { PersonalClassesView } from "@/components/school/personal-school-views";
+import { getTeacherJournalAnalytics } from "@/lib/journal";
 import { NoSchool } from "@/components/school/no-school";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users } from "lucide-react";
@@ -18,8 +20,12 @@ export const dynamic = "force-dynamic";
 /** Классы школы: собираются из реального контингента учеников. */
 export default async function ClassesPage() {
   const user = await getCurrentUser();
-  const school = user ? await getActiveSchool(user.id) : null;
-  if (!school || !school._id) return <NoSchool />;
+  if (!user) return <NoSchool />;
+  const school = await getActiveSchool(user.id);
+  if (!school || !school._id) {
+    const personal = await getTeacherJournalAnalytics(user.id);
+    return <PersonalClassesView data={personal} />;
+  }
   const schoolId = school._id.toString();
   const member = await requireSchoolAccess(user!.id, schoolId);
   const canReadAll = hasSchoolPermission(member.role, member.granted_permissions, "school:students:read_all");

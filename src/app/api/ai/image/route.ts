@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { generateImage } from "@/lib/ai/image";
+import { autoDetectDiagramSpec, buildEducationalSvg, svgToDataUri } from "@/lib/ai/svg-diagram";
 import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 
 const bodySchema = z.object({
@@ -56,7 +57,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     await reservation.finalize(false);
-    console.error("Image generation failed:", error instanceof Error ? error.name : "UnknownError");
-    return NextResponse.json({ error: "Не удалось сгенерировать изображение. Повторите попытку позже." }, { status: 500 });
+    console.warn("Image generation fallback to educational SVG:", error instanceof Error ? error.name : "UnknownError");
+    const svg = buildEducationalSvg(autoDetectDiagramSpec(parsed.data));
+    return NextResponse.json({
+      image: svgToDataUri(svg),
+      provider: "svg-diagram",
+      fallback: true,
+      quota: { remaining: reservation.remaining },
+    });
   }
 }

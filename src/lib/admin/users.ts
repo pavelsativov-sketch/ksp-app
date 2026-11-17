@@ -170,3 +170,59 @@ export async function getAdminUserDetail(userId: string) {
 export type AdminOverview = Awaited<ReturnType<typeof getAdminOverview>>;
 export type AdminUserList = Awaited<ReturnType<typeof listAdminUsers>>;
 export type AdminUserDetail = Awaited<ReturnType<typeof getAdminUserDetail>>;
+
+/**
+ * Генерация одноразовой ссылки сброса пароля администратором (когда почтовый шлюз не настроен
+ * или учитель обратился в поддержку). Ссылка живёт 2 часа, в БД хранится только SHA-256 хеш.
+ */
+export async function createAdminPasswordResetLink(input: unknown): Promise<{
+  email: string;
+  resetUrl: string;
+  expiresAt: string;
+}> {
+  const admin = await requireAdmin();
+  await limitAdmin(admin.id, "create");
+
+  const rawEmail =
+    typeof (input as { email?: unknown } | null)?.email === "string"
+      ? ((input as { email: string }).email).trim().toLowerCase()
+      : "";
+  if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    throw new AdminError(400, "Укажите корректный email пользователя.");
+  }
+
+  const db = await getDb();
+  const user = await db.collection<AdminUser>(COL.users).findOne(
+    { email: rawEmail },
+    { ...options, projection: { _id: 1, email: 1, session_version: 1 } },
+  );
+  if (!user) {
+    throw new AdminError(404, "Пользователь с таким email не найден.");
+  }
+
+  const { createHash, randomBytes } = await import("node:crypto");
+  const token = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 2 * 60 * 60_000);
+
+  await db.collection(COL.passwordResets).insertOne({
+    userId: user._id.toHexString(),
+    sessionVersion: user.session_version ?? 0,
+    tokenHash,
+    expiresAt,
+    createdAt: now,
+  });
+
+  await db.collection(COL.adminActions).insertOne({
+    admin_id: admin.id,
+    target_user_id: user._id.toHexString(),
+    action: "password_reset_link",
+    payload: { email: user.email, expiresAt: expiresAt.toISOString() },
+    at: now,
+  });
+
+  const base = (process.env.APP_URL || "https://ksp-app-pi.vercel.app").replace(/\/+$/, "");
+  const resetUrl = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+  return { email: user.email, resetUrl, expiresAt: expiresAt.toISOString() };
+}

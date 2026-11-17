@@ -21,12 +21,19 @@ export interface RemoteBrowserSession {
   lastValidatedAt: number;
   rpcUrl?: string;
   getInteractionState: () => unknown;
-  performUiAction: (action: string, args?: Record<string, unknown>, allowedOrigin?: string) => Promise<{ screenshot: Uint8Array; title: string; currentUrl: string }>;
+  performUiAction: (
+    action: string,
+    args?: Record<string, unknown>,
+    allowedOrigin?: string,
+    options?: { captureScreenshot?: boolean },
+  ) => Promise<{ screenshot: Uint8Array; title: string; currentUrl: string }>;
 }
 
 const SESSION_TTL_MS = 5 * 60_000;
 const sessions = new Map<string, AgentBrowserSession>();
 const opening = new Map<string, Promise<AgentBrowserSession>>();
+/** Счётчик поколений: защищает от записи старых кук после clearAgentBrowserSession. */
+const sessionEpoch = new Map<string, number>();
 
 function storageKey(): Buffer {
   const secret = process.env.AUTH_SECRET;
@@ -108,6 +115,7 @@ async function readStoredState(userId: string): Promise<SavedBrowserState | unde
 export async function persistAgentBrowserSession(userId: string): Promise<void> {
   const session = sessions.get(userId);
   if (!session || session.page.isClosed()) return;
+  const startEpoch = sessionEpoch.get(userId) ?? 0;
   const state = await session.context.storageState({ indexedDB: true }).catch(() => undefined);
   const currentUrl = /^https?:\/\//i.test(session.page.url()) ? session.page.url() : undefined;
   const sessionId = session.remote?.sessionId;
@@ -116,9 +124,11 @@ export async function persistAgentBrowserSession(userId: string): Promise<void> 
   // runner не смог его собрать — приходит пустым. Затирать им сохранённые
   // куки нельзя: иначе после рестарта лямбды вход в BilimClass теряется.
   const prev = await readStoredState(userId).catch(() => undefined);
+  if ((sessionEpoch.get(userId) ?? 0) !== startEpoch || sessions.get(userId) !== session) return;
   const merged = state ? mergeStorageStates(prev?.storageState, state) : prev?.storageState;
 
   const db = await getDb();
+  if ((sessionEpoch.get(userId) ?? 0) !== startEpoch) return;
   await db.collection(COL.agentBrowserSessions).updateOne(
     { user_id: userId },
     { $set: { encrypted_state: encryptState(JSON.stringify({ storageState: merged, currentUrl: currentUrl ?? prev?.currentUrl, sessionId: sessionId ?? prev?.sessionId, interactionState: session.remote?.getInteractionState?.() ?? prev?.interactionState, rpcUrl: session.remote?.rpcUrl ?? prev?.rpcUrl })), updated_at: new Date() }, $setOnInsert: { created_at: new Date() } },
@@ -127,6 +137,8 @@ export async function persistAgentBrowserSession(userId: string): Promise<void> 
 }
 
 export async function clearAgentBrowserSession(userId: string): Promise<void> {
+  sessionEpoch.set(userId, (sessionEpoch.get(userId) ?? 0) + 1);
+  opening.delete(userId);
   const session = sessions.get(userId);
   sessions.delete(userId);
   if (session) {
@@ -246,6 +258,7 @@ export async function getAgentBrowserSession(userId: string): Promise<AgentBrows
 }
 
 async function createAgentBrowserSession(userId: string, now: number): Promise<AgentBrowserSession> {
+  const startEpoch = sessionEpoch.get(userId) ?? 0;
   const current = sessions.get(userId);
   if (current) {
     sessions.delete(userId);
@@ -295,6 +308,12 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
       rpcUrl,
     });
     const session = createRemoteSession(userId, created.sessionId!, stored?.currentUrl ?? created.currentUrl, stored?.storageState, stored?.interactionState, now, rpcUrl);
+    if ((sessionEpoch.get(userId) ?? 0) !== startEpoch) {
+      sessions.delete(userId);
+      await session.context.close().catch(() => {});
+      await session.browser.close().catch(() => {});
+      throw new BrowserRpcError("Browser session was cleared while opening", 410);
+    }
     // Адрес раннера сохраняем сразу: следующий запрос пойдёт быстрым путём.
     void persistAgentBrowserSession(userId).catch(() => undefined);
     return session;
@@ -322,7 +341,7 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
   let closed = false;
   let closeRequest: Promise<void> | undefined;
 
-  const send = async <T,>(action: string, args?: Record<string, unknown>, allowedOrigin?: string, captureScreenshot = false) => {
+  const send = async <T,>(action: string, args?: Record<string, unknown>, allowedOrigin?: string, captureScreenshot?: boolean) => {
     if (closed && action !== "close") throw new BrowserRpcError("Browser session is closed", 410);
     let response: Awaited<ReturnType<typeof browserRpc<T>>>;
     try {
@@ -332,7 +351,7 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
         interactionState: currentInteractionState,
         rpcUrl,
         ...(allowedOrigin ? { allowedOrigin } : {}),
-        ...(captureScreenshot ? { captureScreenshot: true } : {}),
+        ...(captureScreenshot === undefined ? {} : { captureScreenshot }),
         ...(args ? { args } : {}),
         // Проверка статуса короткая: уснувшая песочница не должна держать запрос минуту.
         timeoutMs: action === "status" ? 10_000 : action === "navigate" ? 35_000 : 55_000,
@@ -431,11 +450,15 @@ async function createAgentBrowserSession(userId: string, now: number): Promise<A
       sessionId,
       rpcUrl,
       getInteractionState: () => currentInteractionState,
-      performUiAction: async (action, args, allowedOrigin) => {
-        const response = await send<{ url?: string; status?: number | null }>(action, args, allowedOrigin, true);
-        if (!response.screenshotBase64) throw new BrowserRpcError("Browser service did not return a page image", 502);
+      performUiAction: async (action, args, allowedOrigin, options) => {
+        const captureScreenshot = options?.captureScreenshot ?? true;
+        const response = await send<{ url?: string; status?: number | null }>(action, args, allowedOrigin, captureScreenshot);
+        if (captureScreenshot && !response.screenshotBase64) throw new BrowserRpcError("Browser service did not return a page image", 502);
         return {
-          screenshot: new Uint8Array(Buffer.from(response.screenshotBase64, "base64")),
+          // Fast UI typing intentionally skips an image. Keep the public
+          // contract stable for agents/integration tests; the route knows not
+          // to render this empty value when it requested a fast action.
+          screenshot: response.screenshotBase64 ? new Uint8Array(Buffer.from(response.screenshotBase64, "base64")) : new Uint8Array(),
           title: response.pageTitle ?? "",
           currentUrl: response.currentUrl ?? currentUrl,
         };

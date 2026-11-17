@@ -144,10 +144,7 @@ export async function logAiHistory(entry: Omit<AiHistoryDoc, "_id" | "createdAt"
 export async function canViewAiHistory(requesterId: string, targetUserId: string): Promise<boolean> {
   if (requesterId === targetUserId) return true;
   try {
-    const [requesterSchools, targetSchools] = await Promise.all([
-      getUserSchools(requesterId),
-      getUserSchools(targetUserId),
-    ]);
+    const targetSchools = await getUserSchools(targetUserId);
     const targetSchoolIds = new Set(targetSchools.map((s) => s._id?.toString()).filter(Boolean) as string[]);
     if (targetSchoolIds.size === 0) return false;
     const db = await getDb();

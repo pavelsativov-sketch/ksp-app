@@ -82,6 +82,14 @@ export async function getPlanMaterial(planId: string, ownerId: string, kind: Mat
   return (await collection()).findOne({ _id: materialId(planId, kind), owner_id: ownerId });
 }
 
+/** Все сохранённые материалы урока с payload (для выгрузки полного комплекта в ZIP). */
+export async function listFullPlanMaterials(planId: string, ownerId: string): Promise<PlanMaterialDoc[]> {
+  return (await collection())
+    .find({ plan_id: planId, owner_id: ownerId })
+    .sort({ updated_at: -1 })
+    .toArray();
+}
+
 /** Задания рабочего листа без картинок и Word-файла: для баллов в «Оценивании». */
 export async function getWorksheetTasks(planId: string, ownerId: string): Promise<{ stage: StageKey; tasks: WorksheetTask[] } | null> {
   const doc = await (await collection()).findOne(

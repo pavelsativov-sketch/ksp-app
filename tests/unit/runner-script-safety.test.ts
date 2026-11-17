@@ -41,4 +41,11 @@ describe("скрипт раннера", () => {
     expect(RUNNER_SCRIPT).toContain('process.on("uncaughtException"');
     expect(RUNNER_SCRIPT).toContain('process.on("unhandledRejection"');
   });
+
+  it("не добавляет искусственную задержку к каждому символу ввода", () => {
+    // UI уже показывает текст локально, поэтому 10 мс на символ превращали
+    // вставку длинного логина/пароля в заметный лаг удалённой клавиатуры.
+    expect(RUNNER_SCRIPT).toContain('args.delay ?? 0');
+    expect(RUNNER_SCRIPT).not.toContain('args.delay ?? 10');
+  });
 });

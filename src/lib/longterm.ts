@@ -264,24 +264,27 @@ export async function getMediumTermPlans(
 export async function linkKspToMediumTerm(
   mediumTermId: string,
   kspId: string,
+  topicIndex?: number,
 ): Promise<MediumTermPlan | null> {
   const oid = toObjectId(mediumTermId);
   if (!oid) return null;
   const db = await getDb();
-  // Add kspId to the first topic that doesn't already have it, or create a new topic
   const doc = await db.collection<MediumTermDoc>(COL.mediumtermPlans).findOne({ _id: oid });
   if (!doc) return null;
 
   const topics = [...doc.topics];
-  // Find a topic to link to — for now, add to the last topic or create a new one
   if (topics.length === 0) {
     topics.push({ title: "", hours: 1, kspIds: [kspId] });
   } else {
-    const lastTopic = { ...topics[topics.length - 1] };
-    if (!lastTopic.kspIds.includes(kspId)) {
-      lastTopic.kspIds = [...lastTopic.kspIds, kspId];
+    const idx =
+      typeof topicIndex === "number" && topicIndex >= 0 && topicIndex < topics.length
+        ? topicIndex
+        : topics.length - 1;
+    const targetTopic = { ...topics[idx] };
+    if (!targetTopic.kspIds.includes(kspId)) {
+      targetTopic.kspIds = [...targetTopic.kspIds, kspId];
     }
-    topics[topics.length - 1] = lastTopic;
+    topics[idx] = targetTopic;
   }
 
   const updated = await db

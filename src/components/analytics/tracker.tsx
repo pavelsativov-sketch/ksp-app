@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 const BATCH_INTERVAL_MS = 30_000;
@@ -16,19 +16,6 @@ interface QueuedEvent {
 
 let eventQueue: QueuedEvent[] = [];
 let flushTimer: ReturnType<typeof setInterval> | null = null;
-let sessionId: string | null = null;
-
-function getSessionId(): string {
-  if (sessionId) return sessionId;
-  if (typeof window === "undefined") return "server";
-  let sid = sessionStorage.getItem("ksp_analytics_session");
-  if (!sid) {
-    sid = crypto.randomUUID();
-    sessionStorage.setItem("ksp_analytics_session", sid);
-  }
-  sessionId = sid;
-  return sid;
-}
 
 async function flushEvents(): Promise<void> {
   if (eventQueue.length === 0) return;

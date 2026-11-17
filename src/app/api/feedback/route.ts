@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isMongoConfigured } from "@/lib/mongo";
 import { getCurrentUser } from "@/lib/auth";
-import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { requireAdmin } from "@/lib/admin/auth";
 import { submitFeedback, getFeedback, respondToFeedback, updateFeedbackStatus, getFeedbackStats } from "@/lib/feedback";
-import { log } from "@/lib/logger";
 
 export const runtime = "nodejs";
 

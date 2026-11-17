@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
 import { requireAdmin } from "@/lib/admin/auth";
 import { trackEventsBatch } from "@/lib/analytics";
-import { log } from "@/lib/logger";
 
 export const runtime = "nodejs";
 

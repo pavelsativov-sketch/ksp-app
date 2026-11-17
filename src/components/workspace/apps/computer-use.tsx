@@ -626,6 +626,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
 
         {screenshot && (
           <figure className="relative mt-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- живой кадр браузера передаётся в data:image/jpeg */}
             <img
               ref={imgRef}
               src={screenshot}

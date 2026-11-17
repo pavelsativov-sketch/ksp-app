@@ -98,10 +98,13 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
   const containerRef = useRef<HTMLDivElement | null>(null);
   const kbInputRef = useRef<HTMLInputElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const frameInFlightRef = useRef(false);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingCountRef = useRef(0);
   const typeBufferRef = useRef('');
   const typeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frameSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const credCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInitialUrlRef = useRef(initialUrl?.trim() || '');
   const canvasFocusedRef = useRef(false);
   // Пока учитель правит адрес, кадры не должны затирать его ввод. Раньше
@@ -238,12 +241,13 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
   }, [endWait]);
 
   const fetchFrame = useCallback(async () => {
-    if (pendingCountRef.current > 0 || typeBufferRef.current) return undefined;
-    if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
+    if (pendingCountRef.current > 0 || typeBufferRef.current || frameInFlightRef.current) return undefined;
+    const ac = new AbortController();
+    abortRef.current = ac;
+    frameInFlightRef.current = true;
     if (!hasImageRef.current) beginWait();
     try {
-      const res = await fetch(`${BASE}?action=screenshot`, { signal: abortRef.current.signal, cache: 'no-store' });
+      const res = await fetch(`${BASE}?action=screenshot`, { signal: ac.signal, cache: 'no-store' });
       // Устойчивый 503 — браузер недоступен по окружению (например, вне
       // Vercel). Не долбим сервер каждые 1.2с: останавливаем polling и
       // показываем понятное сообщение.
@@ -251,7 +255,8 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
         consecutive503Ref.current += 1;
         if (consecutive503Ref.current >= 3) {
           unavailableRef.current = true;
-          setError('Браузер рабочей области сейчас недоступен. На своём компьютере проверьте, что раннер запущен (npm run dev:local); в облаке — что настроена среда Vercel Sandbox.');
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          setError(body.error || 'Браузер рабочей области сейчас недоступен. Проверьте подключение облачной среды Vercel Sandbox.');
         }
         return undefined;
       }
@@ -262,10 +267,18 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
       const isAbort = e instanceof Error && e.name === 'AbortError';
       if (!isAbort) setError(e instanceof Error ? e.message : String(e));
       return undefined;
+    } finally {
+      if (abortRef.current === ac) {
+        frameInFlightRef.current = false;
+      }
     }
   }, [acceptFrame, beginWait]);
 
   const enqueueAction = useCallback((params: Record<string, string>) => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      frameInFlightRef.current = false;
+    }
     pendingCountRef.current += 1;
     if (!hasImageRef.current) beginWait();
     const isNavigation = !params.action || ['navigate', 'reload', 'back', 'forward'].includes(params.action);
@@ -281,7 +294,10 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
             body: JSON.stringify(params),
             cache: 'no-store',
           });
-          await acceptFrame(actionResult);
+          // Быстрый пакет символов подтверждается 204: текст уже виден в
+          // локальном overlay, поэтому не тратим JPEG + DOM-разведку на
+          // каждый фрагмент. Снимок заберёт одна отложенная синхронизация.
+          if (actionResult.status !== 204) await acceptFrame(actionResult);
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e));
         } finally {
@@ -292,6 +308,20 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     return queueRef.current;
   }, [acceptFrame, beginWait]);
   useEffect(() => { enqueueRef.current = enqueueAction; }, [enqueueAction]);
+
+  const scheduleFrameSync = useCallback(() => {
+    if (frameSyncTimerRef.current) clearTimeout(frameSyncTimerRef.current);
+    frameSyncTimerRef.current = setTimeout(() => {
+      frameSyncTimerRef.current = null;
+      void fetchFrame();
+    }, 90);
+  }, [fetchFrame]);
+
+  useEffect(() => () => {
+    if (frameSyncTimerRef.current) clearTimeout(frameSyncTimerRef.current);
+    if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
+    if (credCloseTimerRef.current) clearTimeout(credCloseTimerRef.current);
+  }, []);
 
   // Какие сайты поддерживают автовход и для каких уже есть данные.
   useEffect(() => {
@@ -313,8 +343,8 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     const text = typeBufferRef.current;
     if (!text) return;
     typeBufferRef.current = '';
-    void enqueueAction({ action: 'type', text });
-  }, [enqueueAction]);
+    void enqueueAction({ action: 'type', text, fast: '1' }).then(scheduleFrameSync);
+  }, [enqueueAction, scheduleFrameSync]);
 
   const doAction = useCallback((params: Record<string, string>) => {
     flushTypedBuffer();
@@ -490,8 +520,8 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     if (!pasted) return;
     setLiveText((prev) => prev + pasted);
     flushTypedBuffer();
-    void enqueueAction({ action: 'type', text: pasted });
-  }, [enqueueAction, flushTypedBuffer]);
+    void enqueueAction({ action: 'type', text: pasted, fast: '1' }).then(scheduleFrameSync);
+  }, [enqueueAction, flushTypedBuffer, scheduleFrameSync]);
 
   // Прокрутка колесом. Обработчик React для wheel пассивный: preventDefault
   // в нём не работает и сыплет предупреждения, а страница вокруг тоже
@@ -785,7 +815,8 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
                     // Данные сохранены: браузер вводит их сам и входит в аккаунт.
                     autoLoginAtRef.current = Date.now();
                     void enqueueAction({ action: 'autologin' });
-                    setTimeout(() => setCredDialog(false), 1200);
+                    if (credCloseTimerRef.current) clearTimeout(credCloseTimerRef.current);
+                    credCloseTimerRef.current = setTimeout(() => setCredDialog(false), 1200);
                   } else {
                     const data = (await res.json().catch(() => ({}))) as { error?: string };
                     setCredError(data.error ?? 'Не удалось сохранить данные');

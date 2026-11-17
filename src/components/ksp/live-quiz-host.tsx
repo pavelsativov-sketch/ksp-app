@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Copy,
   Play,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
+import { MathText } from "@/lib/math/render-math";
 import {
   type InteractiveTask,
 } from "@/lib/ksp/tasks";
@@ -56,11 +57,11 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
   // Неотправленные события хоста: показываем баннер с повтором, чтобы ученики не зависли.
   const [failedEvents, setFailedEvents] = useState<Array<{ event: string; payload: unknown }>>([]);
 
-  function send(event: string, payload: unknown) {
+  const send = useCallback((event: string, payload: unknown) => {
     postQuizEvent(code, event, payload).catch(() =>
       setFailedEvents((prev) => [...prev, { event, payload }]),
     );
-  }
+  }, [code]);
 
   function retryFailed() {
     const pending = failedEvents;
@@ -101,7 +102,7 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
       leaderboard: [],
       planId,
     });
-  }, [code, planId, resume]);
+  }, [code, planId, resume, send]);
 
   // Polling входящих событий студентов (join/answer) каждые 1.5с.
   useEffect(() => {
@@ -423,7 +424,7 @@ function QuestionView({
           </span>
         )}
       </div>
-      <h2 className="text-3xl font-semibold leading-tight">{task.question}</h2>
+      <h2 className="text-3xl font-semibold leading-tight"><MathText text={task.question} /></h2>
 
       {task.type === "MCQ" && (
         <div className="grid grid-cols-2 gap-3 pt-3">
@@ -435,7 +436,7 @@ function QuestionView({
               <span className="mr-2 font-bold text-primary">
                 {String.fromCharCode(0x0410 + i)}.
               </span>
-              {opt}
+              <MathText text={opt} />
             </div>
           ))}
         </div>
@@ -451,7 +452,7 @@ function QuestionView({
         </div>
       )}
       {task.type === "FILL_BLANK" && (
-        <p className="text-xl text-muted-foreground italic">{task.template}</p>
+        <p className="text-xl text-muted-foreground italic"><MathText text={task.template} /></p>
       )}
 
       <div className="flex items-center justify-between border-t border-border pt-4">
@@ -494,9 +495,9 @@ function RevealView({
         <p className="text-xs uppercase tracking-wider text-muted-foreground">
           Вопрос {index + 1} из {total}
         </p>
-        <h2 className="text-2xl font-semibold">{task.question}</h2>
+        <h2 className="text-2xl font-semibold"><MathText text={task.question} /></h2>
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-4 text-lg">
-          {correctSummary(task)}
+          <MathText text={correctSummary(task)} />
         </div>
         <Button onClick={onNext} className="w-full">
           {isLast ? "Завершить и показать итоги" : "Следующий вопрос"}{" "}

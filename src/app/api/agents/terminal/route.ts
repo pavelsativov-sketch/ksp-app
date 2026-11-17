@@ -3,7 +3,7 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 import { getWorkspaceTarget } from "@/lib/agents/runtime-mode";
 import { randomUUID } from "node:crypto";
-import { LEGACY_PID_FILE, terminalPidFile, terminalRunId } from "@/lib/agents/terminal-pid";
+import { LEGACY_PID_FILE, shellQuote, terminalPidFile, terminalRunId } from "@/lib/agents/terminal-pid";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     // оболочку командой (exec): «Стоп» с этим runId убивает именно эту команду,
     // а не последнюю из параллельных. Общий файл — для старого клиента без runId.
     const runId = terminalRunId(body.runId) ?? randomUUID();
-    const tracked = `echo $$ > ${terminalPidFile(runId)}; echo $$ > ${LEGACY_PID_FILE}; exec ${body.command}`;
+    const tracked = `echo $$ > ${terminalPidFile(runId)}; echo $$ > ${LEGACY_PID_FILE}; exec bash -lc ${shellQuote(body.command)}`;
     const result = await runtime.runCommand(tracked, typeof body.timeoutMs === "number" ? body.timeoutMs : undefined);
     return NextResponse.json({ success: result.exitCode === 0, runId, ...result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

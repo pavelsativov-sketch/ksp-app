@@ -9,7 +9,7 @@ const userId = new ObjectId().toString();
 const taskId = new ObjectId();
 const taskFindOne = vi.fn();
 const toArray = vi.fn();
-const find = vi.fn((_filter: unknown) => ({ sort: () => ({ limit: () => ({ toArray }) }) }));
+const find = vi.fn<(filter: unknown) => { sort: () => { limit: () => { toArray: typeof toArray } } }>(() => ({ sort: () => ({ limit: () => ({ toArray }) }) }));
 
 vi.mock("@/lib/api-auth", () => ({
   requireApiAuth: async () => ({ user: { id: userId } }),

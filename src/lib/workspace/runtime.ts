@@ -111,6 +111,9 @@ export async function getAccountSandbox(userId: string): Promise<Sandbox> {
   // Если песочница была создана ранее без открытого порта 3000 — пересоздаём её с портом
   const hasPort3000 = (sandbox as unknown as { routes?: Array<{ port: number }> }).routes?.some((r) => r.port === 3000);
   if (!hasPort3000) {
+    // Экспорт выполняем до delete. Если среда не отвечает или места слишком
+    // много, прерываемся с понятной ошибкой и оставляем старую среду целой.
+    const existingFiles = await exportSandboxWorkspace(sandbox);
     try {
       await sandbox.delete({ deleteOrphanSnapshots: true });
     } catch {}
@@ -124,6 +127,8 @@ export async function getAccountSandbox(userId: string): Promise<Sandbox> {
       resources: { vcpus: 1 },
       keepLastSnapshots: { count: 1 },
     });
+    await sandbox.fs.mkdir(WORKSPACE_ROOT, { recursive: true });
+    await importSandboxWorkspace(sandbox, existingFiles);
   }
 
   await sandbox.fs.mkdir(WORKSPACE_ROOT, { recursive: true });
@@ -133,6 +138,50 @@ export async function getAccountSandbox(userId: string): Promise<Sandbox> {
 function sandboxPath(filename: string): string {
   const key = splitFileName(filename);
   return `${WORKSPACE_ROOT}/${key.path === ROOT ? "" : `${key.path.slice(ROOT.length + 1)}/`}${key.name}`;
+}
+
+type SandboxWorkspaceFile = { relative: string; content: string };
+
+/**
+ * Read the user area before replacing an older sandbox configuration.
+ *
+ * Sandboxes created before port 3000 was added have to be recreated for the
+ * browser runner to work. Their filesystem is persistent, but deleting that
+ * sandbox without this export would silently discard every file created only
+ * in the Linux workspace.
+ */
+async function exportSandboxWorkspace(sandbox: Sandbox): Promise<SandboxWorkspaceFile[]> {
+  const result = await sandbox.runCommand({
+    cmd: "find", args: [WORKSPACE_ROOT, "-type", "f", "-print"], cwd: WORKSPACE_ROOT, timeoutMs: 15_000,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error((await result.stderr()).slice(0, 500) || "Не удалось подготовить файлы к обновлению рабочей среды");
+  }
+  const paths = (await result.stdout()).split("\n").map((item) => item.trim()).filter(Boolean);
+  if (paths.length > 500) throw new Error("В рабочей области больше 500 файлов; сократите их перед обновлением среды");
+  const files: SandboxWorkspaceFile[] = [];
+  let bytes = 0;
+  for (const absolute of paths) {
+    if (!absolute.startsWith(`${WORKSPACE_ROOT}/`)) continue;
+    const content = await sandbox.fs.readFile(absolute, "utf8");
+    bytes += Buffer.byteLength(content, "utf8");
+    if (bytes > 20_000_000) throw new Error("Файлы рабочей области больше 20 МБ; сократите их перед обновлением среды");
+    files.push({ relative: absolute.slice(WORKSPACE_ROOT.length + 1), content });
+  }
+  return files;
+}
+
+async function importSandboxWorkspace(sandbox: Sandbox, files: SandboxWorkspaceFile[]): Promise<void> {
+  for (const file of files) {
+    const target = `${WORKSPACE_ROOT}/${file.relative}`;
+    await sandbox.fs.mkdir(target.slice(0, target.lastIndexOf("/")), { recursive: true });
+    await sandbox.fs.writeFile(target, file.content, "utf8");
+  }
+}
+
+function isMissingSandboxPath(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /not.?found|enoent|404/i.test(message);
 }
 
 async function makeVercelRuntime(userId: string) {
@@ -180,6 +229,35 @@ async function makeVercelRuntime(userId: string) {
     async deleteFile(filename: string): Promise<void> {
       try { await sandbox.fs.unlink(sandboxPath(filename)); }
       catch { throw new Error("Файл не найден"); }
+    },
+    /**
+     * Rename inside the sandbox instead of round-tripping content through the
+     * browser.  Besides being much faster, this keeps files larger than the
+     * preview limit intact.
+     */
+    async renameFile(from: string, to: string): Promise<void> {
+      const source = sandboxPath(from);
+      const target = sandboxPath(to);
+      if (source === target) return;
+      try { await sandbox.fs.access(source); }
+      catch (error) {
+        if (isMissingSandboxPath(error)) throw new Error("Файл не найден");
+        throw new Error("Не удалось проверить исходный файл");
+      }
+      let targetExists = false;
+      try {
+        await sandbox.fs.access(target);
+        targetExists = true;
+      } catch (error) {
+        // access() rejects when the destination does not exist, which is the
+        // only case in which moving without replacing data is safe. Other
+        // filesystem failures must never be mistaken for a missing file.
+        if (!isMissingSandboxPath(error)) throw new Error("Не удалось проверить новое имя файла");
+      }
+      if (targetExists) throw new Error("Файл с таким именем уже существует");
+      await sandbox.fs.mkdir(target.slice(0, target.lastIndexOf("/")), { recursive: true });
+      try { await sandbox.fs.rename(source, target); }
+      catch { throw new Error("Не удалось переименовать файл"); }
     },
     async runCommand(command: string, timeoutMs = COMMAND_TIMEOUT_MS) {
       const safeTimeout = Math.min(Math.max(timeoutMs, 1000), COMMAND_TIMEOUT_MS);
@@ -274,6 +352,42 @@ export async function getWorkspaceRuntime(userId: string) {
       const key = splitFileName(filename);
       const result = await files.deleteOne({ user_id: userId, path: key.path, name: key.name });
       if (result.deletedCount !== 1) throw new Error("Файл не найден");
+    },
+
+    /**
+     * Mongo has no filesystem rename primitive.  Insert the destination first
+     * (the unique index rejects collisions), then delete the source.  This
+     * ordering never loses a teacher's file if a database operation fails.
+     */
+    async renameFile(from: string, to: string): Promise<void> {
+      const source = splitFileName(from);
+      const target = splitFileName(to);
+      if (source.path === target.path && source.name === target.name) return;
+      const document = await files.findOne({ user_id: userId, path: source.path, name: source.name });
+      if (!document) throw new Error("Файл не найден");
+      const now = new Date();
+      try {
+        await files.insertOne({
+          user_id: userId,
+          path: target.path,
+          name: target.name,
+          content: document.content,
+          created_at: document.created_at,
+          updated_at: now,
+        });
+      } catch (error) {
+        if (error instanceof Error && /duplicate|E11000/i.test(error.message)) {
+          throw new Error("Файл с таким именем уже существует");
+        }
+        throw new Error("Не удалось переименовать файл");
+      }
+      const deleted = await files.deleteOne({ _id: document._id });
+      if (deleted.deletedCount === 1) return;
+      // Do not leave a surprising duplicate behind if the source vanished in
+      // a competing request.  The original content remains recoverable in
+      // either case; report the conflict instead of claiming success.
+      await files.deleteOne({ user_id: userId, path: target.path, name: target.name, updated_at: now }).catch(() => undefined);
+      throw new Error("Файл изменился во время переименования; повторите попытку");
     },
 
     async runCommand(command: string, timeoutMs = COMMAND_TIMEOUT_MS) {

@@ -248,9 +248,14 @@ async function main() {
     const canvas = page.locator('[aria-label="Рабочая область браузера"]').first();
     const box = await canvas.boundingBox();
     if (!box) throw new Error("не нашёл область браузера");
-    const scale = box.width / VIEWPORT.width;
+    // Скриншот отрендерен с object-fit: contain внутри области браузера:
+    // учитываем реальный масштаб и отступы (letterbox), иначе при узкой высоте
+    // окна клики уходят мимо полей ввода.
+    const scale = Math.min(box.width / VIEWPORT.width, box.height / VIEWPORT.height);
+    const offsetX = (box.width - VIEWPORT.width * scale) / 2;
+    const offsetY = (box.height - VIEWPORT.height * scale) / 2;
     const clickRemote = async (x, y) => {
-      await page.mouse.click(box.x + x * scale, box.y + y * scale);
+      await page.mouse.click(box.x + offsetX + x * scale, box.y + offsetY + y * scale);
       await page.waitForTimeout(2200);
       return lastActiveField;
     };
@@ -328,7 +333,7 @@ async function main() {
     const durations = typed.map((c) => c.ms).sort((a, b) => a - b);
     const medianMs = median(typed.map((c) => c.ms));
     const worst = durations[durations.length - 1] ?? 0;
-    const errors = typed.filter((c) => c.status !== 200);
+    const errors = typed.filter((c) => c.status !== 200 && c.status !== 204);
     step("ввод пароля без ошибок", errors.length === 0,
       typed.length
         ? `запросов ${typed.length}, ошибок ${errors.length}${errors.length ? ` · ${errors.slice(0, 2).map((c) => `${c.status}: ${c.body}`).join(" | ")}` : ""}`
@@ -346,26 +351,33 @@ async function main() {
     // файла, правка в редакторе и чтение результата обратно в терминале.
     // Так видно, что все три приложения видят одну и ту же файловую систему.
     const openTab = async (name) => {
-      await page.getByRole("tab", { name: new RegExp(name, "i") }).click({ timeout: 30_000 });
+      const rx = new RegExp(name, "i");
+      const existing = page.getByRole("tab", { name: rx });
+      if (await existing.count()) {
+        await existing.first().click({ timeout: 30_000 });
+      } else {
+        await page.getByRole("button", { name: "Добавить вкладку" }).click({ timeout: 15_000 });
+        await page.getByRole("button", { name: rx }).first().click({ timeout: 15_000 });
+      }
       await page.waitForTimeout(1500);
     };
 
     /** Вводит команду в терминал и возвращает текст окна терминала. */
-    const runCommand = async (command) => {
-      const input = page.getByLabel("Команда Linux");
+    const runCommand = async (command, marker = command) => {
+      const input = page.locator('input[aria-label="Команда Linux"]:not([disabled])');
       await input.waitFor({ state: "visible", timeout: 30_000 });
       await input.fill(command);
       await input.press("Enter");
-      // Ждём, пока в выводе появится ожидаемая метка команды.
-      const term = page.getByLabel("Linux-терминал");
-      await term.getByText(command, { exact: false }).first()
+      // Ждём, пока в выводе появится ожидаемая метка результата.
+      const term = page.locator('section[aria-label="Терминал"]');
+      await term.locator("pre").filter({ hasText: marker }).first()
         .waitFor({ state: "attached", timeout: 60_000 }).catch(() => {});
       await page.waitForTimeout(1500);
       return (await term.innerText()).replace(/\s+/g, " ").trim();
     };
 
     await openTab("Терминал");
-    const termOut = await runCommand("echo MEKTY_OS_READY");
+    const termOut = await runCommand("echo MEKTY_OS_READY", "MEKTY_OS_READY");
     step("терминал выполняет команды", termOut.includes("MEKTY_OS_READY"),
       termOut.slice(-90));
 
@@ -379,7 +391,7 @@ async function main() {
 
     // Терминалем читаем, что файл действительно оказался на диске песочницы.
     await openTab("Терминал");
-    const catOut = await runCommand(`cat /vercel/sandbox/workspace/${PROBE_FILE}`);
+    const catOut = await runCommand(`cat /vercel/sandbox/workspace/${PROBE_FILE}`, PROBE_TEXT);
     step("файл виден в терминале", catOut.includes(PROBE_TEXT), catOut.slice(-90));
 
     await openTab("Редактор");
@@ -406,7 +418,7 @@ async function main() {
     }, { file: PROBE_FILE, text: EDITED_TEXT });
     step("редактор сохраняет файл", saved.status === 200, `HTTP ${saved.status} ${saved.body}`);
     await openTab("Терминал");
-    const afterEdit = await runCommand(`cat /vercel/sandbox/workspace/${PROBE_FILE}`);
+    const afterEdit = await runCommand(`cat /vercel/sandbox/workspace/${PROBE_FILE}`, EDITED_TEXT);
     step("правка редактора видна в терминале", afterEdit.includes(EDITED_TEXT), afterEdit.slice(-90));
 
     step("без ошибок в странице", pageErrors.length === 0 && consoleErrors.length === 0,

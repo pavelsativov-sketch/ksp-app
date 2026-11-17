@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ObjectId } from "mongodb";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   embeddingCacheKey,
   getCachedEmbedding,

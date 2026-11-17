@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useRef } from 'react';
 import { useWorkspaceStore, type AppType } from '@/lib/store/workspace';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -82,6 +82,17 @@ export const DESKTOP_APPS: DesktopApp[] = [
 export function Desktop() {
   const openWindow = useWorkspaceStore((s) => s.openWindow);
   const windows = useWorkspaceStore((s) => s.windows);
+  // Прогрев дорогой только на холодной песочнице. Начинаем его при явном
+  // намерении открыть внешний сервис (наведение / фокус), но не для каждого
+  // посетителя рабочего стола. На клик браузер уже часто успевает подняться.
+  const warmupStarted = useRef(false);
+  const warmBrowser = useCallback(() => {
+    if (warmupStarted.current) return;
+    warmupStarted.current = true;
+    void fetch('/api/health/browser-keepalive', { cache: 'no-store' }).catch(() => {
+      // Основной экран браузера покажет понятную причину, если среда недоступна.
+    });
+  }, []);
 
   return (
     <div className="absolute inset-0 flex h-full max-h-full flex-col flex-wrap content-start items-start gap-x-1 gap-y-0 p-5">
@@ -91,6 +102,9 @@ export function Desktop() {
           type="button"
           className="group w-[84px] h-[96px] flex flex-col items-center justify-start pt-2 gap-1.5 rounded-xl hover:bg-white/[0.08] active:bg-white/[0.14] cursor-default select-none transition-all duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a98bff]/80 focus:bg-white/[0.08]"
           onClick={() => openWindow(app.id, app.title, app.type, app.url)}
+          onPointerEnter={app.type === 'browser' ? warmBrowser : undefined}
+          onFocus={app.type === 'browser' ? warmBrowser : undefined}
+          onTouchStart={app.type === 'browser' ? warmBrowser : undefined}
           title={`Открыть «${app.title}» — ${app.hint}`}
         >
           <div

@@ -206,7 +206,6 @@ export function escapeCsvValue(value: string | number | null): string {
   // формулы: `=\u0001A1` иначе прошёл бы как «обычный текст».
   // Переводы строк и табуляцию НАМЕРЕННО сохраняем — они легитимная часть
   // значения, и их удаление склеивало строки, ломая структуру CSV.
-  // eslint-disable-next-line no-control-regex
   const cleaned = String(value ?? "")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b-\u200f\ufeff]/g, "")
     .trim();

@@ -13,6 +13,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".vercel/**",
+    ".claude/**",
+    ".zcode/**",
+    ".impeccable/**",
+    "test-results/**",
+    "playwright-report/**",
     // Корневые add-*/fix-*/test-*.js и write-runner.js — исторические
     // одноразовые утилиты, не часть приложения и не поддерживаемые тесты.
     // Остальные действующие файлы приложения, tests и scripts/ остаются lint-имыми.

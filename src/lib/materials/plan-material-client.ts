@@ -1,4 +1,4 @@
-import type { MaterialKind } from "@/lib/types/ksp";
+import type { MaterialKind, StageKey } from "@/lib/types/ksp";
 
 /** Материал сохранён в урок кнопкой на странице: панель комплекта предлагает подключить его к этапу. */
 export const MATERIAL_SAVED_EVENT = "kit:material-saved";
@@ -18,5 +18,25 @@ export async function fetchPlanMaterial<T>(planId: string, kind: MaterialKind): 
   } catch {
     // Сеть недоступна: кнопка просто не предложит открыть прошлый материал.
     return null;
+  }
+}
+
+/** Сохраняет обновлённый материал урока на сервере (например, черновик презентации). */
+export async function savePlanMaterialClient(
+  planId: string,
+  kind: MaterialKind,
+  input: { title: string; stage?: StageKey; payload: unknown },
+): Promise<boolean> {
+  if (!/^[0-9a-f]{24}$/i.test(planId)) return false;
+  try {
+    const res = await fetch(`/api/plans/${planId}/materials/${kind}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (res.ok) announceMaterialSaved();
+    return res.ok;
+  } catch {
+    return false;
   }
 }

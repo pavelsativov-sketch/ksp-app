@@ -12,6 +12,8 @@ beforeEach(() => {
   vi.stubEnv("OPENAI_API_KEY", "");
   vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "");
   vi.stubEnv("CLOUDFLARE_API_TOKEN", "");
+  vi.stubEnv("GEMINI_API_KEY", "");
+  vi.stubEnv("VOYAGE_API_KEY", "");
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -39,7 +41,25 @@ describe("embedTexts provider fallback", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("bge-m3");
   });
 
-  it("throws on Cloudflare error (caller falls back to keyword search)", async () => {
+  it("falls back to Gemini when Cloudflare hits daily quota (429)", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "acc");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "tok");
+    vi.stubEnv("GEMINI_API_KEY", "gkey1,gkey2");
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("cloudflare")) {
+        return { ok: false, status: 429 };
+      }
+      return {
+        ok: true,
+        json: async () => ({ embeddings: [{ values: [0.5, 0.6] }] }),
+      };
+    });
+    const r = await embedTexts(["текст"]);
+    expect(r.provider).toBe("gemini");
+    expect(r.vectors).toEqual([[0.5, 0.6]]);
+  });
+
+  it("throws on Cloudflare error when no fallback providers are configured", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "acc");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "tok");
     fetchMock.mockResolvedValue({ ok: false, status: 500 });

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Check, KeyRound } from "lucide-react";
 import { getDict } from "@/lib/i18n/server";
+import { PricingLeadButton } from "@/components/pricing/pricing-lead-modal";
 
 export const metadata: Metadata = {
   title: "Тарифы — Mekty",
@@ -48,16 +49,31 @@ export default async function PricingPage() {
               <p className="mt-6"><span className="text-4xl font-semibold tracking-tight">2 490 ₸</span><span className="ml-1 text-sm text-graphite">{p.perMonth}</span></p>
               <div className="mt-4 border-l-2 border-pro-gold-bright rounded-xl bg-yellow-soft p-3 text-sm leading-6"><p className="font-semibold text-pro-gold">{p.perQuarter}</p><p className="font-semibold text-pro-gold">{p.perYear}</p><p className="mt-1 font-semibold text-pro-gold">{p.perYearNote}</p><p className="mt-1 text-xs leading-5 text-graphite">{p.perYearSave}</p></div>
               <div className="my-7 border-t border-line pt-6"><FeatureList items={p.proFeatures} /></div>
-              <Link href="/redeem" className="cta-ink mt-auto min-h-12 px-4 py-3 text-sm"><KeyRound aria-hidden="true" className="size-4" />{p.activateCode}</Link>
+              <div className="mt-auto space-y-2.5">
+                <PricingLeadButton
+                  kind="purchase_pro"
+                  label="Купить Pro (Kaspi / заявка)"
+                  className="cta-ink w-full min-h-12 px-4 py-3 text-sm"
+                />
+                <Link href="/redeem" className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-muted"><KeyRound aria-hidden="true" className="size-4" />{p.activateCode}</Link>
+              </div>
             </article>
 
             <article aria-labelledby="school-plan" className="app-card flex flex-col p-6">
               <p className="editorial-kicker">{p.schoolKicker}</p>
               <h2 id="school-plan" className="editorial-display mt-5 text-3xl">{p.schoolName}</h2>
-              <p className="mt-6"><span className="text-2xl font-semibold tracking-tight text-graphite">Скоро</span></p>
+              <p className="mt-6"><span className="text-2xl font-semibold tracking-tight text-graphite">Скоро · по заявке</span></p>
               <p className="mt-2 text-sm text-graphite">{p.schoolPerTeacher}</p>
               <div className="my-7 border-t border-line pt-6"><p className="text-sm leading-6 text-graphite">{p.schoolText}</p><p className="app-note mt-6 text-xl">{p.schoolSlogan}</p></div>
-              <div className="mt-auto border-t border-line pt-5"><p className="font-semibold text-ink">{p.schoolTitle}</p><p className="mt-2 text-sm leading-6 text-graphite">{p.schoolNote}</p></div>
+              <div className="mt-auto border-t border-line pt-5">
+                <p className="font-semibold text-ink">{p.schoolTitle}</p>
+                <p className="mt-2 text-sm leading-6 text-graphite">{p.schoolNote}</p>
+                <PricingLeadButton
+                  kind="school_lead"
+                  label="Оставить заявку для школы"
+                  className="cta-ink mt-4 w-full min-h-12 px-4 py-3 text-sm"
+                />
+              </div>
             </article>
           </div>
 

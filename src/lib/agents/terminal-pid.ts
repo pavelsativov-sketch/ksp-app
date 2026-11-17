@@ -15,9 +15,14 @@ export function terminalPidFile(runId: string): string {
   return `/tmp/mekty-term-${runId}.pid`;
 }
 
-/** Команда остановки: свой запуск по runId, иначе — последний (старое поведение). */
+/** Безопасное одиночное экранирование строки для передачи в `exec bash -lc '...'`. */
+export function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+/** Команда остановки: свой запуск по runId (включая дочерние процессы), иначе — последний. */
 export function terminalStopCommand(runId: string | null): string {
-  if (!runId) return `kill -TERM $(cat ${LEGACY_PID_FILE} 2>/dev/null) 2>/dev/null || true`;
+  if (!runId) return `P=$(cat ${LEGACY_PID_FILE} 2>/dev/null); [ -n "$P" ] && { pkill -TERM -P "$P" 2>/dev/null; kill -TERM "$P" 2>/dev/null; }; true`;
   const file = terminalPidFile(runId);
-  return `kill -TERM $(cat ${file} 2>/dev/null) 2>/dev/null; rm -f ${file}; true`;
+  return `P=$(cat ${file} 2>/dev/null); [ -n "$P" ] && { pkill -TERM -P "$P" 2>/dev/null; kill -TERM "$P" 2>/dev/null; }; rm -f ${file}; true`;
 }

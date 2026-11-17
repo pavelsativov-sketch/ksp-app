@@ -1,5 +1,4 @@
 import { chromium } from "playwright";
-import fs from "node:fs";
 import path from "node:path";
 
 const BASE_URL = process.env.TEST_URL || "https://ksp-app-pi.vercel.app";

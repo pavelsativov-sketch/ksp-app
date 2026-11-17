@@ -69,6 +69,10 @@ manus-webdev.json
 public/monaco/
 # Служебный каталог рантайма локальной машины: 136 МБ, в деплой не годится
 .freebuff/
+.claude/
+.zcode/
+.impeccable/
+dbg-*.png
 dev-os-check.log
 dev-os-check.pid
 # Логи, локальные утилиты и артефакты прогонов на ноутбуке.
@@ -79,3 +83,6 @@ test-bilim-*.png
 
 # Черновые пробы (могут содержать ключи)
 *.tmp.mjs
+
+.vercel
+.env*

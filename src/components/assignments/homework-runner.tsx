@@ -9,6 +9,7 @@ import type { PublicTask } from "@/lib/ksp/live-quiz";
 import type { TaskAnswer } from "@/lib/ksp/tasks";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { assignmentPreviewCopy } from "@/components/assignments/assignment-preview-copy";
+import { MathText, formatMathPlain } from "@/lib/math/render-math";
 
 type SubmitResult = {
   score: number;
@@ -48,7 +49,7 @@ function AnswerInput({
         {task.options.map((opt, i) => (
           <label key={i} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${answer.selectedIndex === i ? "border-primary bg-primary/5" : "border-border"}`}>
             <input type="radio" name={`q-${task.id}`} checked={answer.selectedIndex === i} onChange={() => onChange({ type: "MCQ", selectedIndex: i })} />
-            <span>{opt}</span>
+            <span><MathText text={opt} /></span>
           </label>
         ))}
       </div>
@@ -79,7 +80,7 @@ function AnswerInput({
       <div className="space-y-2">
         {parts.map((part, i) => (
           <div key={i} className="flex items-center gap-2">
-            {part && <span className="text-sm text-muted-foreground">{part}</span>}
+            {part && <span className="text-sm text-muted-foreground"><MathText text={part} /></span>}
             {i < answer.fillers.length && (
               <Input
                 value={answer.fillers[i]}
@@ -103,7 +104,7 @@ function AnswerInput({
       <div className="space-y-2">
         {task.left.map((left, li) => (
           <div key={li} className="flex items-center gap-2">
-            <span className="flex-1 rounded-lg bg-muted px-3 py-2 text-sm">{left}</span>
+            <span className="flex-1 rounded-lg bg-muted px-3 py-2 text-sm"><MathText text={left} /></span>
             <span className="text-muted-foreground">→</span>
             <select
               value={chosen.get(li) ?? ""}
@@ -114,11 +115,11 @@ function AnswerInput({
                 onChange({ type: "MATCHING", pairs });
               }}
               className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              aria-label={`${r.matchFor} «${left}»`}
+              aria-label={`${r.matchFor} «${formatMathPlain(left)}»`}
             >
               <option value="">{r.selectPh}</option>
               {task.right.map((right, ri) => (
-                <option key={ri} value={ri}>{right}</option>
+                <option key={ri} value={ri}>{formatMathPlain(right)}</option>
               ))}
             </select>
           </div>
@@ -139,7 +140,7 @@ function AnswerInput({
         {answer.order.map((itemIndex, pos) => (
           <li key={itemIndex} className="flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm">
             <span className="font-bold text-muted-foreground">{pos + 1}.</span>
-            <span className="flex-1">{task.items[itemIndex]}</span>
+            <span className="flex-1"><MathText text={task.items[itemIndex] ?? ""} /></span>
             <button type="button" onClick={() => move(pos, -1)} disabled={pos === 0} aria-label={r.up} className="rounded px-2 py-1 hover:bg-muted disabled:opacity-30">↑</button>
             <button type="button" onClick={() => move(pos, 1)} disabled={pos === answer.order.length - 1} aria-label={r.down} className="rounded px-2 py-1 hover:bg-muted disabled:opacity-30">↓</button>
           </li>
@@ -212,11 +213,11 @@ export function HomeworkRunner({ assignment }: { assignment: PublicAssignment })
                   {detail?.correct
                     ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
                     : <XCircle className="mt-0.5 size-4 shrink-0 text-red-500" />}
-                  {i + 1}. {task.question}
+                  <span>{i + 1}. <MathText text={task.question} /></span>
                 </p>
                 {detail && (
                   detail.correct && detail.summary ? (
-                    <p className="mt-2 text-sm text-muted-foreground">{detail.summary}</p>
+                    <p className="mt-2 text-sm text-muted-foreground"><MathText text={detail.summary} /></p>
                   ) : detail.correct ? (
                     <p className="mt-2 text-sm text-muted-foreground">{copy.feedbackDisabled}</p>
                   ) : (
@@ -266,8 +267,8 @@ export function HomeworkRunner({ assignment }: { assignment: PublicAssignment })
       </div>
       <div className="rounded-2xl border border-border bg-surface p-5">
         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{r.points.replace("{n}", String(task.points))}</p>
-        <h2 className="mt-1 text-lg font-semibold">{task.question}</h2>
-        {task.hint && <p className="mt-1 text-sm text-warning">{r.hintL} {task.hint}</p>}
+        <h2 className="mt-1 text-lg font-semibold"><MathText text={task.question} /></h2>
+        {task.hint && <p className="mt-1 text-sm text-warning">{r.hintL} <MathText text={task.hint} /></p>}
         <div className="mt-4">
           <AnswerInput
             task={task}

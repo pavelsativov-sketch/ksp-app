@@ -13,9 +13,12 @@ export function useFormDraft<T>(
   restore: (draft: T) => void,
 ): () => void {
   const restoreRef = useRef(restore);
-  restoreRef.current = restore;
   const savedRef = useRef(false);
   const skipFirstWriteRef = useRef(true);
+
+  useEffect(() => {
+    restoreRef.current = restore;
+  }, [restore]);
 
   useEffect(() => {
     try {

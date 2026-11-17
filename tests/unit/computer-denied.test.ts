@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { deniedLabel, describeError } from "@/lib/agents/computer/loop";
 import type { ProposedAction } from "@/lib/agents/computer/loop";

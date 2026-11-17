@@ -19,7 +19,6 @@
 import { chromium } from "playwright";
 import { readFileSync } from "node:fs";
 
-const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const KEY = process.env.GROQ_API_KEY;
 const GROQ = "https://api.groq.com/openai/v1";
 const SCREEN_WIDTH = 1280;

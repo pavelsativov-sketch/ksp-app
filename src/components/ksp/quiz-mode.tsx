@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { TaskPlayer } from "./task-player";
+import { MathText } from "@/lib/math/render-math";
 import type { InteractiveTask, TaskResult } from "@/lib/ksp/tasks";
 
 interface StageBundle {
@@ -210,7 +211,7 @@ function FinalScreen({
           >
             <span className="text-xs text-muted-foreground w-6">{i + 1}.</span>
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{r.question || "—"}</p>
+              <p className="font-medium truncate">{r.question ? <MathText text={r.question} /> : "—"}</p>
               <p className="text-xs text-muted-foreground">{r.stageTitle}</p>
             </div>
             <span className="tabular-nums text-sm shrink-0">

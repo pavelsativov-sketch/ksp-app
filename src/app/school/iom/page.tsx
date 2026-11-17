@@ -3,14 +3,22 @@
 import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, Check, Printer, Sparkles, Target, Compass } from "lucide-react";
+import { Loader2, Copy, Check, Printer, Sparkles, Compass } from "lucide-react";
+import { RosterPicker } from "@/components/school/roster-picker";
+import { SchoolDocxButton } from "@/components/school/school-docx-button";
+import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
 export default function IomPage() {
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
+
   const [studentName, setStudentName] = useState("Сериков Нурлан");
   const [subject, setSubject] = useState("Математика");
   const [grade, setGrade] = useState("6 класс");
   const [trackType, setTrackType] = useState("Ликвидация пробелов в знаниях (слабоуспевающий)");
-  const [gaps, setGaps] = useState("Действия с обыкновенными и десятичными дробями, решение уравнений и текстовых задач на движение");
+  const [gaps, setGaps] = useState(
+    "Действия с обыкновенными и десятичными дробями, решение уравнений и текстовых задач на движение",
+  );
   const [period, setPeriod] = useState("1 месяц (4 недели)");
 
   const [loading, setLoading] = useState(false);
@@ -27,7 +35,15 @@ export default function IomPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tool: "iom",
-          params: { studentName, subject, grade, trackType, gaps, period },
+          params: {
+            studentName,
+            subject,
+            grade,
+            trackType,
+            gaps,
+            period,
+            language: isKk ? "kz" : "ru",
+          },
         }),
       });
       const data = await res.json();
@@ -50,23 +66,49 @@ export default function IomPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 md:px-6">
       <header>
-        <p className="editorial-kicker text-warning">Дифференцированное обучение</p>
-        <h1 className="editorial-display mt-1 text-3xl font-bold">Индивидуальные образовательные маршруты (ИОМ)</h1>
+        <p className="editorial-kicker text-warning">
+          {isKk ? "Саралап оқыту" : "Дифференцированное обучение"}
+        </p>
+        <h1 className="editorial-display mt-1 text-3xl font-bold">
+          {isKk
+            ? "Жеке білім беру маршруттары (ЖБМ)"
+            : "Индивидуальные образовательные маршруты (ИОМ)"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Пошаговые программы работы со слабоуспевающими или высокомотивированными учащимися: диагностика пробелов, понедельный план ликвидации затруднений, дидактические карточки и критерии контроля.
+          {isKk
+            ? "Оқушыны базадан таңдаңыз — ЖИ білімдегі олқылықтарды жоюдың апталық жоспарын, дидактикалық тапсырмалар мен бақылау критерийлерін құрастырады (Word форматымен)."
+            : "Пошаговые программы работы со слабоуспевающими или одарёнными учащимися: диагностика пробелов, понедельный план, дидактические задания и выгрузка в Word."}
         </p>
       </header>
 
       <div className="grid gap-6 md:grid-cols-12">
         <Card className="md:col-span-5">
           <CardHeader>
-            <CardTitle className="text-base">Параметры маршрута</CardTitle>
-            <CardDescription>Укажите предмет, пробелы и сроки</CardDescription>
+            <CardTitle className="text-base">
+              {isKk ? "Маршрут параметрлері" : "Параметры маршрута"}
+            </CardTitle>
+            <CardDescription>
+              {isKk ? "Пәнді, тақырыптарды және мерзімін көрсетіңіз" : "Укажите предмет, пробелы и сроки"}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
+            <RosterPicker
+              mode="student"
+              locale={locale}
+              onSelectStudent={(st, summaryText) => {
+                setStudentName(st.fullName);
+                setGrade(st.className);
+                if (summaryText) {
+                  setGaps((prev) => `${summaryText}\n${prev}`.slice(0, 600));
+                }
+              }}
+            />
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-muted-foreground">Учащийся</label>
+                <label className="text-xs font-semibold text-muted-foreground">
+                  {isKk ? "Оқушы" : "Учащийся"}
+                </label>
                 <input
                   type="text"
                   value={studentName}
@@ -75,7 +117,9 @@ export default function IomPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted-foreground">Класс</label>
+                <label className="text-xs font-semibold text-muted-foreground">
+                  {isKk ? "Сынып" : "Класс"}
+                </label>
                 <input
                   type="text"
                   value={grade}
@@ -87,7 +131,9 @@ export default function IomPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-muted-foreground">Предмет</label>
+                <label className="text-xs font-semibold text-muted-foreground">
+                  {isKk ? "Пән" : "Предмет"}
+                </label>
                 <input
                   type="text"
                   value={subject}
@@ -96,79 +142,119 @@ export default function IomPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted-foreground">Срок реализации</label>
+                <label className="text-xs font-semibold text-muted-foreground">
+                  {isKk ? "Іске асыру мерзімі" : "Срок реализации"}
+                </label>
                 <select
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
                   className="mt-1 w-full rounded-lg border bg-background px-2.5 py-2 text-sm outline-none focus:border-warning/40"
                 >
-                  <option value="2 недели (интенсив)">2 недели (интенсив)</option>
-                  <option value="1 месяц (4 недели)">1 месяц (4 недели)</option>
-                  <option value="1 учебная четверть">1 четверть</option>
-                  <option value="Учебное полугодие">Полугодие</option>
+                  <option value="2 недели (интенсив)">
+                    {isKk ? "2 апта (қарқынды)" : "2 недели (интенсив)"}
+                  </option>
+                  <option value="1 месяц (4 недели)">
+                    {isKk ? "1 ай (4 апта)" : "1 месяц (4 недели)"}
+                  </option>
+                  <option value="1 учебная четверть">
+                    {isKk ? "1 тоқсан" : "1 четверть"}
+                  </option>
+                  <option value="Учебное полугодие">
+                    {isKk ? "Жартыжылдық" : "Полугодие"}
+                  </option>
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground">Направленность маршрута</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                {isKk ? "Маршрут бағыты" : "Направленность маршрута"}
+              </label>
               <select
                 value={trackType}
                 onChange={(e) => setTrackType(e.target.value)}
                 className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-xs outline-none focus:border-warning/40"
               >
                 <option value="Ликвидация пробелов в знаниях (слабоуспевающий)">
-                  Ликвидация пробелов в знаниях (слабоуспевающий)
+                  {isKk
+                    ? "Білімдегі олқылықтарды жою (үлгерімі төмен)"
+                    : "Ликвидация пробелов в знаниях (слабоуспевающий)"}
                 </option>
                 <option value="Развитие одарённости и углублённая подготовка к олимпиадам">
-                  Развитие одарённости и олимпиадная подготовка
+                  {isKk
+                    ? "Дарындылықты дамыту және олимпиадаға дайындық"
+                    : "Развитие одарённости и олимпиадная подготовка"}
                 </option>
                 <option value="Подготовка к пересдаче суммативного оценивания (СОР/СОЧ)">
-                  Подготовка к пересдаче СОР / СОЧ
+                  {isKk ? "БЖБ / ТЖБ-ға дайындық" : "Подготовка к пересдаче СОР / СОЧ"}
                 </option>
                 <option value="Индивидуальное сопровождение после длительного пропуска уроков">
-                  Сопровождение после болезни / пропуска занятий
+                  {isKk
+                    ? "Аурудан / сабақ босатудан кейінгі сүйемелдеу"
+                    : "Сопровождение после болезни / пропуска занятий"}
                 </option>
               </select>
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground">Западающие темы / Выявленные затруднения</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                {isKk ? "Қиындық тудыратын тақырыптар" : "Западающие темы / Выявленные затруднения"}
+              </label>
               <textarea
                 value={gaps}
                 onChange={(e) => setGaps(e.target.value)}
                 rows={3}
-                placeholder="Темы пробелов или разделы олимпиадной подготовки..."
                 className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-warning/40"
               />
             </div>
 
             <Button
-              onClick={handleGenerate}
+              onClick={() => void handleGenerate()}
               disabled={loading || !studentName.trim()}
               className="w-full gap-2 bg-gradient-to-r from-warning to-warning font-semibold text-white shadow-lg hover:opacity-90"
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              {loading ? "Формирую маршрут..." : "Сформировать маршрут ИОМ"}
+              {loading
+                ? isKk
+                  ? "Маршрут құрылуда..."
+                  : "Формирую маршрут..."
+                : isKk
+                  ? "ЖБМ маршрутын құрастыру"
+                  : "Сформировать маршрут ИОМ"}
             </Button>
             {error && <p className="text-xs text-rose-400">{error}</p>}
           </CardContent>
         </Card>
 
         <Card className="flex flex-col md:col-span-7">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-2 pb-3">
             <div>
-              <CardTitle className="text-base">Индивидуальный маршрут (ИОМ)</CardTitle>
-              <CardDescription>Понедельный план и дидактические шаги</CardDescription>
+              <CardTitle className="text-base">
+                {isKk ? "Жеке білім беру маршруты (ЖБМ)" : "Индивидуальный маршрут (ИОМ)"}
+              </CardTitle>
+              <CardDescription>
+                {isKk ? "Апталық жоспар және дидактикалық қадамдар" : "Понедельный план и дидактические шаги"}
+              </CardDescription>
             </div>
             {result && (
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                <SchoolDocxButton
+                  title={`${isKk ? "ЖБМ" : "ИОМ"} — ${studentName} (${subject})`}
+                  subtitle={`${grade} · ${period}`}
+                  content={result}
+                  language={isKk ? "kz" : "ru"}
+                />
                 <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1.5 text-xs">
                   {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-                  {copied ? "Скопировано" : "Копировать"}
+                  {copied ? (isKk ? "Көшірілді" : "Скопировано") : isKk ? "Көшіру" : "Копировать"}
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-1.5 text-xs">
-                  <Printer className="size-3.5" /> Печать
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="gap-1.5 text-xs"
+                >
+                  <Printer className="size-3.5" /> {isKk ? "Басып шығару" : "Печать"}
                 </Button>
               </div>
             )}
@@ -178,24 +264,17 @@ export default function IomPage() {
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
                 <div className="space-y-2">
                   <Compass className="mx-auto size-10 opacity-30" />
-                  <p className="text-sm font-medium">Маршрут появится здесь</p>
-                  <p className="text-xs text-muted-foreground/70">
-                    ИИ построит диагностическую карту, понедельные цели, практические упражнения и критерии контроля
+                  <p className="text-sm font-medium">
+                    {isKk ? "Маршрут осында шығады" : "Маршрут появится здесь"}
                   </p>
                 </div>
               </div>
             )}
-
             {loading && (
               <div className="grid h-80 place-items-center text-center text-muted-foreground">
-                <div className="space-y-3">
-                  <Loader2 className="mx-auto size-8 animate-spin text-warning" />
-                  <p className="text-sm font-medium text-white">ИИ проектирует образовательный маршрут...</p>
-                  <p className="text-xs text-muted-foreground/70">Формируется понедельный план повторения и консультаций</p>
-                </div>
+                <Loader2 className="mx-auto size-8 animate-spin text-warning" />
               </div>
             )}
-
             {result && (
               <div className="max-h-[620px] overflow-y-auto rounded-xl border bg-muted/30 p-5 font-sans text-sm leading-relaxed text-foreground whitespace-pre-wrap">
                 {result}

@@ -242,7 +242,9 @@ export async function POST(request: Request) {
             params,
             rag: ragInfo,
           });
-        } catch {}
+        } catch (err) {
+          log.warn("Failed to log AI history in stream", { reason: err instanceof Error ? err.message : String(err) });
+        }
 
         // Кладём в кэш под полным ключом (с учётом resolved-учебника).
         setCachedGeneration(preCacheKey, { payload: content, model, rag: ragInfo });

@@ -59,9 +59,10 @@ export async function generateKspWithModel(input: GenerateKspOptions): Promise<G
     return reviewDraft(payload, input);
   };
   let capturedModel = "unknown";
-  // Бюджет на один проход: при refine суммарно не должен превышать maxDuration
-  // роута (120 с), иначе платформа обрежет супервизор-проход на середине.
-  const passBudgetMs = input.refine ? 50_000 : 90_000;
+  // Бюджет на первый проход: оставляем достаточно времени на 3–4 независимых провайдера,
+  // а второй проход методиста запускаем только если остаётся безопасный запас до maxDuration (120 с).
+  const passBudgetMs = input.refine ? 68_000 : 90_000;
+  const perAttemptTimeoutMs = input.refine ? 18_000 : 22_000;
   const draft = await executeWithFallback("generation", async (client, model, config, signal) => {
     capturedModel = model;
     lastGenerationModel = model;
@@ -85,9 +86,9 @@ export async function generateKspWithModel(input: GenerateKspOptions): Promise<G
       throw new Error(`AI оборвал ответ на лимите ${config.maxTokens ?? 8192} токенов — план не дописан`);
     }
     return parseAndValidate(raw, input.topic, input.language);
-  }, { budgetMs: passBudgetMs, signal: input.signal });
+  }, { budgetMs: passBudgetMs, timeoutMs: perAttemptTimeoutMs, signal: input.signal });
 
-  if (!input.refine) {
+  if (!input.refine || Date.now() - startedAt > 55_000) {
     const payload = await reviewed(draft);
     stage?.({ percent: 100, label: "План готов" });
     return { payload, model: capturedModel };
@@ -95,6 +96,7 @@ export async function generateKspWithModel(input: GenerateKspOptions): Promise<G
 
   stage?.({ percent: 55, label: "Черновик готов, проверяем методистом" });
   try {
+    const remainingSupervisorBudget = Math.max(20_000, 102_000 - (Date.now() - startedAt));
     const refined = await executeWithFallback("generation", async (client, model, config, signal) => {
       capturedModel = model;
       lastGenerationModel = model;
@@ -116,7 +118,7 @@ export async function generateKspWithModel(input: GenerateKspOptions): Promise<G
       if (!raw) throw new Error("Supervisor AI не вернул ответ");
       if (choice?.finish_reason === "length") throw new Error("Supervisor AI оборвал ответ на лимите токенов");
       return parseAndValidate(raw, input.topic, input.language);
-    });
+    }, { budgetMs: remainingSupervisorBudget, timeoutMs: 18_000, signal: input.signal });
     const payload = await reviewed(refined);
     stage?.({ percent: 100, label: "План готов и проверен методистом" });
     return { payload, model: capturedModel };

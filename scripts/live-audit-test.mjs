@@ -154,9 +154,11 @@ try {
       .filter((t) => /Не удалось|Ошибка|занят|Проверьте|Слишком/i.test(t));
     return reds.slice(0, 3);
   });
-  schoolCount >= 1
-    ? pass("школа создана")
-    : fail("школа создана", `найдено ${schoolCount}; ошибки UI: ${JSON.stringify(schoolErrText)}`);
+  if (schoolCount >= 1) {
+    pass("школа создана");
+  } else {
+    fail("школа создана", `найдено ${schoolCount}; ошибки UI: ${JSON.stringify(schoolErrText)}`);
+  }
 
   // ── 4. План для live-квиза (напрямую в БД) ──
   console.log("— 4. Подготовка плана с задачей MCQ —");

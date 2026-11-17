@@ -376,13 +376,20 @@ const server = http.createServer(async (req, res) => {
           button: String(args.button ?? "left"),
           clickCount: Number(args.clickCount ?? 1),
         });
-        await page.waitForTimeout(150);
+        // Короткая пауза нужна, чтобы React/Vue успели обработать клик, но
+        // прежние 150 мс ощущались как лаг каждого нажатия мыши.
+        await page.waitForTimeout(50);
       } else if (action === "type") {
         const text = String(args.text ?? "");
         if (text) {
-          await page.keyboard.type(text, { delay: Number(args.delay ?? 10) });
+          // Вкладка уже рисует локальный overlay ввода. Искусственная пауза
+          // в 10 мс на символ лишь замедляла реальный ввод в удалённое поле.
+          const delay = Number(args.delay ?? 0);
+          await page.keyboard.type(text, { delay: Number.isFinite(delay) && delay >= 0 ? delay : 0 });
         }
-        await page.waitForTimeout(100);
+        // Быстрый ввод синхронизируется кадром после короткой паузы на клиенте;
+        // не кодируем JPEG после каждого фрагмента текста.
+        if (!args.fast) await page.waitForTimeout(50);
       } else if (action === "press") {
         const key = String(args.key ?? "Enter");
         await page.keyboard.press(key);
@@ -468,7 +475,10 @@ const server = http.createServer(async (req, res) => {
         "screenshot", "navigate", "click", "type", "press", "wheel",
         "back", "forward", "reload", "fill", "mouseDown", "mouseUp",
       ]);
-      if (captureScreenshot || (action !== "screenshot" && VISUAL_ACTIONS.has(action))) {
+      // captureScreenshot=false используется только для пакетного ввода
+      // из UI. Это избавляет каждый фрагмент текста от JPEG/base64-кодирования;
+      // отдельный кадр запрашивается после окончания набора.
+      if (captureScreenshot === true || (captureScreenshot !== false && action !== "screenshot" && VISUAL_ACTIONS.has(action))) {
         const shot = await page.screenshot({ type: "jpeg", quality: 80 });
         responsePayload.screenshotBase64 = shot.toString("base64");
       }

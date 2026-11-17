@@ -4,6 +4,7 @@
  * Обе операции используют один эндпойнт /api/agents/sandbox:
  *   GET  — список/содержимое,
  *   PUT  — создание/замена файла,
+ *   PATCH — серверное переименование без передачи содержимого в браузер,
  *   DELETE — удаление.
  * Для проверки сервер заменяется маленькой in-memory «машиной».
  */
@@ -36,6 +37,15 @@ function stubSandboxFetch() {
       if (existing >= 0) fs[existing]!.content = body.content ?? "";
       else fs.push({ name: body.file, content: body.content ?? "" });
       return respond({ ok: true, name: body.file });
+    }
+    if (method === "PATCH") {
+      const body = JSON.parse(String(init?.body)) as { from?: string; to?: string };
+      const source = fs.find((entry) => entry.name === body.from);
+      if (!source || !body.to || fs.some((entry) => entry.name === body.to)) {
+        return respond({ error: "Не удалось переименовать файл" }, false);
+      }
+      source.name = body.to;
+      return respond({ ok: true, name: body.to });
     }
     if (method === "DELETE") {
       const name = new URL(url, "http://localhost").searchParams.get("file") ?? "";
@@ -105,7 +115,7 @@ it("несуществующий файл по несовпадению имен
   expect(fs.find((entry) => entry.name === "plan.md")!.content).toBe("# План");
 });
 
-it("переименовывает открытый файл: PUT нового имени и DELETE старого", async () => {
+it("переименовывает открытый файл серверной операцией", async () => {
   vi.mocked(prompt as unknown as ReturnType<typeof vi.fn>).mockReturnValue("plan-v2.md");
   render(<FileManagerApp />);
   await waitFor(() => expect(screen.getByText("plan.md")).toBeTruthy());
@@ -123,6 +133,21 @@ it("переименовывает открытый файл: PUT нового �
   await waitFor(() => expect(screen.getByText("Файл переименован: plan-v2.md")).toBeTruthy());
   expect(fs.some((entry) => entry.name === "plan-v2.md" && entry.content === "# План")).toBe(true);
   expect(fs.some((entry) => entry.name === "plan.md")).toBe(false);
+  const renameCall = (fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+    (call) => String(call[0]) === "/api/agents/sandbox" && (call[1] as RequestInit | undefined)?.method === "PATCH",
+  );
+  expect(renameCall).toBeTruthy();
+});
+
+it("переименовывает файл больше лимита предпросмотра без потери содержимого", async () => {
+  fs = [{ name: "big.md", content: "x".repeat(25_000) }];
+  vi.mocked(prompt as unknown as ReturnType<typeof vi.fn>).mockReturnValue("big-renamed.md");
+  render(<FileManagerApp />);
+  await waitFor(() => expect(screen.getByText("big.md")).toBeTruthy());
+  await act(async () => { fireEvent.click(screen.getByText("big.md")); });
+  await act(async () => { fireEvent.click(screen.getByLabelText("Переименовать файл")); });
+  await waitFor(() => expect(screen.getByText("Файл переименован: big-renamed.md")).toBeTruthy());
+  expect(fs).toEqual([{ name: "big-renamed.md", content: "x".repeat(25_000) }]);
 });
 
 it("переименование можно отменить в диалоге — файл остаётся", async () => {

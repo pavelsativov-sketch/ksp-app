@@ -936,21 +936,26 @@ const RUNTIME_JS = `
 `;
 
 /** README for the zip, instructing the teacher how to open the package. */
-export function buildReadme(plan: LessonPlanRow): string {
+export function buildReadme(plan: LessonPlanRow, extraLines?: string[]): string {
+  const fileLines = [
+    "- plan.docx              — краткосрочный план (открывается в Word / Google Docs)",
+    ...(extraLines ?? []),
+    "- interactive.html       — интерактивные задания (откройте двойным кликом в любом браузере)",
+    "- README.txt             — этот файл",
+  ].join("\n");
+
   return `КСП: ${plan.title}
 Тема: ${plan.content.topic}
 Класс: ${plan.grade}
 
-Содержимое пакета:
-- plan.docx           — краткосрочный план (открывается в Word / Google Docs)
-- interactive.html    — интерактивные задания (откройте двойным кликом в любом браузере)
-- README.txt          — этот файл
+Содержимое комплекта урока:
+${fileLines}
 
 Инструкция для учителя:
 1. Распакуйте архив полностью (не запускайте файлы из zip напрямую).
-2. Откройте interactive.html — файл работает без интернета, в любом современном браузере.
-3. Для проведения урока выведите интерактивные задания на проектор / интерактивную доску.
-4. Прогресс сохраняется в браузере; кнопка «Сбросить прогресс» очищает ответы.
+2. Откройте документы .docx в Microsoft Word / Google Docs и при необходимости распечатайте рабочие листы, вариант ООП и карточки.
+3. Откройте presentation.pptx в PowerPoint для показа классу, либо interactive.html — файл работает без интернета в любом современном браузере.
+4. Прогресс интерактивных заданий сохраняется в браузере; кнопка «Сбросить прогресс» очищает ответы.
 
 Типы поддерживаемых заданий: выбор ответа, верно/неверно, короткий ответ,
 заполни пропуск, соотнесение (drag-and-drop), порядок, числовой ответ.

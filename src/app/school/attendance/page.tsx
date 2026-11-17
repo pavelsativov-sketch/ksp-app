@@ -2,7 +2,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { getAttendancePerClass, getAttendancePerDay, getAttendanceSummary } from "@/lib/school-analytics";
 import { getSchoolStudents } from "@/lib/school";
+import { getTeacherJournalAnalytics } from "@/lib/journal";
 import { NoSchool } from "@/components/school/no-school";
+import { PersonalAttendanceView } from "@/components/school/personal-school-views";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AttendanceRecorder } from "@/components/school/attendance-recorder";
 
@@ -11,8 +13,12 @@ export const dynamic = "force-dynamic";
 /** Посещаемость на реальных данных: общий %, по классам и по дням. */
 export default async function AttendancePage() {
   const user = await getCurrentUser();
-  const school = user ? await getActiveSchool(user.id) : null;
-  if (!school) return <NoSchool />;
+  if (!user) return <NoSchool />;
+  const school = await getActiveSchool(user.id);
+  if (!school) {
+    const personal = await getTeacherJournalAnalytics(user.id);
+    return <PersonalAttendanceView data={personal} />;
+  }
 
   const [summary, perClass, perDay, roster] = await Promise.all([
     getAttendanceSummary(school._id!.toString(), "2000-01-01", "2099-01-01"),

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
-import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType } from "docx";
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun } from "docx";
 import { parseBodyElements } from "@/lib/import/xml";
 import { parseAssessmentCell } from "@/lib/import/docx";
 

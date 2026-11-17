@@ -27,19 +27,24 @@ export async function GET(request: Request) {
   let csv: string;
   let filename: string;
 
-  if (studentParam) {
-    // searchParams уже декодирован — повторный decode ломался на «%» в имени.
-    const studentName = studentParam;
-    const student = await getStudentResults(user.id, studentName);
-    if (!student) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+  try {
+    if (studentParam) {
+      // searchParams уже декодирован — повторный decode ломался на «%» в имени.
+      const studentName = studentParam;
+      const student = await getStudentResults(user.id, studentName);
+      if (!student) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      csv = exportStudentToCsv(student);
+      filename = `gradebook-${student.studentName}.csv`;
+    } else {
+      const data = await getTeacherGradebook(user.id);
+      csv = exportGradebookToCsv(data);
+      filename = "gradebook.csv";
     }
-    csv = exportStudentToCsv(student);
-    filename = `gradebook-${student.studentName}.csv`;
-  } else {
-    const data = await getTeacherGradebook(user.id);
-    csv = exportGradebookToCsv(data);
-    filename = "gradebook.csv";
+  } catch (err) {
+    console.error("[gradebook/export] failed", err);
+    return NextResponse.json({ error: "Не удалось выгрузить журнал." }, { status: 503 });
   }
 
   const csvWithBom = csv.startsWith("\uFEFF") ? csv : `\uFEFF${csv}`;

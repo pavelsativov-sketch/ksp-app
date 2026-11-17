@@ -24,6 +24,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MathText } from "@/lib/math/render-math";
 import {
   evaluateTask,
   taskTypeLabel,
@@ -124,7 +125,7 @@ export function TaskPlayer({ task, onComplete, hideReset }: TaskPlayerProps) {
               </span>
             )}
           </p>
-          <p className="font-medium">{task.question || "—"}</p>
+          <p className="font-medium">{task.question ? <MathText text={task.question} /> : "—"}</p>
         </div>
       </div>
 
@@ -248,7 +249,7 @@ function HintBlock({
   return (
     <div className="flex items-start gap-2 rounded-xl border border-border bg-primary-soft px-3 py-2 text-xs text-ink">
       <Lightbulb className="w-4 h-4 mt-0.5 shrink-0" />
-      <span>{hint}</span>
+      <span><MathText text={hint} /></span>
     </div>
   );
 }
@@ -391,7 +392,7 @@ function McqInput({
             onChange={() => onChange({ type: "MCQ", selectedIndex: i })}
           />
           <span className="text-sm">
-            {task.options[i] || <em className="text-muted-foreground">—</em>}
+            {task.options[i] ? <MathText text={task.options[i]} /> : <em className="text-muted-foreground">—</em>}
           </span>
         </label>
       ))}

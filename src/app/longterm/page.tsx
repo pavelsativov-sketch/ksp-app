@@ -7,7 +7,6 @@ import { listLongTermPlans, type LongTermPlan } from "@/lib/longterm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDict } from "@/lib/i18n/server";
-import type { Dict } from "@/lib/i18n/dictionaries";
 
 export const dynamic = "force-dynamic";
 

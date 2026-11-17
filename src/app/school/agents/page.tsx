@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CircleCheck, CircleX, Loader2 } from "lucide-react";
 import { setActiveAgentTask } from "@/components/agents/agent-dock";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ interface TaskRow {
 
 /** История задач агента: клик по задаче снова открывает живое окно сессии. */
 export default function AgentHistoryPage() {
+  const router = useRouter();
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,11 +28,11 @@ export default function AgentHistoryPage() {
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((data: { tasks: TaskRow[] }) => { if (alive) setTasks(data.tasks ?? []); })
       .catch((e: Error) => {
-        if (e.message === "401") { window.location.href = "/login?next=/school/agents"; return; }
+        if (e.message === "401") { router.push("/login?next=/school/agents"); return; }
         if (alive) setError("Не удалось загрузить задачи");
       });
     return () => { alive = false; };
-  }, []);
+  }, [router]);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 md:px-6">

@@ -3,7 +3,7 @@ import type { ClientSession, Db, ObjectId } from "mongodb";
 import { COL, getDb, toObjectId } from "@/lib/mongo";
 import { toPlanRow, type PlanDoc } from "@/lib/plans-repo";
 import type { LessonPlanRow } from "@/lib/types/ksp";
-import { PLAN_VERSION_SECTIONS, type PlanSection } from "@/lib/plan-sections";
+import type { PlanSection } from "@/lib/plan-sections";
 export { PLAN_VERSION_SECTIONS, type PlanSection } from "@/lib/plan-sections";
 
 export const MAX_PLAN_VERSIONS = 30;

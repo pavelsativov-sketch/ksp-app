@@ -19,7 +19,7 @@ export async function POST() {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
 
-  const rl = await checkRateLimitAsync(`ai:${auth.user.id}`, 30, 3600_000);
+  const rl = await checkRateLimitAsync(`ai-refund:${auth.user.id}`, 20, 3600_000);
   if (!rl.ok) {
     return NextResponse.json({ error: "Превышен лимит запросов. Попробуйте позже." }, { status: 429 });
   }

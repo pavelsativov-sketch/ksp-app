@@ -8,11 +8,6 @@ import {
   // Типы конкретных заданий нужны ниже: без них файл не собирается
   // («Cannot find name 'McqTask'»), даже если сами объявления используются
   // только в подсказках типов.
-  type McqTask,
-  type TrueFalseTask,
-  type FillBlankTask,
-  type OrderingTask,
-  type NumericTask,
   type TaskType,
   emptyTask,
 } from "@/lib/ksp/tasks";
@@ -491,6 +486,7 @@ ${difficultyGuidance}
 ${topicContext}
 ${baseTaskContext}
 ${variationInstruction}
+${levelInstruction}
 
 Разрешённые типы: MCQ (4 варианта), TRUE_FALSE, SHORT_ANSWER, FILL_BLANK, MATCHING, ORDERING, NUMERIC.
 Для каждого задания укажи тип, вопрос, подсказку (hint), баллы (1–5) и payload по схеме:
@@ -550,8 +546,9 @@ function getVariationInstruction(style: TaskVariationStyle, language: "ru" | "kz
 }
 
 function getDifficultyGuidance(stage: "beginning" | "middle" | "end", grade: number): string {
+  const gradeNote = ` (${grade} класс)`;
   if (stage === "beginning") {
-    return `УРОВЕНЬ СЛОЖНОСТИ: Начальный (актуализация знаний)
+    return `УРОВЕНЬ СЛОЖНОСТИ${gradeNote}: Начальный (актуализация знаний)
 - Вопросы на вспоминание ранее изученного
 - Простые определения и факты
 - Подсказки должны помогать вспомнить материал`;

@@ -88,6 +88,17 @@ const ru = {
   favoritesPage: "Избранное",
   favoritesLead: "Планы из библиотеки, которые вы отметили.",
   plansPage: "Планы уроков",
+  subNav: {
+    kspList: "Мои КСП",
+    longterm: "КТП / ДСП и ССП",
+    gradebook: "Электронный журнал",
+    importDocx: "Импорт из Word",
+    aiHistory: "История ИИ",
+    publicLibrary: "Библиотека КСП",
+    textbooks: "Учебники PDF",
+    kits: "Мои комплекты",
+    templates: "Шаблоны КСП",
+  },
 };
 
 const kk: typeof ru = {
@@ -178,6 +189,17 @@ const kk: typeof ru = {
   favoritesPage: "Таңдаулылар",
   favoritesLead: "Кітапханадан белгілеген жоспарларыңыз.",
   plansPage: "Сабақ жоспарлары",
+  subNav: {
+    kspList: "Менің ҚМЖ",
+    longterm: "КТЖ / ҰМЖ және ОМЖ",
+    gradebook: "Электрондық журнал",
+    importDocx: "Word-тан импорт",
+    aiHistory: "ЖИ тарихы",
+    publicLibrary: "ҚМЖ кітапханасы",
+    textbooks: "PDF оқулықтар",
+    kits: "Менің жинақтарым",
+    templates: "ҚМЖ үлгілері",
+  },
 };
 
 export type AppCopy = typeof ru;

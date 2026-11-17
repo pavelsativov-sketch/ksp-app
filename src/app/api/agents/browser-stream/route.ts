@@ -50,13 +50,15 @@ type BrowserAction = {
   text?: unknown;
   key?: unknown;
   dy?: unknown;
+  /** Ввод без немедленного кадра: UI уже показывает текст локально. */
+  fast?: unknown;
 };
 
-async function authorize() {
+async function authorize(bucket: "frame" | "action" = "action") {
   const auth = await requireApiAuth();
   if (auth.response) return { response: auth.response } as const;
 
-  const rl = await checkRateLimitAsync(`agent:browser-stream:${auth.user.id}`, 240, 60_000);
+  const rl = await checkRateLimitAsync(`agent:browser-stream:${bucket}:${auth.user.id}`, 300, 60_000);
   if (!rl.ok) {
     return {
       response: NextResponse.json(
@@ -89,17 +91,32 @@ interface DomProbe {
   authBarrier: Awaited<ReturnType<typeof detectPageAuthBarrier>>;
 }
 const domCache = new Map<string, { probe: DomProbe; at: number }>();
+const domRefreshes = new Map<string, Promise<void>>();
+
+async function refreshDomProbe(userId: string, session: AgentBrowserSession): Promise<DomProbe> {
+  const existing = domRefreshes.get(userId);
+  if (existing) {
+    await existing;
+    return domCache.get(userId)?.probe ?? { activeField: await inspectActiveField(session.page), authBarrier: await detectPageAuthBarrier(session.page) };
+  }
+  const refresh = Promise.all([
+    inspectActiveField(session.page),
+    detectPageAuthBarrier(session.page),
+  ]).then(([activeField, authBarrier]) => {
+    domCache.set(userId, { probe: { activeField, authBarrier }, at: Date.now() });
+  }).finally(() => { domRefreshes.delete(userId); });
+  domRefreshes.set(userId, refresh);
+  await refresh;
+  return domCache.get(userId)!.probe;
+}
 
 async function readDomProbe(userId: string, session: AgentBrowserSession, refresh: boolean): Promise<DomProbe> {
   const cached = domCache.get(userId);
   if (!refresh && cached && Date.now() - cached.at < DOM_CACHE_TTL_MS) return cached.probe;
-  const [activeField, authBarrier] = await Promise.all([
-    inspectActiveField(session.page),
-    detectPageAuthBarrier(session.page),
-  ]);
-  const probe = { activeField, authBarrier };
-  domCache.set(userId, { probe, at: Date.now() });
-  return probe;
+  // После клика/перехода обязательно дожидаемся свежего probe: иначе ответ на
+  // клик вернёт старое активное поле (body вместо input[type=password]), а
+  // фоновый промис на Vercel заморозится сразу после отправки ответа.
+  return refreshDomProbe(userId, session);
 }
 
 /**
@@ -143,6 +160,7 @@ async function runAction(userId: string, args: BrowserAction) {
       let remoteAction = action;
       let remoteArgs: Record<string, unknown> = {};
       let allowedOrigin: string | undefined;
+      const fastInput = action === "type" && (args.fast === true || args.fast === "1");
 
       if (action === "navigate") {
         const nav = searchUrl(typeof args.url === "string" ? args.url : "");
@@ -160,7 +178,7 @@ async function runAction(userId: string, args: BrowserAction) {
       } else if (action === "type") {
         const text = typeof args.text === "string" ? args.text.slice(0, 500) : "";
         if (!text) return NextResponse.json({ error: "Введите текст для страницы" }, { status: 400 });
-        remoteArgs = { text };
+        remoteArgs = { text, delay: 0, ...(fastInput ? { fast: true } : {}) };
       } else if (action === "key") {
         const key = typeof args.key === "string" ? args.key.slice(0, 30) : "Enter";
         if (!/^(?:[\w]+|Control\+[\w]+|Shift\+[\w]+|Alt\+[\w]+)$/.test(key)) {
@@ -177,7 +195,7 @@ async function runAction(userId: string, args: BrowserAction) {
         return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
       }
 
-      const frame = await session.remote.performUiAction(remoteAction, remoteArgs, allowedOrigin);
+      const frame = await session.remote.performUiAction(remoteAction, remoteArgs, allowedOrigin, { captureScreenshot: !fastInput });
       // Куки меняются не на каждый символ, а при переходе и отправке формы.
       // Вычитка storageState медленная, поэтому она уходит в фон и не держит
       // ответ: иначе клик по «Войти» подвисал на сотни миллисекунд.
@@ -197,11 +215,14 @@ async function runAction(userId: string, args: BrowserAction) {
       // поля и баннер авторизации работают и на удалённой сессии. При вводе
       // текста фокус не меняется — берём недавнее значение, чтобы не гонять
       // ещё два запроса на каждую букву.
-      const { activeField, authBarrier } = await readDomProbe(
-        userId,
-        session,
-        REFRESH_DOM_ACTIONS.has(action),
-      );
+      if (fastInput) {
+        return new NextResponse(null, {
+          status: 204,
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
+
+      const { activeField, authBarrier } = await readDomProbe(userId, session, REFRESH_DOM_ACTIONS.has(action));
 
       return new NextResponse(new Uint8Array(autoFrame.screenshot), {
         headers: {
@@ -293,10 +314,10 @@ async function runAction(userId: string, args: BrowserAction) {
 
 /** GET — скриншот и несенситивные действия. */
 export async function GET(req: Request) {
-  const auth = await authorize();
-  if ("response" in auth) return auth.response;
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action") ?? "screenshot";
+  const auth = await authorize(action === "screenshot" ? "frame" : "action");
+  if ("response" in auth) return auth.response;
   if (action === "type") return NextResponse.json({ error: "Ввод текста передавайте методом POST" }, { status: 405 });
   return runAction(auth.userId, {
     action,

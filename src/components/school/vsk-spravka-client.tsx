@@ -3,9 +3,10 @@
 import React, { useState, useSyncExternalStore } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, Check, Printer, Sparkles, FileSpreadsheet, ShieldAlert } from "lucide-react";
+import { Loader2, Copy, Check, Printer, Sparkles, FileSpreadsheet } from "lucide-react";
+import { RosterPicker } from "@/components/school/roster-picker";
+import { SchoolDocxButton } from "@/components/school/school-docx-button";
 
-/** Окно в полминуты: внутри снимок не меняется, лишних перерисовок нет. */
 const DAY_TICK_MS = 30_000;
 
 function subscribeDayTick(onChange: () => void) {
@@ -17,14 +18,10 @@ function getDayTick(): number {
   return Math.floor(Date.now() / DAY_TICK_MS);
 }
 
-export function VskSpravkaClient() {
+export function VskSpravkaClient({ locale = "ru" }: { locale?: "ru" | "kk" } = {}) {
+  const isKk = locale === "kk";
   const [inspectionType, setInspectionType] = useState("Посещение и анализ уроков педагогов");
   const [target, setTarget] = useState("Учителя естественно-математического цикла (5–9 классы)");
-  // Дата приходит только от часов браузера: вычисленная в useState на
-  // сервере дата расходилась с браузерной с полуночи UTC до пяти утра по
-  // Астане — React падал с ошибкой гидратации 418, а справка скатывалась
-  // на день назад. Серверное значение — пустое, далее useSyncExternalStore
-  // сам перерисовывает поле под клиентскую дату.
   const [inboxDate, setInboxDate] = useState<string | null>(null);
   const dateTick = useSyncExternalStore(
     subscribeDayTick,
@@ -32,8 +29,12 @@ export function VskSpravkaClient() {
     () => null,
   );
   const date = inboxDate ?? (dateTick === null ? "" : new Date().toLocaleDateString("ru-RU"));
-  const [purpose, setPurpose] = useState("Определение соответствия поурочного планирования требованиям ГОСО, эффективность использования формативного оценивания");
-  const [notes, setNotes] = useState("Большинство педагогов используют критериальное оценивание. У двух молодых специалистов выявлены затруднения с дифференциацией заданий на этапе закрепления.");
+  const [purpose, setPurpose] = useState(
+    "Определение соответствия поурочного планирования требованиям ГОСО, эффективность использования формативного оценивания",
+  );
+  const [notes, setNotes] = useState(
+    "Большинство педагогов используют критериальное оценивание. У двух молодых специалистов выявлены затруднения с дифференциацией заданий на этапе закрепления.",
+  );
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -49,7 +50,14 @@ export function VskSpravkaClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tool: "vsk-spravka",
-          params: { inspectionType, target, date, purpose, notes },
+          params: {
+            inspectionType,
+            target,
+            date,
+            purpose,
+            notes,
+            language: isKk ? "kz" : "ru",
+          },
         }),
       });
       const data = await res.json();
@@ -73,41 +81,62 @@ export function VskSpravkaClient() {
     <div className="grid gap-6 md:grid-cols-12">
       <Card className="md:col-span-5">
         <CardHeader>
-          <CardTitle className="text-base">Параметры проверки ВШК</CardTitle>
-          <CardDescription>Задайте вводные данные для аналитической справки</CardDescription>
+          <CardTitle className="text-base">
+            {isKk ? "МІБ тексеру параметрлері" : "Параметры проверки ВШК"}
+          </CardTitle>
+          <CardDescription>
+            {isKk ? "Аналитикалық анықтама үшін бастапқы деректер" : "Задайте вводные данные для аналитической справки"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
+          <RosterPicker
+            mode="class"
+            locale={locale}
+            onSelectClass={(cls, _scores, summaryText) => {
+              setTarget(cls);
+              if (summaryText) {
+                setNotes((prev) => `${summaryText}\n${prev}`.slice(0, 700));
+              }
+            }}
+          />
+
           <div>
-            <label className="text-xs font-semibold text-muted-foreground">Направление контроля</label>
+            <label className="text-xs font-semibold text-muted-foreground">
+              {isKk ? "Бақылау бағыты" : "Направление контроля"}
+            </label>
             <select
               value={inspectionType}
               onChange={(e) => setInspectionType(e.target.value)}
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-xs outline-none focus:border-rose-500"
             >
-              <option value="Посещение и анализ уроков педагогов">Посещение и анализ уроков педагогов</option>
+              <option value="Посещение и анализ уроков педагогов">
+                {isKk ? "Педагогтардың сабақтарына қатысу және талдау" : "Посещение и анализ уроков педагогов"}
+              </option>
               <option value="Проверка поурочных планов (КСП) и календарно-тематических планов (КТП)">
-                Проверка поурочных планов (КСП) и КТП
+                {isKk ? "ҚМЖ және КТЖ жоспарларын тексеру" : "Проверка поурочных планов (КСП) и КТП"}
               </option>
               <option value="Контроль качества ведения рабочих тетрадей и тетрадей для СОР/СОЧ">
-                Проверка рабочих тетрадей и тетрадей СОР/СОЧ
+                {isKk ? "Жұмыс дәптерлері мен БЖБ/ТЖБ дәптерлерін тексеру" : "Проверка рабочих тетрадей и тетрадей СОР/СОЧ"}
               </option>
               <option value="Адаптация учащихся (1, 5, 10 классы) к новым условиям обучения">
-                Адаптация учащихся 1, 5, 10 классов
+                {isKk ? "1, 5, 10 сынып оқушыларының бейімделуі" : "Адаптация учащихся 1, 5, 10 классов"}
               </option>
               <option value="Методическое сопровождение и адаптация молодых специалистов">
-                Работа с молодыми специалистами
+                {isKk ? "Жас мамандармен әдістемелік жұмыс" : "Работа с молодыми специалистами"}
               </option>
               <option value="Контроль соблюдения норм оценивания и объективности выставления баллов">
-                Соблюдение норм критериального оценивания
+                {isKk ? "Критериалды бағалау нормаларын сақтау" : "Соблюдение норм критериального оценивания"}
               </option>
               <option value="Подготовка учащихся выпускных классов к итоговой аттестации">
-                Подготовка к итоговой аттестации (9, 11 классы)
+                {isKk ? "9, 11 сыныптарды қорытынды аттестаттауға дайындау" : "Подготовка к итоговой аттестации (9, 11 классы)"}
               </option>
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-muted-foreground">Объект проверки / Кафедра / Классы</label>
+            <label className="text-xs font-semibold text-muted-foreground">
+              {isKk ? "Тексеру нысаны / Кафедра / Сыныптар" : "Объект проверки / Кафедра / Классы"}
+            </label>
             <input
               type="text"
               value={target}
@@ -117,7 +146,9 @@ export function VskSpravkaClient() {
           </div>
 
           <div>
-            <label htmlFor="vsk-date" className="text-xs font-semibold text-muted-foreground">Сроки / Дата проведения проверки</label>
+            <label htmlFor="vsk-date" className="text-xs font-semibold text-muted-foreground">
+              {isKk ? "Тексеру мерзімі / Күні" : "Сроки / Дата проведения проверки"}
+            </label>
             <input
               id="vsk-date"
               type="text"
@@ -128,7 +159,9 @@ export function VskSpravkaClient() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-muted-foreground">Цель контроля</label>
+            <label className="text-xs font-semibold text-muted-foreground">
+              {isKk ? "Бақылау мақсаты" : "Цель контроля"}
+            </label>
             <textarea
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
@@ -138,42 +171,64 @@ export function VskSpravkaClient() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-muted-foreground">Фактические наблюдения / Плюсы и минусы</label>
+            <label className="text-xs font-semibold text-muted-foreground">
+              {isKk ? "Нақты байқаулар / Артықшылықтар мен ескертулер" : "Фактические наблюдения / Плюсы и минусы"}
+            </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
-              placeholder="Что увидели: сильные стороны уроков, типичные недочёты, рекомендации..."
               className="mt-1 w-full rounded-lg border bg-background p-2.5 text-xs outline-none focus:border-rose-500"
             />
           </div>
 
           <Button
-            onClick={handleGenerate}
+            onClick={() => void handleGenerate()}
             disabled={loading}
             className="w-full gap-2 bg-gradient-to-r from-rose-500 to-pink-600 font-semibold text-white shadow-lg hover:opacity-90"
           >
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {loading ? "Составляю справку..." : "Сформировать справку ВШК"}
+            {loading
+              ? isKk
+                ? "Анықтама дайындалуда..."
+                : "Составляю справку..."
+              : isKk
+                ? "МІБ анықтамасын құрастыру"
+                : "Сформировать справку ВШК"}
           </Button>
           {error && <p className="text-xs text-rose-400">{error}</p>}
         </CardContent>
       </Card>
 
       <Card className="flex flex-col md:col-span-7">
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-2 pb-3">
           <div>
-            <CardTitle className="text-base">Аналитическая справка ВШК</CardTitle>
-            <CardDescription>Официальный документ для совещания при директоре или педсовета</CardDescription>
+            <CardTitle className="text-base">
+              {isKk ? "МІБ аналитикалық анықтамасы" : "Аналитическая справка ВШК"}
+            </CardTitle>
+            <CardDescription>
+              {isKk ? "Педагогикалық кеңес немесе директор жанындағы кеңес үшін ресми құжат" : "Официальный документ для совещания при директоре или педсовета"}
+            </CardDescription>
           </div>
           {result && (
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
+              <SchoolDocxButton
+                title={`${isKk ? "МІБ анықтамасы" : "Справка ВШК"} — ${target.slice(0, 50)}`}
+                subtitle={inspectionType}
+                content={result}
+                language={isKk ? "kz" : "ru"}
+              />
               <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1.5 text-xs">
                 {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-                {copied ? "Скопировано" : "Копировать"}
+                {copied ? (isKk ? "Көшірілді" : "Скопировано") : isKk ? "Көшіру" : "Копировать"}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-1.5 text-xs">
-                <Printer className="size-3.5" /> Печать
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.print()}
+                className="gap-1.5 text-xs"
+              >
+                <Printer className="size-3.5" /> {isKk ? "Басып шығару" : "Печать"}
               </Button>
             </div>
           )}
@@ -183,9 +238,8 @@ export function VskSpravkaClient() {
             <div className="grid h-80 place-items-center text-center text-muted-foreground">
               <div className="space-y-2">
                 <FileSpreadsheet className="mx-auto size-10 opacity-30" />
-                <p className="text-sm font-medium">Справка появится здесь</p>
-                <p className="text-xs text-muted-foreground/70">
-                  Завучу больше не нужно писать страницы текста вручную: ИИ структурирует вводную часть, констатацию фактов, выводы и проект решения
+                <p className="text-sm font-medium">
+                  {isKk ? "Анықтама осында шығады" : "Справка появится здесь"}
                 </p>
               </div>
             </div>
@@ -193,11 +247,7 @@ export function VskSpravkaClient() {
 
           {loading && (
             <div className="grid h-80 place-items-center text-center text-muted-foreground">
-              <div className="space-y-3">
-                <Loader2 className="mx-auto size-8 animate-spin text-rose-400" />
-                <p className="text-sm font-medium text-white">ИИ формирует официальную справку ВШК...</p>
-                <p className="text-xs text-muted-foreground/70">Подбираются нормативные формулировки и проект управленческого решения</p>
-              </div>
+              <Loader2 className="mx-auto size-8 animate-spin text-rose-400" />
             </div>
           )}
 

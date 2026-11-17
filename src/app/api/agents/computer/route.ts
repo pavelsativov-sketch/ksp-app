@@ -28,7 +28,6 @@ import {
 import {
   inspectActiveField,
   detectPageAuthBarrier,
-  type PageAuthBarrier,
 } from "@/lib/agents/browser-dom";
 
 export const runtime = "nodejs";

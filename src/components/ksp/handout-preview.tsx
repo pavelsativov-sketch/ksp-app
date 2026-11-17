@@ -14,6 +14,7 @@ import { CardsSheet, WorksheetSheet } from "@/components/ksp/print-sheet";
 import { downloadSheetImages } from "@/lib/handouts/sheet-export";
 import { toOopSheet } from "@/lib/handouts/oop";
 import { docTitle, docTopic, SaveKitButton } from "@/components/kits/save-kit-button";
+import { MathText } from "@/lib/math/render-math";
 
 /** Цветовая схема эталона РК (как в docx.ts): синие баннеры, персиковое облако, золото. */
 const NAVY = "text-ink";
@@ -187,7 +188,7 @@ function TaskBodyContent({ task, language, onLinkChange }: {
           {(task.options ?? []).map((opt, i) => (
             <div key={i} className="flex items-center gap-2 border border-border rounded px-2 py-1 text-sm bg-white">
               <span className={`font-bold ${NAVY}`}>{optionLetter(i)})</span>
-              <span>{opt}</span>
+              <span><MathText text={opt} /></span>
             </div>
           ))}
         </div>
@@ -207,10 +208,10 @@ function TaskBodyContent({ task, language, onLinkChange }: {
           {options.map((opt, i) => (
             <div key={i} className="contents">
               <div className="border border-border rounded px-2 py-1 bg-white">
-                <b className={NAVY}>{i + 1}.</b> {opt}
+                <b className={NAVY}>{i + 1}.</b> <MathText text={opt} />
               </div>
               <div className="border border-border rounded px-2 py-1 bg-white">
-                <b className={NAVY}>{optionLetter(i)})</b> {pairs[i] ?? ""}
+                <b className={NAVY}>{optionLetter(i)})</b> <MathText text={pairs[i] ?? ""} />
               </div>
             </div>
           ))}
@@ -576,7 +577,7 @@ function WorksheetView({
           <h4 className="font-bold text-sm mb-2 text-ink">{copy.answers}</h4>
             <div className="text-sm space-y-1">
               {worksheetAnswerLines(sheet.tasks, contentLanguage).map((line, i) => (
-                <div key={i}>{line}</div>
+                <div key={i}><MathText text={line} /></div>
               ))}
             </div>
           </div>
@@ -596,8 +597,8 @@ function WorksheetView({
                 {sheet.tasks.map((task, i) => (
                   <tr key={i} className="border-b border-border">
                     <td className="p-2 border-r border-border">{copy.taskN}{i + 1} ({task.points}б)</td>
-                    <td className="p-2 border-r border-border">{task.criterion}</td>
-                    <td className="p-2">{task.descriptor}</td>
+                    <td className="p-2 border-r border-border"><MathText text={task.criterion ?? ""} /></td>
+                    <td className="p-2"><MathText text={task.descriptor ?? ""} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -687,7 +688,7 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
           <ol className="list-decimal list-inside space-y-1">
             {puzzle.placed.filter((w) => w.direction === "across").map((w) => (
               <li key={`a${w.number}`}>
-                <b>{w.number}.</b> {w.clue} ({w.word.length} {label.letters})
+                <b>{w.number}.</b> <MathText text={w.clue} /> ({w.word.length} {label.letters})
               </li>
             ))}
           </ol>
@@ -697,7 +698,7 @@ function CrosswordView({ puzzle }: { puzzle: Crossword }) {
           <ol className="list-decimal list-inside space-y-1">
             {puzzle.placed.filter((w) => w.direction === "down").map((w) => (
               <li key={`d${w.number}`}>
-                <b>{w.number}.</b> {w.clue} ({w.word.length} {label.letters})
+                <b>{w.number}.</b> <MathText text={w.clue} /> ({w.word.length} {label.letters})
               </li>
             ))}
           </ol>

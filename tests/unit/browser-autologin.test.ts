@@ -96,6 +96,16 @@ describe("loginWithSavedCredentials", () => {
     expect(typed).toEqual([]);
   });
 
+  it("без сохранённых данных не ждёт SPA-форму входа", async () => {
+    const { page } = fakePage({ formAfterChecks: 99 });
+    const inspect = vi.spyOn(page, "evaluate");
+    const result = await loginWithSavedCredentials("u-no-creds", page as never);
+    expect(result.status).toBe("no-credentials");
+    // Это критично для первого открытия BilimClass: не тратим до 12 секунд
+    // на форму, когда автологин всё равно невозможен.
+    expect(inspect).not.toHaveBeenCalled();
+  });
+
   it("данные другого пользователя не используются", async () => {
     await saveCredentials("u1", "bilimclass.kz", "a", "b");
     const { page, typed } = fakePage();

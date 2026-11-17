@@ -162,6 +162,33 @@ export async function setPlanHidden(input: unknown, hidden: boolean) {
   return { ok: true as const };
 }
 
+export interface HiddenPlanItem {
+  planId: string;
+  title: string;
+  ownerId: string;
+  hiddenAt: string | null;
+}
+
+/** Все планы, скрытые модерацией (чтобы администратор мог снять скрытие даже после закрытия жалобы). */
+export async function listHiddenPlans(): Promise<HiddenPlanItem[]> {
+  const admin = await requireAdmin();
+  await limitAdmin(admin.id, "read");
+  const db = await getDb();
+  const docs = await db
+    .collection<PlanDoc & { hidden_at?: Date }>(COL.plans)
+    .find({ moderation_hidden: true })
+    .project({ title: 1, owner_id: 1, hidden_at: 1, updated_at: 1 })
+    .sort({ hidden_at: -1, updated_at: -1 })
+    .limit(50)
+    .toArray();
+  return docs.map((p) => ({
+    planId: p._id.toString(),
+    title: p.title || "(без названия)",
+    ownerId: p.owner_id ?? "",
+    hiddenAt: p.hidden_at instanceof Date ? p.hidden_at.toISOString() : null,
+  }));
+}
+
 /** Закрыть жалобу как рассмотренную. */
 export async function resolveReport(input: unknown) {
   const admin = await requireAdmin();

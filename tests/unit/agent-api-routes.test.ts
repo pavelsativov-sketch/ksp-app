@@ -21,6 +21,7 @@ vi.mock("@/lib/workspace/runtime", () => ({
 
 import { POST as taskPOST, GET as taskGET } from "@/app/api/agents/task/route";
 import { POST as terminalPOST, GET as terminalGET } from "@/app/api/agents/terminal/route";
+import { PATCH as sandboxPATCH } from "@/app/api/agents/sandbox/route";
 
 const userId = "a".repeat(24);
 
@@ -135,5 +136,27 @@ describe("GET /api/agents/terminal", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.available).toBe(false);
+  });
+});
+
+describe("PATCH /api/agents/sandbox", () => {
+  it("переименовывает файл внутри рабочей среды без отправки содержимого клиентом", async () => {
+    const renameFile = vi.fn(async () => undefined);
+    mock.runtime.mockResolvedValue({ renameFile });
+    const res = await sandboxPATCH(new Request("http://x/api/agents/sandbox", {
+      method: "PATCH",
+      body: JSON.stringify({ from: "materials/source.md", to: "materials/final.md" }),
+    }));
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ ok: true, name: "materials/final.md" });
+    expect(renameFile).toHaveBeenCalledWith("materials/source.md", "materials/final.md");
+  });
+
+  it("отклоняет запрос без пары имён", async () => {
+    const res = await sandboxPATCH(new Request("http://x/api/agents/sandbox", {
+      method: "PATCH",
+      body: JSON.stringify({ from: "source.md" }),
+    }));
+    expect(res.status).toBe(400);
   });
 });

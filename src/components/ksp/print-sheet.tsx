@@ -4,6 +4,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, typ
 import { QrCodeSvg } from "@/components/ksp/qr-card";
 import { optionLetter, taskAnswerParts, worksheetTypeLabel } from "@/lib/handouts/answers";
 import type { Flashcard, FlashcardSet, Worksheet, WorksheetTask } from "@/lib/handouts/types";
+import { MathText } from "@/lib/math/render-math";
 import s from "./print-sheet.module.css";
 
 /** Рабочая высота белого листа: A4 за вычетом рамки, строки сверху и подвала. */
@@ -54,9 +55,9 @@ export function matchOrder(length: number): number[] {
 function Blanks({ text, answers = [] }: { text: string; answers?: string[] }) {
   let blank = 0;
   return <>{text.split(/(_{3,})/).map((part, i) => {
-    if (!/^_{3,}$/.test(part)) return part;
+    if (!/^_{3,}$/.test(part)) return <MathText key={i} text={part} />;
     const answer = answers[blank++];
-    return <span key={i} className={s.blank}>{answer ? <span className={s.key}>{answer}</span> : <>&nbsp;</>}</span>;
+    return <span key={i} className={s.blank}>{answer ? <span className={s.key}><MathText text={answer} /></span> : <>&nbsp;</>}</span>;
   })}</>;
 }
 
@@ -78,12 +79,12 @@ function MatchRows({ task, withKey }: { task: WorksheetTask; withKey: boolean })
     <div className={s.match} style={{ gridTemplateRows: `repeat(${rows}, minmax(34px, 1fr))` }}>
       {terms.map((term, i) => (
         <div key={`l${i}`} className={s.matchLeft} style={{ ...tone(i), gridRow: i + 1 }}>
-          <span className={s.matchNum}>{i + 1}</span><span className={s.matchText}>{term}</span><span className={s.dot} />
+          <span className={s.matchNum}>{i + 1}</span><span className={s.matchText}><MathText text={term} /></span><span className={s.dot} />
         </div>
       ))}
       {order.map((source, j) => (
         <div key={`r${j}`} className={s.matchRight} style={{ ...tone(j + 3), gridRow: j + 1 }}>
-          <span className={s.dot} /><span className={s.matchText}>{definitions[source]}</span>
+          <span className={s.dot} /><span className={s.matchText}><MathText text={definitions[source] ?? ""} /></span>
         </div>
       ))}
       {withKey && (
@@ -134,8 +135,8 @@ function TaskContent({ task, withKey, onLinkChange, fallback }: { task: Workshee
     const [head, ...body] = table.rows;
     return (
       <table className={s.table}>
-        <thead><tr>{head!.map((cell, i) => <th key={i} scope="col">{cell}</th>)}</tr></thead>
-        <tbody>{body.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody>
+        <thead><tr>{head!.map((cell, i) => <th key={i} scope="col"><MathText text={cell} /></th>)}</tr></thead>
+        <tbody>{body.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}><MathText text={cell} /></td>)}</tr>)}</tbody>
       </table>
     );
   }
@@ -163,7 +164,7 @@ function TaskContent({ task, withKey, onLinkChange, fallback }: { task: Workshee
         <>
           {questions.map((question, i) => (
             <div key={i}>
-              <p className={s.question}>{i + 1}. {question}</p>
+              <p className={s.question}>{i + 1}. <MathText text={question} /></p>
               {/* Эталон один на всё задание: пишем его под последним вопросом. */}
               <HandLines count={2} answer={i === questions.length - 1 ? answer : undefined} />
             </div>
@@ -175,13 +176,13 @@ function TaskContent({ task, withKey, onLinkChange, fallback }: { task: Workshee
       const columns = task.compareColumns ?? [];
       return (
         <table className={s.table}>
-          <thead><tr>{columns.map((column, i) => <th key={i} scope="col">{column}</th>)}</tr></thead>
-          <tbody>{(task.compareRows ?? []).map((row, i) => <tr key={i}><td>{row}</td>{columns.slice(1).map((_, j) => <td key={j} />)}</tr>)}</tbody>
+          <thead><tr>{columns.map((column, i) => <th key={i} scope="col"><MathText text={column} /></th>)}</tr></thead>
+          <tbody>{(task.compareRows ?? []).map((row, i) => <tr key={i}><td><MathText text={row} /></td>{columns.slice(1).map((_, j) => <td key={j} />)}</tr>)}</tbody>
         </table>
       );
     }
     case "multiple_choice":
-      return <div className={s.options}>{(task.options ?? []).map((option, i) => <div key={i} className={`${s.option} ${withKey && task.correctIndex === i ? s.correct : ""}`}><span className={s.letter}>{optionLetter(i)}</span>{option}</div>)}</div>;
+      return <div className={s.options}>{(task.options ?? []).map((option, i) => <div key={i} className={`${s.option} ${withKey && task.correctIndex === i ? s.correct : ""}`}><span className={s.letter}>{optionLetter(i)}</span><MathText text={option} /></div>)}</div>;
     case "true_false":
       return (
         <div className={s.options}>
@@ -237,14 +238,14 @@ function TaskBlock({ task, index, language, withKey, onRegenerate, regenerating,
     <section className={s.task} style={tone(index)} data-task>
       <div className={s.taskHead}>
         <span className={s.badge}>{word} №{index + 1}.</span>
-        <span className={s.instruction}>{instructionOf(task, language)}</span>
+        <span className={s.instruction}><MathText text={instructionOf(task, language)} /></span>
         <span className={s.points}>{task.points > 0 ? `${task.points} б.` : ""}</span>
         {onRegenerate && <button type="button" data-no-capture className={s.replace} onClick={onRegenerate} disabled={regenerating}>{regenerating ? "…" : "Заменить"}</button>}
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {task.imageBase64 && <img className={s.taskImage} src={imageSrc(task.imageBase64, task.imageMime)} alt={task.imageAlt ?? ""} />}
       <TaskContent task={task} withKey={withKey} onLinkChange={onLinkChange} fallback={fallback} />
-      {keyLine && <p className={`${s.key} ${s.keyLine}`}>{keyLine}</p>}
+      {keyLine && <p className={`${s.key} ${s.keyLine}`}><MathText text={keyLine} /></p>}
       <div style={{ clear: "both" }} />
     </section>
   );
@@ -320,12 +321,12 @@ export function WorksheetSheet({ sheet, grade, subject, footer = "MEKTY", withKe
 function CardCell({ card, index, language }: { card: Flashcard; index: number; language: "ru" | "kz" }) {
   return (
     <div className={s.card} style={tone(index)}>
-      <div className={s.cardHead}><span className={s.cardNumber}>{index + 1}</span>{card.front}</div>
+      <div className={s.cardHead}><span className={s.cardNumber}>{index + 1}</span><MathText text={card.front} /></div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {card.imageBase64 && <img className={s.cardImage} src={imageSrc(card.imageBase64, card.imageMime)} alt={card.imageAlt ?? ""} />}
-      <p className={s.cardText}>{card.back}</p>
-      {card.example && <p className={s.cardExample}><b>{language === "kz" ? "Мысал" : "Пример"}:</b> {card.example}</p>}
-      {card.checkQuestion && <p className={s.cardCheck}><b>{language === "kz" ? "Өзіңді тексер" : "Проверь себя"}:</b> {card.checkQuestion}</p>}
+      <p className={s.cardText}><MathText text={card.back} /></p>
+      {card.example && <p className={s.cardExample}><b>{language === "kz" ? "Мысал" : "Пример"}:</b> <MathText text={card.example} /></p>}
+      {card.checkQuestion && <p className={s.cardCheck}><b>{language === "kz" ? "Өзіңді тексер" : "Проверь себя"}:</b> <MathText text={card.checkQuestion} /></p>}
     </div>
   );
 }

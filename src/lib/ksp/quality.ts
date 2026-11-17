@@ -31,12 +31,6 @@ export interface QualityItem {
 const nonEmpty = (v: unknown): boolean =>
   Array.isArray(v) ? v.length > 0 : typeof v === "string" ? v.trim().length > 0 : v != null;
 
-type LocalizedStrings = {
-  hint: string;
-  details: string;
-  where: string;
-};
-
 function profileLabel(profile: string | undefined, language: "ru" | "kz"): string | null {
   if (profile === "emn") return language === "kz" ? "ЖМБ" : "ЕМН";
   if (profile === "ogn") return language === "kz" ? "ҚГБ" : "ОГН";

@@ -16,6 +16,7 @@ import { KtpBuilder } from "@/components/ksp/ktp-builder";
 import { LikeButton } from "@/components/ksp/like-button";
 import { ReportPlanButton } from "@/components/ksp/report-plan-button";
 import { DeletePlanButton } from "@/components/ksp/delete-plan-button";
+import { BilimclassPushButton } from "@/components/ksp/bilimclass-push-button";
 import { AssignHomeworkButton } from "@/components/assignments/assign-homework-button";
 import { QualityGate } from "@/components/ksp/quality-gate";
 import { QrCard } from "@/components/ksp/qr-card";
@@ -34,7 +35,7 @@ import { resolveWatermark } from "@/lib/billing/watermark";
 import { getComments, getReviews, getUserNames } from "@/lib/comments";
 import { log } from "@/lib/logger";
 import type { LessonPlanRow } from "@/lib/types/ksp";
-import { Archive, Download, Edit, FileSpreadsheet, Gamepad2, Grid3x3, History as HistoryIcon, Layers, MessageSquareText, Presentation, Printer, Radio, ScrollText, Users } from "lucide-react";
+import { Archive, Clock, Download, Edit, FileSpreadsheet, Gamepad2, Grid3x3, History as HistoryIcon, Layers, MessageSquareText, PlusCircle, Presentation, Printer, Radio, ScrollText, Users } from "lucide-react";
 import { ThreeStage } from "@/components/three/three-stage";
 import l from "@/components/app/lesson.module.css";
 
@@ -231,6 +232,11 @@ export default async function PlanViewPage({
           <p className={l.bannerMeta}>{[subjectName, `${plan.grade} класс`].filter(Boolean).join(" · ")}</p>
           <h1 className={l.bannerTitle}>{plan.content?.topic || plan.title}</h1>
           <div className={l.bannerActions}>
+            <Button asChild>
+              <Link href={`/plans/${plan.id}/timer`}>
+                <Clock /> {approvalLocale === "kk" ? "Сабақ өткізу (Таймер)" : "Провести урок (Таймер)"}
+              </Link>
+            </Button>
             {isOwner && (
               <AssignHomeworkButton
                 planId={plan.id}
@@ -247,11 +253,32 @@ export default async function PlanViewPage({
               />
             )}
             <Button asChild variant="outline">
+              <a href={`/api/export/zip/${plan.id}`}>
+                <Archive /> {approvalLocale === "kk" ? "Толық жинақ (.zip)" : "Весь комплект (.zip)"}
+              </a>
+            </Button>
+            {isOwner && (
+              <BilimclassPushButton
+                planId={plan.id}
+                topic={plan.content?.topic || plan.title}
+                subjectName={subjectName}
+                grade={plan.grade}
+                classLabel={plan.content?.header?.grade}
+                date={plan.content?.header?.date}
+                learningObjectives={handoutKspContext?.learningObjectives ?? []}
+                homework={plan.content?.stages?.end?.homework}
+                schoolId={approvalSchool?._id ? approvalSchool._id.toString() : null}
+                language={plan.language}
+              />
+            )}
+            <Button asChild variant="outline">
               <a href={`/api/export/docx/${plan.id}`}><Download /> Word</a>
             </Button>
             {isOwner && (
               <Button asChild variant="outline">
-                <Link href={`/plans/${plan.id}/edit`}><Edit /> Редактировать</Link>
+                <Link href={`/plans/${plan.id}/edit`}>
+                  <Edit /> {approvalLocale === "kk" ? "Толық редактор" : "Редактировать"}
+                </Link>
               </Button>
             )}
             <PrintButton><Printer /> PDF</PrintButton>
@@ -262,7 +289,9 @@ export default async function PlanViewPage({
       </header>
 
       <section id="materials" aria-labelledby="materials-title" className={`${l.section} no-print`}>
-        <h2 id="materials-title" className={l.sectionTitle}>Материалы урока</h2>
+        <h2 id="materials-title" className={l.sectionTitle}>
+          {approvalLocale === "kk" ? "Сабақ материалдары мен жинағы" : "Материалы и комплект урока"}
+        </h2>
         {isOwner && plan.content ? (
           <KitPanel
             kit={plan.content.kit}
@@ -270,35 +299,48 @@ export default async function PlanViewPage({
             footer={plan.content.header.school || plan.content.header.teacherName || undefined}
           />
         ) : null}
-        <div className={l.tiles}>
-          <div className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>Live-квиз, пропуски, пары, порядок: выберите формат.</p>
-            {isOwner ? <InteractiveButton planId={plan.id} /> : <p className={l.note}>Доступен автору плана.</p>}
-            {isOwner && hasTasks(plan) && <Button asChild variant="outline"><Link href={`/quiz/host/${plan.id}`}><Radio /> Live-квиз</Link></Button>}
-          </div>
-          <div className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Красочный лист A4: картинка для печати, PDF или Word.</p>
-            <WorksheetButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
-          </div>
-          <div className={l.tile} data-tone="violet"><Users aria-hidden="true" className={l.tileIcon} /><b>Групповая работа</b><p>Карточки для групп или пар: ситуация, пять заданий, схема и ценность урока.</p>
-            <GroupWorkButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} learningObjectives={handoutKspContext?.learningObjectives} values={plan.content?.values} />
-          </div>
-          <div className={l.tile} data-tone="peach"><MessageSquareText aria-hidden="true" className={l.tileIcon} /><b>Слова педагога</b><p>Живая речь учителя по этапам, в Word.</p>
-            {user ? <TeacherSpeechButton planId={plan.id} /> : <Button asChild variant="outline"><a href={`/api/export/teacher-script/${plan.id}`}><ScrollText /> Слова педагога</a></Button>}
-          </div>
-          <div className={l.tile} data-tone="green"><Grid3x3 aria-hidden="true" className={l.tileIcon} /><b>Кроссворд</b><p>Из терминов этой темы.</p>
-            <CrosswordButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
-          </div>
-          <div className={l.tile} data-tone="pink"><Layers aria-hidden="true" className={l.tileIcon} /><b>Карточки в тетрадь</b><p>Печатаются, вырезаются и вклеиваются в тетрадь.</p>
-            <MemosButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
-          </div>
-          <div className={l.tile} data-tone="gray"><Presentation aria-hidden="true" className={l.tileIcon} /><b>Презентация</b><p>ИИ разбирает КСП, вы правите слайды, на выходе PowerPoint с анимацией.</p>
-            <div className={l.tileRow}>
-              {isOwner
-                ? <Button asChild variant="outline"><Link href={`/plans/${plan.id}/presentation`}><Presentation /> Конструктор</Link></Button>
-                : <Button asChild variant="outline"><a href={`/api/export/pptx/${plan.id}`}><Presentation /> PowerPoint</a></Button>}
-              <Button asChild variant="outline"><a href={`/api/export/zip/${plan.id}`}><Archive /> ZIP</a></Button>
+        <details
+          className={l.more}
+          open={!isOwner || (plan.content?.kit?.slots?.length ?? 0) === 0}
+        >
+          <summary className="inline-flex cursor-pointer items-center gap-2 font-medium">
+            <PlusCircle className="size-4 text-primary" />
+            {approvalLocale === "kk"
+              ? "Қосымша материал жасау немесе баптау (жұмыс парағы, карточкалар, презентация, сөзжұмбақ)"
+              : "Создать или настроить отдельный материал (рабочий лист, карточки, презентация, кроссворд, интерактив)"}
+          </summary>
+          <div className={`${l.moreBody} pt-3`}>
+            <div className={l.tiles}>
+              <div className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>Live-квиз, пропуски, пары, порядок: выберите формат.</p>
+                {isOwner ? <InteractiveButton planId={plan.id} /> : <p className={l.note}>Доступен автору плана.</p>}
+                {isOwner && hasTasks(plan) && <Button asChild variant="outline"><Link href={`/quiz/host/${plan.id}`}><Radio /> Live-квиз</Link></Button>}
+              </div>
+              <div className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Красочный лист A4 (+ версия ООП): печать, PDF или Word.</p>
+                <WorksheetButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
+              </div>
+              <div className={l.tile} data-tone="violet"><Users aria-hidden="true" className={l.tileIcon} /><b>Групповая работа</b><p>Карточки для групп или пар: ситуация, пять заданий, схема и ценность урока.</p>
+                <GroupWorkButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} learningObjectives={handoutKspContext?.learningObjectives} values={plan.content?.values} />
+              </div>
+              <div className={l.tile} data-tone="peach"><MessageSquareText aria-hidden="true" className={l.tileIcon} /><b>Слова педагога</b><p>Живая речь учителя по этапам, в Word.</p>
+                {user ? <TeacherSpeechButton planId={plan.id} /> : <Button asChild variant="outline"><a href={`/api/export/teacher-script/${plan.id}`}><ScrollText /> Слова педагога</a></Button>}
+              </div>
+              <div className={l.tile} data-tone="green"><Grid3x3 aria-hidden="true" className={l.tileIcon} /><b>Кроссворд</b><p>Из терминов этой темы.</p>
+                <CrosswordButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
+              </div>
+              <div className={l.tile} data-tone="pink"><Layers aria-hidden="true" className={l.tileIcon} /><b>Карточки в тетрадь</b><p>Печатаются, вырезаются и вклеиваются в тетрадь.</p>
+                <MemosButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
+              </div>
+              <div className={l.tile} data-tone="gray"><Presentation aria-hidden="true" className={l.tileIcon} /><b>Презентация</b><p>ИИ разбирает КСП, вы правите слайды, на выходе PowerPoint с анимацией.</p>
+                <div className={l.tileRow}>
+                  {isOwner
+                    ? <Button asChild variant="outline"><Link href={`/plans/${plan.id}/presentation`}><Presentation /> Конструктор</Link></Button>
+                    : <Button asChild variant="outline"><a href={`/api/export/pptx/${plan.id}`}><Presentation /> PowerPoint</a></Button>}
+                  <Button asChild variant="outline"><a href={`/api/export/zip/${plan.id}`}><Archive /> ZIP</a></Button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </details>
         {isOwner && <KtpBuilder planId={plan.id} topic={plan.content.topic || plan.title} isPro={canUseKtp} grade={plan.grade} subjectId={plan.subject_id} language={plan.language} />}
       </section>
 
@@ -326,7 +368,7 @@ export default async function PlanViewPage({
           План скрыт модерацией и не виден другим пользователям. {isOwner && "Проверьте содержание и смените видимость после исправлений — скрытие снимет администратор."}
         </p>
       )}
-      <PlanView plan={plan} />
+      <PlanView plan={plan} editable={isOwner} subjectName={subjectName} />
       {user && (
         <div className="space-y-6 no-print">
           <CommentsSection planId={plan.id} initialComments={comments} isOwner={isOwner} />

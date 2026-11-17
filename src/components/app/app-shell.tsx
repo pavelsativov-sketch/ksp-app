@@ -51,12 +51,25 @@ export function AppShell({
   const main: NavItem[] = [
     { href: "/dashboard", label: c.nav.home, icon: Home, active: (p) => p === "/dashboard" },
     { href: "/dashboard?new=1", label: c.nav.constructor, icon: FileText, active: (p) => p === "/plans/new" },
-    { href: "/plans", label: c.nav.plans, icon: CalendarDays, active: (p) => p === "/plans" || (p.startsWith("/plans/") && p !== "/plans/new") },
+    { href: "/plans", label: c.nav.plans, icon: CalendarDays, active: (p) => p === "/plans" || (p.startsWith("/plans/") && p !== "/plans/new") || p.startsWith("/longterm") || p.startsWith("/gradebook") || p.startsWith("/import") || p.startsWith("/assignments") || p.startsWith("/ai") },
     { href: "/library", label: c.nav.library, icon: BookOpen, active: (p) => p.startsWith("/library") || p.startsWith("/kits") || p.startsWith("/templates") || p.startsWith("/textbooks") },
     { href: "/school", label: c.nav.agent, icon: Bot, active: (p) => p === "/school" || p.startsWith("/school/agents") || p.startsWith("/school/workspace") },
     { href: "/school/dashboard", label: c.nav.os, icon: MonitorSmartphone, active: (p) => inSchool && p !== "/school" && !p.startsWith("/school/agents") && !p.startsWith("/school/workspace") && !p.startsWith("/school/reports") },
     { href: "/school/reports", label: c.nav.analytics, icon: ChartLine, active: (p) => p.startsWith("/school/reports") },
     { href: "/favorites", label: c.nav.favorites, icon: Star, active: (p) => p.startsWith("/favorites") },
+  ];
+  const plansSub = [
+    { href: "/plans", label: c.subNav.kspList, active: (p: string) => p === "/plans" || (p.startsWith("/plans/") && p !== "/plans/new") },
+    { href: "/longterm", label: c.subNav.longterm, active: (p: string) => p.startsWith("/longterm") },
+    { href: "/gradebook", label: c.subNav.gradebook, active: (p: string) => p.startsWith("/gradebook") || p.startsWith("/assignments") },
+    { href: "/import", label: c.subNav.importDocx, active: (p: string) => p.startsWith("/import") },
+    { href: "/ai/history", label: c.subNav.aiHistory, active: (p: string) => p.startsWith("/ai") },
+  ];
+  const librarySub = [
+    { href: "/library", label: c.subNav.publicLibrary, active: (p: string) => p.startsWith("/library") },
+    { href: "/textbooks", label: c.subNav.textbooks, active: (p: string) => p.startsWith("/textbooks") },
+    { href: "/kits", label: c.subNav.kits, active: (p: string) => p.startsWith("/kits") },
+    { href: "/templates", label: c.subNav.templates, active: (p: string) => p.startsWith("/templates") },
   ];
   const foot: NavItem[] = [
     { href: "/feedback", label: c.nav.help, icon: CircleHelp, active: (p) => p.startsWith("/feedback") },
@@ -116,6 +129,24 @@ export function AppShell({
             {main.map((item) => (
               <Fragment key={item.href}>
                 {renderItem(item)}
+                {item.href === "/plans" && item.active(path) && (
+                  <div className={s.sub}>
+                    {plansSub.map((sub) => (
+                      <Link key={sub.href} href={sub.href} prefetch={false} aria-current={sub.active(path) ? "page" : undefined} className={sub.active(path) ? `${s.subItem} ${s.subItemActive}` : s.subItem} onClick={() => setOpen(false)}>
+                        {sub.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {item.href === "/library" && item.active(path) && (
+                  <div className={s.sub}>
+                    {librarySub.map((sub) => (
+                      <Link key={sub.href} href={sub.href} prefetch={false} aria-current={sub.active(path) ? "page" : undefined} className={sub.active(path) ? `${s.subItem} ${s.subItemActive}` : s.subItem} onClick={() => setOpen(false)}>
+                        {sub.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
                 {/* Разделы школы раскрываются под своим пунктом и только внутри него. */}
                 {item.href === "/school/dashboard" && item.active(path) && (
                   <div className={s.sub}>
@@ -141,7 +172,7 @@ export function AppShell({
           )}
         </aside>
         {open && <button type="button" aria-label={c.close} className={s.scrim} onClick={() => setOpen(false)} />}
-        <div className={s.content} data-shell-content>{children}<BannerRobot path={path} /><BrowserWarmup /></div>
+        <div className={s.content} data-shell-content>{children}{!inSchool && <BannerRobot path={path} />}<BrowserWarmup /></div>
       </div>
     </div>
   );
@@ -152,14 +183,31 @@ const PAGE_HEADER = "header:not([class*='banner']):not([class*='head'])";
 
 /**
  * Живой 3D-робот в шапке каждой страницы кабинета. Шапки у страниц свои, поэтому робот
- * подселяется в найденный <header> с заголовком, а не вписывается в десятки файлов.
+ * подселяется в найденный <header> с заголовком ПОСЛЕ завершения гидрации дочерних
+ * Suspense-границ — иначе вставка узла в чужой <header> вызывала React #418.
  */
 function BannerRobot({ path }: { path: string }) {
   const [host, setHost] = useState<Element | null>(null);
   useEffect(() => {
-    const header = [...document.querySelectorAll(`[data-shell-content] ${PAGE_HEADER}`)].find((el) => el.querySelector("h1")) ?? null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- шапку страницы можно найти только в готовой разметке
-    setHost(header);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const mount = () => {
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        const header = [...document.querySelectorAll(`[data-shell-content] ${PAGE_HEADER}`)].find((el) => el.querySelector("h1")) ?? null;
+        setHost(header);
+      }, 150);
+    };
+    if (document.readyState === "complete") {
+      mount();
+    } else {
+      window.addEventListener("load", mount, { once: true });
+    }
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("load", mount);
+    };
   }, [path]);
   if (!host?.isConnected) return null;
   return createPortal(<span className={s.bannerRobot} aria-hidden="true"><ThreeStage scene="robot" className={s.bannerFill} /></span>, host);

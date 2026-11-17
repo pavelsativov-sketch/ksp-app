@@ -128,7 +128,6 @@ export async function POST(request: Request) {
 
       const { system, user } = buildPrompt(parsed.data);
       const configs = TASK_CONFIGS.enhance().filter((c) => c.apiKey);
-      let lastError: unknown = new Error("Нет доступных AI-провайдеров");
 
       for (const config of configs) {
         const keyList = config.apiKeys?.length ? config.apiKeys : [config.apiKey];
@@ -150,7 +149,8 @@ export async function POST(request: Request) {
                 temperature: 0.6,
                 max_tokens: 1200,
                 stream: true,
-              },
+                ...(config.extraBody ?? {}),
+              } as Parameters<typeof client.chat.completions.create>[0] & { stream: true },
               { signal: request.signal },
             );
             let full = "";
@@ -174,7 +174,6 @@ export async function POST(request: Request) {
               provider: config.label,
               reason: e instanceof Error ? e.message : String(e),
             });
-            lastError = e;
           }
         }
       }

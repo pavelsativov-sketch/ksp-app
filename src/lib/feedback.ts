@@ -3,7 +3,13 @@ import { ObjectId } from "mongodb";
 import { getDb, COL, toObjectId } from "@/lib/mongo";
 import { log } from "@/lib/logger";
 
-export type FeedbackCategory = "bug" | "feature" | "general";
+export type FeedbackCategory =
+  | "bug"
+  | "feature"
+  | "general"
+  | "purchase_pro"
+  | "school_lead"
+  | "password_reset";
 export type FeedbackStatus = "new" | "in_progress" | "resolved" | "closed";
 
 export interface FeedbackDoc {
@@ -13,6 +19,9 @@ export interface FeedbackDoc {
   comment: string;
   category: FeedbackCategory;
   status: FeedbackStatus;
+  contact_name?: string;
+  contact_info?: string;
+  organization?: string;
   response?: string;
   responded_by?: string;
   responded_at?: Date;
@@ -200,7 +209,14 @@ export async function getFeedbackStats(): Promise<{
       ]).toArray(),
     ]);
 
-    const categoryMap: Record<FeedbackCategory, number> = { bug: 0, feature: 0, general: 0 };
+    const categoryMap: Record<FeedbackCategory, number> = {
+      bug: 0,
+      feature: 0,
+      general: 0,
+      purchase_pro: 0,
+      school_lead: 0,
+      password_reset: 0,
+    };
     for (const row of byCategory) {
       categoryMap[row._id] = row.count;
     }
@@ -223,7 +239,14 @@ export async function getFeedbackStats(): Promise<{
     return {
       total: 0,
       averageRating: 0,
-      byCategory: { bug: 0, feature: 0, general: 0 },
+      byCategory: {
+        bug: 0,
+        feature: 0,
+        general: 0,
+        purchase_pro: 0,
+        school_lead: 0,
+        password_reset: 0,
+      },
       byStatus: { new: 0, in_progress: 0, resolved: 0, closed: 0 },
     };
   }

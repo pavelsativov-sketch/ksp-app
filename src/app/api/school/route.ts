@@ -18,7 +18,7 @@ const createSchoolSchema = z.object({
   })
 });
 
-export async function GET(_request: Request) {
+export async function GET() {
   try {
     const authResult = await requireApiAuth();
     if (authResult.response) return authResult.response;

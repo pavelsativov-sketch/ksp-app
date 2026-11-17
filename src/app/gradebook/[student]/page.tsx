@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Award, BarChart3, Download, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, BarChart3, Download, TrendingDown, TrendingUp } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getStudentResults } from "@/lib/gradebook";
 import { Button } from "@/components/ui/button";

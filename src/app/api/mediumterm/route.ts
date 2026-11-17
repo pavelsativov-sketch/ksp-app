@@ -9,7 +9,6 @@ import {
   getMediumTermPlans,
   linkKspToMediumTerm,
   unlinkKspFromMediumTerm,
-  type MediumTermTopic,
 } from "@/lib/longterm";
 
 export const runtime = "nodejs";
@@ -177,6 +176,7 @@ export async function PATCH(request: Request) {
     const linkSchema = z.object({
       mediumTermId: z.string().regex(/^[0-9a-f]{24}$/i),
       kspId: z.string().regex(/^[0-9a-f]{24}$/i),
+      topicIndex: z.number().int().min(0).max(200).optional(),
       action: z.enum(["link", "unlink"]),
     });
     const parsed = linkSchema.safeParse(json);
@@ -187,14 +187,14 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { mediumTermId, kspId, action } = parsed.data;
+    const { mediumTermId, kspId, topicIndex, action } = parsed.data;
     const existing = await getMediumTermPlan(mediumTermId);
     if (!existing || existing.owner_id !== auth.user.id) {
       return errorResponse("Not found", 404);
     }
 
     const plan = action === "link"
-      ? await linkKspToMediumTerm(mediumTermId, kspId)
+      ? await linkKspToMediumTerm(mediumTermId, kspId, topicIndex)
       : await unlinkKspFromMediumTerm(mediumTermId, kspId);
     return NextResponse.json({ plan }, { headers });
   } catch {

@@ -402,6 +402,36 @@ function taskBanner(index: number, t: WorksheetTask, copy: WorksheetCopy, langua
   });
 }
 
+const SVG_FALLBACK_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIAAAUAAeImBZsAAAAASUVORK5CYII=",
+  "base64",
+);
+
+function buildDocxImageRun(
+  data: Buffer,
+  mime: string | undefined,
+  width: number,
+  height: number,
+  alt?: string,
+): ImageRun {
+  const altText = alt ? { title: alt, description: alt, name: alt } : undefined;
+  if (mime === "image/svg+xml") {
+    return new ImageRun({
+      type: "svg",
+      data,
+      fallback: { type: "png", data: SVG_FALLBACK_PNG },
+      transformation: { width, height },
+      altText,
+    });
+  }
+  return new ImageRun({
+    data,
+    transformation: { width, height },
+    type: mime === "image/png" ? "png" : "jpg",
+    altText,
+  });
+}
+
 function imageParagraph(t: WorksheetTask, width: number, height: number): Paragraph | null {
   const base64 = t.imageBase64;
   if (!base64) return null;
@@ -409,14 +439,7 @@ function imageParagraph(t: WorksheetTask, width: number, height: number): Paragr
     return new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 120 },
-      children: [
-        new ImageRun({
-          data: Buffer.from(base64, "base64"),
-          transformation: { width, height },
-          type: t.imageMime === "image/png" ? "png" : "jpg",
-          altText: t.imageAlt ? { title: t.imageAlt, description: t.imageAlt, name: t.imageAlt } : undefined,
-        }),
-      ],
+      children: [buildDocxImageRun(Buffer.from(base64, "base64"), t.imageMime, width, height, t.imageAlt)],
     });
   } catch {
     return null; // повреждённая картинка не должна ломать лист
@@ -1012,16 +1035,7 @@ function flashCell(
           alignment: AlignmentType.CENTER,
           spacing: { after: 80 },
           children: [
-            new ImageRun({
-              data,
-              // Квадратная рамка под картинку: картинки генерируются 1:1, и
-              // растягивание до нестандартного размера искажало их.
-              transformation: { width: 128, height: 128 },
-              type: card.imageMime === "image/png" ? "png" : "jpg",
-              altText: card.imageAlt
-                ? { title: card.imageAlt, description: card.imageAlt, name: card.imageAlt }
-                : undefined,
-            }),
+            buildDocxImageRun(data, card.imageMime, 128, 128, card.imageAlt),
           ],
         }),
       );

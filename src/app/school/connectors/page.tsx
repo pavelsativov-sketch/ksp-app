@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { NoSchool } from "@/components/school/no-school";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExternalLink, KeyRound, ShieldCheck, Globe, BookOpen, Users } from "lucide-react";
+import { BrowserWarmupLink } from "@/components/school/browser-warmup-link";
 
 export const dynamic = "force-dynamic";
 
@@ -69,13 +69,13 @@ export default async function ConnectorsPage() {
                 <p className="tabular-nums text-xs text-muted-foreground/70">{service.url}</p>
                 <div className="flex gap-2 pt-1">
                   {/* Открыть в рабочей области — браузер сразу переходит на нужный URL */}
-                  <Link
+                  <BrowserWarmupLink
                     href={workspaceHref}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90"
                   >
                     <Globe className="size-3.5" />
                     Открыть в браузере
-                  </Link>
+                  </BrowserWarmupLink>
                   {/* Открыть сайт напрямую в новой вкладке браузера */}
                   <a
                     href={service.url}

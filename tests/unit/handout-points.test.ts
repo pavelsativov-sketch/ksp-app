@@ -55,7 +55,7 @@ describe("бюджет 10 баллов", () => {
 
   it("каждое оцениваемое задание получает минимум 1 балл", () => {
     const tasks = enforceTenPoints(
-      new Array(6).fill(0).map((_, i) => task({ type: "open", points: 0 })),
+      new Array(6).fill(0).map(() => task({ type: "open", points: 0 })),
     );
     expect(tasks.every((t) => t.points >= 1)).toBe(true);
     expect(total(tasks)).toBe(10);

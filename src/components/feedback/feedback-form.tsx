@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 type FeedbackCategory = "bug" | "feature" | "general";
 
 interface FeedbackFormProps {
-  userId: string;
+  userId?: string;
   onSuccess?: () => void;
 }
 
@@ -20,7 +20,7 @@ const categories: { value: FeedbackCategory; label: string }[] = [
   { value: "general", label: "Общий отзыв" },
 ];
 
-export function FeedbackForm({ userId, onSuccess }: FeedbackFormProps) {
+export function FeedbackForm({ onSuccess }: FeedbackFormProps) {
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [category, setCategory] = useState<FeedbackCategory>("general");

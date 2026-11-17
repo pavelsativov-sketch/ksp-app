@@ -39,7 +39,7 @@ export function useActiveTaskStatus(): {
   const task = useActiveAgentTask();
   const [status, setStatus] = useState<ActiveTaskStatus>("running");
   const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
     if (!task) return;
@@ -55,6 +55,7 @@ export function useActiveTaskStatus(): {
         if (!alive || !found) return;
         setStatus(normalize(found.status));
         setStartedAt(new Date(found.createdAt).getTime());
+        setNow(Date.now());
       } catch {
         // статус не критичен: оставляем предыдущее значение
       }
@@ -74,7 +75,7 @@ export function useActiveTaskStatus(): {
     return () => clearInterval(tick);
   }, [task, status]);
 
-  const elapsed = task && startedAt ? formatHms(Math.max(0, Math.floor((now - startedAt) / 1000))) : null;
+  const elapsed = task && startedAt && now !== null ? formatHms(Math.max(0, Math.floor((now - startedAt) / 1000))) : null;
 
   return { status: task ? status : "idle", elapsed, startedAt };
 }

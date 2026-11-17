@@ -197,8 +197,15 @@ export async function loginWithSavedCredentials(userId: string, page: LoginPage)
   const result = (status: AutoLoginStatus): AutoLoginResult => ({ status, ...site });
   const config = KNOWN_LOGIN_SITES[site.domain]!;
   try {
+    // Не ждём медленную SPA-форму, если вводить всё равно нечего. Раньше
+    // первый переход в BilimClass гостем тратил до 12 секунд на опрос поля
+    // пароля, а затем только узнавал, что сохранённых данных нет. Экран
+    // сервиса должен появляться сразу; окно входа покажет обычная DOM-проверка.
+    const creds = await getCredentials(userId, site.domain);
+    if (!creds) return result("no-credentials");
+
     // SPA BilimClass рисует форму только после ответов API (до 10–15 с): на странице
-    // входа ждём её появления, а не считаем, что формы нет.
+    // входа ждём её появления только когда действительно есть данные для входа.
     let hasForm = Boolean(await page.evaluate(asScript(hasVisiblePassword) as never));
     const onLoginPath = /\/login/i.test(page.url());
     for (let i = 0; i < 12 && !hasForm && onLoginPath; i += 1) {
@@ -206,8 +213,6 @@ export async function loginWithSavedCredentials(userId: string, page: LoginPage)
       hasForm = Boolean(await page.evaluate(asScript(hasVisiblePassword) as never));
     }
     if (!hasForm) return result("no-form");
-    const creds = await getCredentials(userId, site.domain);
-    if (!creds) return result("no-credentials");
 
     const key = `${userId}:${site.domain}`;
     if (Date.now() - (lastAttempt.get(key) ?? 0) < ATTEMPT_GAP_MS) return result("throttled");
@@ -281,8 +286,10 @@ export async function tryAutoLogin(
     await sendRpc("press", { key: "Enter" });
 
     // Либо кликаем кнопку
+    const submitSel = site.submitSelector.split(",")[0]!.trim();
     await sendRpc("evaluate", {
-      script: `() => { const btn = document.querySelector("${site.submitSelector.split(",")[0].trim()}"); if (btn) btn.click(); }`,
+      script: `(sel) => { const btn = document.querySelector(sel); if (btn instanceof HTMLElement) btn.click(); }`,
+      arg: submitSel,
     });
 
     // Ждём загрузки после входа

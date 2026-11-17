@@ -224,7 +224,8 @@ try {
     await page.fill('input[type="password"]', PASS);
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/(welcome|dashboard|plans|school|login)/, { timeout: 30000 });
-    page.url().includes("/login") ? fail("A1 регистрация", "остались на /login") : pass("A1 регистрация", page.url());
+    if (page.url().includes("/login")) fail("A1 регистрация", "остались на /login");
+    else pass("A1 регистрация", page.url());
     const userDoc = await db.collection("users").findOne({ email: EMAIL });
     if (!userDoc) fail("A1 пользователь в БД", "не найден");
     else userId = userDoc._id.toString();
@@ -234,7 +235,8 @@ try {
   console.log("\nA2. Профиль");
   await step("A2 профиль", async () => {
     const prof = await apiFetch("/profile");
-    prof.status === 200 ? pass("A2 профиль", `HTTP ${prof.status}`) : fail("A2 профиль", `HTTP ${prof.status}`);
+    if (prof.status === 200) pass("A2 профиль", `HTTP ${prof.status}`);
+    else fail("A2 профиль", `HTTP ${prof.status}`);
   });
 
   // ═══ A3. Школа через UI ═══
@@ -418,9 +420,11 @@ try {
       if (last.status === 200 && last.json?.improved?.length) break;
       await new Promise((r) => setTimeout(r, 5000));
     }
-    (last.status === 200 && last.json?.improved?.length)
-      ? pass("A6 enhance", String(last.json.improved).slice(0, 60))
-      : fail("A6 enhance", JSON.stringify(last.json ?? last.text).slice(0, 150));
+    if (last.status === 200 && last.json?.improved?.length) {
+      pass("A6 enhance", String(last.json.improved).slice(0, 60));
+    } else {
+      fail("A6 enhance", JSON.stringify(last.json ?? last.text).slice(0, 150));
+    }
   });
 
   // ═══ A7. Экспорт docx ═══
@@ -428,9 +432,11 @@ try {
   await step("A7 docx", async () => {
     if (!planId) { fail("A7 docx", "план отсутствует"); return; }
     const docx = await apiFetchBuffer(`/api/export/docx/${planId}`);
-    (docx.status === 200 && docx.bytes > 1000 && docx.type.includes("wordprocessingml"))
-      ? pass("A7 docx", `${docx.bytes} байт`)
-      : fail("A7 docx", JSON.stringify(docx));
+    if (docx.status === 200 && docx.bytes > 1000 && docx.type.includes("wordprocessingml")) {
+      pass("A7 docx", `${docx.bytes} байт`);
+    } else {
+      fail("A7 docx", JSON.stringify(docx));
+    }
   });
 
   // ═══ A8. Раздаточный материал ═══
@@ -444,9 +450,11 @@ try {
       count: 4,
       language: "ru",
     });
-    (handout.status === 200 && handout.json?.ok !== false)
-      ? pass("A8 worksheet", `HTTP ${handout.status}`)
-      : fail("A8 worksheet", JSON.stringify(handout.json ?? handout.text).slice(0, 160));
+    if (handout.status === 200 && handout.json?.ok !== false) {
+      pass("A8 worksheet", `HTTP ${handout.status}`);
+    } else {
+      fail("A8 worksheet", JSON.stringify(handout.json ?? handout.text).slice(0, 160));
+    }
   });
 
   // ═══ A9. История AI ═══
@@ -455,7 +463,8 @@ try {
     await new Promise((r) => setTimeout(r, 1500));
     const hist = await apiFetch("/api/ai/history?limit=5");
     const histItems = hist.json?.items ?? [];
-    histItems.length >= 1 ? pass("A9 история", `${histItems.length} записей`) : fail("A9 история", JSON.stringify(hist.json).slice(0, 120));
+    if (histItems.length >= 1) pass("A9 история", `${histItems.length} записей`);
+    else fail("A9 история", JSON.stringify(hist.json).slice(0, 120));
   });
 
   // ═══ A10. Чат-ассистент (SSE) ═══
@@ -472,9 +481,11 @@ try {
     // получить токены — считаем чат работающим (ответ накапливается).
     const streamed = chatEvents.filter((e) => e.type === "token").map((e) => e.text ?? "").join("");
     const answer = chatDone?.answer ?? streamed;
-    (typeof answer === "string" && answer.length > 20)
-      ? pass("A10 чат", answer.slice(0, 70))
-      : fail("A10 чат", `err=${chatError?.error ?? "нет ответа"} (stop=${chat.status}, events=${chatEvents.length})`);
+    if (typeof answer === "string" && answer.length > 20) {
+      pass("A10 чат", answer.slice(0, 70));
+    } else {
+      fail("A10 чат", `err=${chatError?.error ?? "нет ответа"} (stop=${chat.status}, events=${chatEvents.length})`);
+    }
   });
 
   // ═══ A11. Агент: задача running → completed ═══
@@ -491,9 +502,11 @@ try {
     }
     const agentTaskId = agentStart.json.taskId;
     const status = await waitTaskTerminal(agentTaskId);
-    status === "completed"
-      ? pass("A11 задача completed", `taskId=${agentTaskId}`)
-      : fail("A11 задача completed", `status=${status}`);
+    if (status === "completed") {
+      pass("A11 задача completed", `taskId=${agentTaskId}`);
+    } else {
+      fail("A11 задача completed", `status=${status}`);
+    }
   });
 
   // ═══ A12. Агент: очередь (последовательно: первая завершается → вторая) ═══
@@ -505,18 +518,22 @@ try {
     });
     const firstId = first.json?.taskId;
     const firstStatus = firstId ? await waitTaskTerminal(firstId) : null;
-    firstStatus === "completed"
-      ? pass("A12 первая завершена", String(firstStatus))
-      : fail("A12 первая", String(firstStatus));
+    if (firstStatus === "completed") {
+      pass("A12 первая завершена", String(firstStatus));
+    } else {
+      fail("A12 первая", String(firstStatus));
+    }
     // После полного завершения первой — вторая стартует сразу (по 201).
     const second = await apiFetch("/api/agents/task", "POST", {
       prompt: "Скажи кратко: столица Казахстана?",
     });
     const secondId = second.json?.taskId;
     const secondStatus = secondId ? await waitTaskTerminal(secondId) : null;
-    secondStatus === "completed"
-      ? pass("A12 вторая (после первой) завершена", String(secondStatus))
-      : fail("A12 вторая", `status=${secondStatus} (task=${second.json?.status})`);
+    if (secondStatus === "completed") {
+      pass("A12 вторая (после первой) завершена", String(secondStatus));
+    } else {
+      fail("A12 вторая", `status=${secondStatus} (task=${second.json?.status})`);
+    }
     // Принудительная очистка слота для следующих шагов.
     if (userId) {
       await db.collection("agent_tasks").updateMany(
@@ -608,9 +625,11 @@ try {
     });
     const kitDoc = await db.collection("lesson_kits").findOne({ title: "Комплект E2E" });
     const kitCreated = kit.status === 200 || kit.json?.kit?.id;
-    (kitCreated && kitDoc)
-      ? pass("A15 комплект сохранён", kitDoc._id.toString())
-      : fail("A15 комплект", `status=${kit.status} body=${JSON.stringify(kit.json ?? kit.text).slice(0, 200)}`);
+    if (kitCreated && kitDoc) {
+      pass("A15 комплект сохранён", kitDoc._id.toString());
+    } else {
+      fail("A15 комплект", `status=${kit.status} body=${JSON.stringify(kit.json ?? kit.text).slice(0, 200)}`);
+    }
   });
 
   // ═══ A16. Logout → Login ═══

@@ -16,7 +16,7 @@ export async function GET(
 
   if (!isMongoConfigured()) return NextResponse.json({ error: "Сервер не настроен" }, { status: 500 });
   const user = await getCurrentUser();
-  const rl = await checkRateLimitAsync(`export:${user?.id || clientIp(request)}`, 30, 60_000);
+  const rl = await checkRateLimitAsync(`export:script:${user?.id || clientIp(request)}`, 30, 60_000);
   if (!rl.ok) {
     return NextResponse.json(
       { error: "Слишком много скачиваний. Повторите через минуту." },

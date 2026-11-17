@@ -13,7 +13,7 @@
  *   по умолчанию 10 аккаунтов на http://localhost:3000
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 

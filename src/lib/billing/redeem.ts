@@ -81,6 +81,42 @@ export async function redeemActivationCode(userId: string, code: unknown): Promi
         }, { session });
         return { ok: true, plan: "pro", expiresAt };
       });
+    } catch (txErr) {
+      const te = txErr as { code?: unknown; message?: string };
+      const standalone = te.code === 20 || /replica set member or mongos/i.test(te.message ?? "");
+      if (!standalone) throw txErr;
+      // Standalone MongoDB (без replica set): атомарно захватываем код через findOneAndUpdate
+      // и при сбое записи тарифа вручную откатываем статус кода.
+      const now = new Date();
+      const user = await db.collection<UserBillingFields>(COL.users).findOne({ _id: id });
+      if (!user) return { ok: false, error: "Требуется вход", status: 401 };
+      const redeemed = await db.collection<BillingCodeDocument>(COL.billingCodes).findOneAndUpdate(
+        { codeHash: hashActivationCode(parsed.data), status: "active", type: { $in: ["pro_1y", "pro_3m", "pro_1m"] } },
+        { $set: { status: "redeemed", redeemed_by: userId, redeemed_at: now } },
+        { returnDocument: "after" },
+      );
+      if (!redeemed) return { ok: false, error: INVALID_CODE_MESSAGE, status: 400 };
+      try {
+        const base = user.plan_expires_at && user.plan_expires_at > now ? user.plan_expires_at : now;
+        const expiresAt = extendPlanExpiry(base, redeemed.type);
+        const updated = await db.collection(COL.users).updateOne(
+          { _id: id }, { $set: { plan: "pro", plan_expires_at: expiresAt } },
+        );
+        if (updated.matchedCount !== 1) throw new Error("Billing user disappeared");
+        await db.collection(COL.planEvents).insertOne({
+          user_id: userId, event: "activation_code_redeemed", code_id: redeemed._id,
+          code_type: redeemed.type, previous_plan: user.plan ?? "free",
+          previous_expires_at: user.plan_expires_at ?? null,
+          plan: "pro", plan_expires_at: expiresAt, created_at: now,
+        });
+        return { ok: true, plan: "pro", expiresAt };
+      } catch (innerErr) {
+        await db.collection<BillingCodeDocument>(COL.billingCodes).updateOne(
+          { _id: redeemed._id, redeemed_by: userId },
+          { $set: { status: "active" }, $unset: { redeemed_by: "", redeemed_at: "" } },
+        ).catch(() => {});
+        throw innerErr;
+      }
     } finally {
       await session.endSession();
     }

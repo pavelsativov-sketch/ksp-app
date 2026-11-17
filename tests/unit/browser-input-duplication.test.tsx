@@ -141,7 +141,7 @@ describe('BrowserApp: прямой ввод с клавиатуры прямо �
       const typeCalls = fetchMock.mock.calls.filter((call) => {
         try {
           const body = JSON.parse(call[1]?.body as string);
-          return body.action === 'type' && body.text === 'teacher123';
+          return body.action === 'type' && body.text === 'teacher123' && body.fast === '1';
         } catch {
           return false;
         }

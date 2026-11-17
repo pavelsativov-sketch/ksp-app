@@ -44,4 +44,23 @@ describe("extraBody провайдера", () => {
     expect(mercury?.body).toMatchObject({ model: "mercury-3", reasoning_effort: "instant" });
     expect(groq?.body).not.toHaveProperty("reasoning_effort");
   });
+
+  it("пропускает вторую модель того же хоста после таймаута первой", async () => {
+    bodies.length = 0;
+    process.env.MERCURY_API_KEY = "";
+    process.env.MXR_API_KEY = "mxr-test";
+    process.env.GROQ_API_KEY = "groq-test";
+    vi.resetModules();
+    const { executeWithFallback } = await import("@/lib/ai/providers");
+    await executeWithFallback("generation", async (client, model) => {
+      if (client.baseURL.includes("mxr.one")) {
+        bodies.push({ baseURL: client.baseURL, body: { model } });
+        throw new Error("Request timed out.");
+      }
+      return client.chat.completions.create({ model, messages: [] });
+    });
+    const mxrCalls = bodies.filter((c) => c.baseURL.includes("mxr.one"));
+    expect(mxrCalls).toHaveLength(1);
+    expect(bodies.some((c) => c.baseURL.includes("groq"))).toBe(true);
+  });
 });

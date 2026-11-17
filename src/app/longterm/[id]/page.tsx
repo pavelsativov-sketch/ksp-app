@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Plus, Clock, BookOpen } from "lucide-react";
+import { ArrowLeft, Plus, Clock, BookOpen, CheckCircle2 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
-import { isMongoConfigured } from "@/lib/mongo";
+import { COL, getDb, isMongoConfigured } from "@/lib/mongo";
 import { getLongTermPlan, getMediumTermPlans } from "@/lib/longterm";
 import { DeletePlanButton } from "@/components/longterm/delete-plan-button";
+import { KtpGenerateKspButton } from "@/components/longterm/ktp-generate-ksp-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDict } from "@/lib/i18n/server";
@@ -15,10 +16,15 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+function normTitle(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 export default async function LongTermDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const { t } = await getDict();
+  const { locale, t } = await getDict();
   const d = t.longterm;
+  const isKk = locale === "kk";
 
   if (!isMongoConfigured()) {
     return (
@@ -38,7 +44,26 @@ export default async function LongTermDetailPage({ params }: PageProps) {
   const plan = await getLongTermPlan(id);
   if (!plan || plan.owner_id !== user.id) notFound();
 
-  const mediumPlans = await getMediumTermPlans(user.id, { longTermId: id });
+  const db = await getDb();
+  const [mediumPlans, ownedPlans] = await Promise.all([
+    getMediumTermPlans(user.id, { longTermId: id }),
+    db
+      .collection<{ _id: unknown; title?: string; content?: { topic?: string } }>(COL.plans)
+      .find(
+        { owner_id: user.id, grade: plan.grade },
+        { projection: { title: 1, "content.topic": 1 } },
+      )
+      .limit(400)
+      .toArray()
+      .catch(() => []),
+  ]);
+
+  const kspByTopic = new Map<string, string>();
+  for (const p of ownedPlans) {
+    const pid = String(p._id);
+    if (p.title) kspByTopic.set(normTitle(p.title), pid);
+    if (p.content?.topic) kspByTopic.set(normTitle(p.content.topic), pid);
+  }
 
   const totalHours = plan.sections.reduce(
     (sum, s) => sum + s.topics.reduce((tsum, t) => tsum + t.hours, 0),
@@ -54,17 +79,17 @@ export default async function LongTermDetailPage({ params }: PageProps) {
         </Link>
       </Button>
 
-      <div className="flex items-start justify-between gap-4 mb-8">
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="editorial-kicker">{d.kicker}</p>
           <h1 className="editorial-display mt-2 text-4xl">
-            {plan.subject} — {plan.grade} класс
+            {plan.subject} — {plan.grade} {isKk ? "сынып" : "класс"}
           </h1>
           <p className="mt-2 text-muted-foreground">
-            {plan.year} · {totalTopics} {totalTopics === 1 ? "тема" : totalTopics < 5 ? "темы" : "тем"} · {totalHours} ч.
+            {plan.year} · {totalTopics} {isKk ? "тақырып" : "тем"} · {totalHours} {isKk ? "сағ." : "ч."}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
             <Link href={`/longterm/${id}/medium/new`}>
               <Plus /> {d.createMedium}
@@ -73,64 +98,93 @@ export default async function LongTermDetailPage({ params }: PageProps) {
           <DeletePlanButton
             endpoint="/api/longterm"
             id={id}
-            confirmText="Удалить этот план? Связанные ССП также будут удалены."
+            confirmText={
+              isKk
+                ? "Бұл жоспарды өшіру керек пе? Байланысты ОМЖ да өшіріледі."
+                : "Удалить этот план? Связанные ССП также будут удалены."
+            }
             fallbackHref="/longterm"
           />
         </div>
       </div>
 
-      {/* Progress */}
       <Card className="mb-8">
         <CardContent className="pt-6">
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
               <BookOpen className="size-4 text-muted-foreground" />
-              <span>{plan.sections.length} {plan.sections.length === 1 ? "раздел" : "разделов"}</span>
+              <span>
+                {plan.sections.length} {isKk ? "бөлім" : "разделов"}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="size-4 text-muted-foreground" />
-              <span>{totalHours} ч.</span>
+              <span>
+                {totalHours} {isKk ? "сағ." : "ч."}
+              </span>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Sections */}
+      {/* Разделы и темы ДСП/КТП с генерацией КСП в 1 клик */}
       <div className="space-y-6">
         {plan.sections.map((section, sIdx) => (
           <Card key={sIdx}>
             <CardHeader>
               <CardTitle className="text-xl">{section.title}</CardTitle>
               <CardDescription>
-                {section.topics.length} {section.topics.length === 1 ? "тема" : "тем"} ·{" "}
-                {section.topics.reduce((sum, t) => sum + t.hours, 0)} ч.
+                {section.topics.length} {isKk ? "тақырып" : "тем"} ·{" "}
+                {section.topics.reduce((sum, t) => sum + t.hours, 0)} {isKk ? "сағ." : "ч."}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {section.topics.map((topic, tIdx) => (
-                  <div
-                    key={tIdx}
-                    className="flex items-start justify-between gap-4 rounded-xl border border-border p-4"
-                  >
-                    <div>
-                      <p className="font-semibold">{topic.title}</p>
-                      {topic.objectives && (
-                        <p className="mt-1 text-sm text-muted-foreground">{topic.objectives}</p>
-                      )}
+                {section.topics.map((topic, tIdx) => {
+                  const matchedKspId = kspByTopic.get(normTitle(topic.title));
+                  const prevTopic = tIdx > 0 ? section.topics[tIdx - 1]?.title : undefined;
+                  return (
+                    <div
+                      key={tIdx}
+                      className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border p-4"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{topic.title}</p>
+                        {topic.objectives && (
+                          <p className="mt-1 text-sm text-muted-foreground">{topic.objectives}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                          {topic.hours} {isKk ? "сағ." : "ч."}
+                        </span>
+                        {matchedKspId ? (
+                          <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs text-emerald-600">
+                            <Link href={`/plans/${matchedKspId}`}>
+                              <CheckCircle2 className="size-3.5" />
+                              {isKk ? "ҚМЖ дайын → Ашу" : "КСП готов → Открыть"}
+                            </Link>
+                          </Button>
+                        ) : (
+                          <KtpGenerateKspButton
+                            subject={plan.subject}
+                            grade={plan.grade}
+                            topic={topic.title}
+                            objectives={topic.objectives}
+                            previousTopic={prevTopic}
+                            locale={locale}
+                          />
+                        )}
+                      </div>
                     </div>
-                    <span className="shrink-0 tabular-nums text-sm text-muted-foreground">
-                      {topic.hours} ч.
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Linked ССП */}
       {mediumPlans.length > 0 && (
         <Card className="mt-8">
           <CardHeader>
@@ -142,12 +196,13 @@ export default async function LongTermDetailPage({ params }: PageProps) {
                 <Link
                   key={mp.id}
                   href={`/longterm/${id}/medium/${mp.id}`}
-                  className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-primary-soft transition-colors"
+                  className="flex items-center justify-between rounded-xl border border-border p-4 transition-colors hover:bg-primary-soft"
                 >
                   <div>
                     <p className="font-semibold">{mp.title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {mp.quarter} четверть · {mp.topics.length} тем
+                      {mp.quarter} {isKk ? "тоқсан" : "четверть"} · {mp.topics.length}{" "}
+                      {isKk ? "тақырып" : "тем"}
                     </p>
                   </div>
                 </Link>

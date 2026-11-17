@@ -7,7 +7,6 @@ import {
   updateLongTermPlan,
   deleteLongTermPlan,
   listLongTermPlans,
-  type LongTermSection,
 } from "@/lib/longterm";
 
 export const runtime = "nodejs";

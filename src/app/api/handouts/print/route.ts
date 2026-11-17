@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { booleanFlag, optionalBooleanFlag } from "@/lib/validation/boolean-flag";
+import { booleanFlag } from "@/lib/validation/boolean-flag";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { buildCombinedDocx, buildHandoutDocx } from "@/lib/handouts/docx";

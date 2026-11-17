@@ -120,32 +120,35 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
   generation: () => [
     // Mercury первым: КСП — длинный JSON, а Mercury пишет его за секунды (см. tasks).
     withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (KSP Primary)", temperature: 0.4, maxTokens: 8192, extraBody: MERCURY_FAST }),
-    // Apinex (Apinex/Bond) — проверено живым бенчмарком 2026-10-28:
-    // kimi-k3 даёт самый полный валидный КСП; glm-5.3 — быстрый запасной;
-    // gpt-6-luna — ещё один резерв.
-    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Primary)", temperature: 0.4, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback 2)", temperature: 0.5, maxTokens: 8192 }),
-    // Groq GPT OSS 120B — резерв (недоступен/медленнее, чем Apinex).
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Fallback 3)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna (KSP Fallback)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.kenari(), baseURL: KENARI_BASE, model: "nemotron-3-ultra-550b-a55b:free", supportsJsonSchema: false, label: "Kenari Nemotron 3 Ultra (KSP Fallback)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o", supportsJsonSchema: true, label: "OpenAI GPT-4o (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 6)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6.1-terra", supportsJsonSchema: false, label: "MXR GPT 6.1 Terra (KSP Fallback 1)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna (KSP Fallback 2)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.kenari(), baseURL: KENARI_BASE, model: "nemotron-3-ultra-550b-a55b:free", supportsJsonSchema: false, label: "Kenari Nemotron 3 Ultra (KSP Fallback 3)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: false, label: "Groq GPT OSS 120B (Fallback 4)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "qwen/qwen3.8-27b", supportsJsonSchema: false, label: "Groq Qwen 3.8 27B (Fallback 4b)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Fallback)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 6)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o", supportsJsonSchema: true, label: "OpenAI GPT-4o (Fallback 7)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 8)", temperature: 0.7, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-pro", supportsJsonSchema: false, label: "OpenRouter Nex 2.5 Pro (Free Emergency Fallback)", temperature: 0.7, maxTokens: 8192 }),
   ],
   enhance: () => [
-    // Apinex — самый быстрый и стабильный на коротких задачах.
-    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Primary)", temperature: 0.3, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback 1)", temperature: 0.4, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback 2)", temperature: 0.4, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: true, label: "Groq GPT OSS 120B (Fallback 3)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 5)", temperature: 0.5, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 6)", temperature: 0.5, maxTokens: 8192 }),
+    // Живые и быстрые провайдеры первыми: Mercury (~1.6 с), MXR, Kenari, Groq.
+    withKeys({ apiKeys: keys.mercury(), baseURL: MERCURY_BASE, model: "mercury-3", supportsJsonSchema: false, label: "Inception Mercury 3 (Primary)", temperature: 0.3, maxTokens: 8192, extraBody: MERCURY_FAST }),
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6.1-terra", supportsJsonSchema: false, label: "MXR GPT 6.1 Terra (Fallback 1)", temperature: 0.3, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna (Fallback 2)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.kenari(), baseURL: KENARI_BASE, model: "nemotron-3-ultra-550b-a55b:free", supportsJsonSchema: false, label: "Kenari Nemotron 3 Ultra (Fallback 3)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-120b", supportsJsonSchema: true, label: "Groq GPT OSS 120B (Fallback 4)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "qwen/qwen3.8-27b", supportsJsonSchema: false, label: "Groq Qwen 3.8 27B (Fallback 4b)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/kimi-k3", supportsJsonSchema: false, label: "Apinex Kimi K3 (Fallback)", temperature: 0.3, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/glm-5.3", supportsJsonSchema: false, label: "Apinex GLM 5.3 (Fallback)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.apinex(), baseURL: APINEX_BASE, model: "free/gpt-6-luna", supportsJsonSchema: false, label: "Apinex GPT 6 Luna (Fallback)", temperature: 0.4, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 5)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 6)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 7)", temperature: 0.5, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 8)", temperature: 0.5, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-pro", supportsJsonSchema: false, label: "OpenRouter Nex 2.5 Pro (Free Emergency Fallback)", temperature: 0.5, maxTokens: 8192 }),
   ],
   tasks: () => [
@@ -189,9 +192,11 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
   // съедал бы по 1–3 секунды на каждый бесполезный запрос.
   vision: () => [
     withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "qwen/qwen3.8-27b", supportsJsonSchema: false, label: "Groq Qwen 3.8 27B Vision (Primary)", temperature: 0.1, maxTokens: 1024 }),
-    // Gemini — резерв: умеет зрение, и второй его ключ держит отдельную квоту,
-    // поэтому каскад переключается на него, когда Groq исчерпал суточный лимит.
-    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash Vision (Fallback)", temperature: 0.1, maxTokens: 2048 }),
+    // MXR — проверено вживую: принимает image_url и стабильно возвращает tool_calls с координатами.
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6-luna", supportsJsonSchema: false, label: "MXR GPT 6 Luna Vision (Fallback 1)", temperature: 0.1, maxTokens: 1024 }),
+    withKeys({ apiKeys: keys.mxr(), baseURL: MXR_BASE, model: "gpt-6.1-terra", supportsJsonSchema: false, label: "MXR GPT 6.1 Terra Vision (Fallback 2)", temperature: 0.1, maxTokens: 1024 }),
+    // Gemini — резерв, если Groq и MXR недоступны.
+    withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash Vision (Fallback 3)", temperature: 0.1, maxTokens: 2048 }),
   ],
 };
 
@@ -210,6 +215,7 @@ export function isAnyProviderConfigured(): boolean {
       keys.mxr().length ||
       keys.mercury().length ||
       keys.kenari().length ||
+      keys.apinex().length ||
       keys.openrouter().length,
   );
 }
@@ -242,10 +248,10 @@ export function getResponseFormat(
  */
 /** Таймаут одного запроса провайдеру. Короткие задачи должны быстро переключаться дальше. */
 const PROVIDER_TIMEOUT_MS: Record<AiTask, number> = {
-  generation: 30_000,
-  enhance: 20_000,
+  generation: 22_000,
+  enhance: 18_000,
   tasks: 12_000,
-  image: 30_000,
+  image: 25_000,
   vision: 15_000,
 };
 
@@ -279,10 +285,19 @@ export function parseRetryAfterMs(message: string): number | null {
 
 function shouldTryNextKey(err: unknown): boolean {
   const status = (err as { status?: number })?.status;
-  // 401/403 — ключ отозван или невалиден; 429 — исчерпан лимит.
-  if (status === 401 || status === 403 || status === 429) return true;
+  // 401/402/403 — ключ отозван, без баланса или невалиден; 429/503 — лимит или перегрузка.
+  if (status === 401 || status === 402 || status === 403 || status === 429 || status === 503) return true;
   const message = err instanceof Error ? err.message : String(err);
-  return /exceeded your current quota|invalid api key|incorrect api key|quota|permission denied|unauthorized/i.test(
+  return /exceeded your current quota|invalid api key|incorrect api key|quota|permission denied|unauthorized|high demand/i.test(
+    message,
+  );
+}
+
+function isHostTimeoutOrStall(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  if (status === 408 || status === 502 || status === 504) return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /timed?\s*out|timeout|econnreset|etimedout|enotfound|socket hang up|bad gateway|gateway time-?out/i.test(
     message,
   );
 }
@@ -320,7 +335,17 @@ export async function executeWithFallback<T>(
   }
 
   let soonestRetryMs: number | null = null;
-  for (const config of configs) {
+  const timedOutHosts = new Set<string>();
+  for (let cfgIdx = 0; cfgIdx < configs.length; cfgIdx++) {
+    const config = configs[cfgIdx]!;
+    // Если этот хост (например mxr.one или apinex) только что завис по таймауту,
+    // не тратим ещё 20 с на вторую модель того же хоста — переходим к независимому провайдеру.
+    if (
+      timedOutHosts.has(config.baseURL) &&
+      configs.slice(cfgIdx + 1).some((c) => !timedOutHosts.has(c.baseURL))
+    ) {
+      continue;
+    }
     // Ключи провайдера: первый основной, остальные резервные. Перебор идёт
     // только по тем, кто подходит под ошибку выше, — иначе второй ключ
     // тратил бы время на заведомо непроходящий запрос.
@@ -397,6 +422,11 @@ export async function executeWithFallback<T>(
         lastError = err;
         const retryMs = parseRetryAfterMs(message);
         if (retryMs !== null) soonestRetryMs = Math.min(soonestRetryMs ?? retryMs, retryMs);
+
+        if (!opts.signal?.aborted && isHostTimeoutOrStall(err)) {
+          timedOutHosts.add(config.baseURL);
+          break;
+        }
 
         // Ключи исчерпаны — переходим к следующему провайдеру каскада.
         if (!tryNextKeyOnly) break;

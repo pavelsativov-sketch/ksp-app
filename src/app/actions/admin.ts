@@ -87,3 +87,16 @@ export async function moderationQueueAction(): Promise<Failure | { ok: true; ite
     return failure(error);
   }
 }
+
+/** Одноразовая ссылка сброса пароля по запросу учителя в поддержку. */
+export async function createPasswordResetLinkAction(
+  input: unknown,
+): Promise<Failure | { ok: true; email: string; resetUrl: string; expiresAt: string }> {
+  try {
+    const { createAdminPasswordResetLink } = await import("@/lib/admin/users");
+    const result = await createAdminPasswordResetLink(input);
+    return { ok: true, ...result };
+  } catch (error) {
+    return failure(error);
+  }
+}

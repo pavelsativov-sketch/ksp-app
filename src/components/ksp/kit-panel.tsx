@@ -14,7 +14,8 @@ import { HandoutPreview } from "./handout-preview";
 import { GroupWorkDialog } from "./group-work";
 import s from "./kit-panel.module.css";
 
-const STAGES: Array<[StageKey, string]> = [["beginning", "Начало урока"], ["middle", "Середина урока"], ["end", "Конец урока"]];
+const STAGES_RU: Array<[StageKey, string]> = [["beginning", "Начало урока"], ["middle", "Середина урока"], ["end", "Конец урока"]];
+const STAGES_KZ: Array<[StageKey, string]> = [["beginning", "Сабақтың басы"], ["middle", "Сабақтың ортасы"], ["end", "Сабақтың соңы"]];
 const ICONS: Record<MaterialKind, LucideIcon> = {
   worksheet: FileText, oop_sheet: HeartHandshake, group_cards: Users, pair_cards: Users,
   crossword: Grid3x3, flashcards: Layers, deck: MonitorPlay, interactive: Gamepad2,
@@ -52,7 +53,10 @@ type Opened =
   | { type: "sheet"; handout: Handout; docxBase64?: string; title: string; variant: "student" | "oop" }
   | { type: "group"; work: GroupWork };
 
-const STATUS_TEXT: Record<SlotStatus, string> = { planned: "Не создан", generating: "Готовится", ready: "Готово", failed: "Не получилось" };
+const STATUS_TEXT: Record<"ru" | "kz", Record<SlotStatus, string>> = {
+  ru: { planned: "Не создан", generating: "Готовится", ready: "Готово", failed: "Не получилось" },
+  kz: { planned: "Жасалмаған", generating: "Дайындалуда", ready: "Дайын", failed: "Сәтсіз" },
+};
 
 /** Слот, чьё состояние показывает этот: лист ООП повторяет рабочий лист. */
 function sourceSlot(slot: MaterialSlot, slots: MaterialSlot[]): MaterialSlot {
@@ -67,6 +71,8 @@ function sourceSlot(slot: MaterialSlot, slots: MaterialSlot[]): MaterialSlot {
  */
 export function KitPanel({ kit: kitProp, ctx, footer }: { kit?: LessonKit; ctx: KitLessonContext; footer?: string }) {
   const { planId } = ctx;
+  const isKz = ctx.language === "kz";
+  const STAGES = isKz ? STAGES_KZ : STAGES_RU;
   const router = useRouter();
   const kit = kitProp ?? EMPTY_KIT;
   const [saved, setSaved] = useState<Set<MaterialKind>>(new Set());
@@ -225,14 +231,22 @@ export function KitPanel({ kit: kitProp, ctx, footer }: { kit?: LessonKit; ctx: 
     <section className={s.panel} aria-labelledby="kit-panel-title">
       <header className={s.head}>
         <div>
-          <h3 id="kit-panel-title" className={s.title}>Комплект урока</h3>
+          <h3 id="kit-panel-title" className={s.title}>{isKz ? "Сабақ жинағы" : "Комплект урока"}</h3>
           <p className={s.lead}>
-            {!loaded ? "Проверяем материалы…" : kit.slots.length ? `Готово ${ready} из ${kit.slots.length}. Материалы сохраняются в уроке, со страницы можно уйти.` : "Подключите созданные материалы к этапам урока: они появятся в КСП."}
+            {!loaded
+              ? isKz ? "Материалдар тексерілуде…" : "Проверяем материалы…"
+              : kit.slots.length
+                ? isKz
+                  ? `Дайыны: ${ready} / ${kit.slots.length}. Материалдар сабақта сақталады.`
+                  : `Готово ${ready} из ${kit.slots.length}. Материалы сохраняются в уроке, со страницы можно уйти.`
+                : isKz
+                  ? "Жасалған материалдарды сабақ кезеңдеріне қосыңыз: олар ҚМЖ-да көрінеді."
+                  : "Подключите созданные материалы к этапам урока: они появятся в КСП."}
           </p>
         </div>
         {loaded && missing.length > 1 && (
           <button type="button" className={s.all} onClick={() => missing.forEach((slot) => void start(slot))}>
-            <Sparkles aria-hidden="true" /> Создать всё
+            <Sparkles aria-hidden="true" /> {isKz ? "Барлығын жасау" : "Создать всё"}
           </button>
         )}
       </header>
@@ -285,18 +299,18 @@ export function KitPanel({ kit: kitProp, ctx, footer }: { kit?: LessonKit; ctx: 
                         <small className={s.status} aria-live="polite">
                           {status === "generating" && <Loader2 aria-hidden="true" className={s.spin} />}
                           {status === "ready" && <Check aria-hidden="true" />}
-                          {status === "failed" ? error || STATUS_TEXT.failed : STATUS_TEXT[status]}
+                          {status === "failed" ? error || STATUS_TEXT[isKz ? "kz" : "ru"].failed : STATUS_TEXT[isKz ? "kz" : "ru"][status]}
                         </small>
                       </span>
-                      {status === "ready" && slot.kind === "deck" && <Link className={s.action} href={`/plans/${planId}/presentation`}>Открыть</Link>}
+                      {status === "ready" && slot.kind === "deck" && <Link className={s.action} href={`/plans/${planId}/presentation`}>{isKz ? "Ашу" : "Открыть"}</Link>}
                       {status === "ready" && slot.kind !== "deck" && slot.kind !== "interactive" && (
                         <button type="button" className={s.action} onClick={() => void open(slot)} disabled={opening === slot.id}>
-                          {opening === slot.id ? <Loader2 aria-hidden="true" className={s.spin} /> : "Открыть"}
+                          {opening === slot.id ? <Loader2 aria-hidden="true" className={s.spin} /> : isKz ? "Ашу" : "Открыть"}
                         </button>
                       )}
                       {(status === "planned" || status === "failed") && !derived && (
                         <button type="button" className={s.action} onClick={() => void start(slot)}>
-                          {status === "failed" ? <><RotateCcw aria-hidden="true" /> Повторить</> : "Создать"}
+                          {status === "failed" ? <><RotateCcw aria-hidden="true" /> {isKz ? "Қайталау" : "Повторить"}</> : isKz ? "Жасау" : "Создать"}
                         </button>
                       )}
                     </li>

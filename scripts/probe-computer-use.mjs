@@ -9,7 +9,6 @@
  * ни формат ответа модели, ни реальные снимки экрана.
  */
 import { chromium } from "playwright";
-import { readFileSync } from "node:fs";
 
 const KEY = process.env.GROQ_API_KEY;
 if (!KEY) {

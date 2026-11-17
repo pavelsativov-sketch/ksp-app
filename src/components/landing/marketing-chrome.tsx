@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
  * Гейт клиентский, потому что путь знает только клиент, зато SSR и первый
  * клиентский рендер совпадают: `usePathname` возвращает путь сразу.
  */
-const CABINET_PATHS = ["/dashboard", "/plans", "/favorites", "/library", "/kits", "/templates", "/textbooks", "/profile", "/gradebook", "/longterm", "/import", "/notifications", "/feedback", "/assignments", "/ai", "/redeem", "/school"];
+const CABINET_PATHS = ["/dashboard", "/plans", "/favorites", "/library", "/kits", "/templates", "/textbooks", "/profile", "/gradebook", "/longterm", "/import", "/notifications", "/feedback", "/assignments", "/ai", "/redeem", "/admin", "/school"];
 
 
 export function MarketingChrome({

@@ -58,7 +58,7 @@ export async function illustrateWorksheetTasks(
   const result = await illustrate(tasksToIllustrate, ctx, (task) => buildWorksheetPrompt(task, ctx), (task, res) => ({
     ...task,
     imageBase64: res.base64,
-    imageMime: "image/jpeg" as const,
+    imageMime: res.mimeType === "image/png" ? "image/png" as const : "image/jpeg" as const,
     imageAlt: task.prompt.slice(0, 120),
   }), reserve);
 

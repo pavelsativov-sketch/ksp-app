@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Upload, CalendarRange, ClipboardList } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb, COL, isMongoConfigured } from "@/lib/mongo";
 import { listSubjects, type PlanDoc } from "@/lib/plans-repo";
@@ -51,7 +51,15 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   const approvalCopy = schoolApprovalCopy[locale];
 
   return <div className="mx-auto max-w-[1200px] space-y-8 px-4 py-6 md:px-6">
-    <header className="grid gap-5 md:grid-cols-[1fr_auto] md:items-end"><div><h1 className="text-4xl font-extrabold tracking-tight">{d.title}</h1><p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{d.lead}</p></div><Button asChild><Link href="/dashboard?new=1"><Plus /> {d.newKsp}</Link></Button></header>
+    <header className="grid gap-5 md:grid-cols-[1fr_auto] md:items-end">
+      <div><h1 className="text-4xl font-extrabold tracking-tight">{d.title}</h1><p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{d.lead}</p></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" asChild><Link href="/import"><Upload className="size-4" /> {locale === "kk" ? "Word импорт" : "Импорт .docx"}</Link></Button>
+        <Button variant="outline" size="sm" asChild><Link href="/longterm"><CalendarRange className="size-4" /> {locale === "kk" ? "КТЖ / ҰМЖ" : "КТП / ДСП"}</Link></Button>
+        <Button variant="outline" size="sm" asChild><Link href="/gradebook"><ClipboardList className="size-4" /> {locale === "kk" ? "Журнал" : "Журнал выдач"}</Link></Button>
+        <Button asChild><Link href="/dashboard?new=1"><Plus /> {d.newKsp}</Link></Button>
+      </div>
+    </header>
     {canOpenSchoolApprovals && <Link href="/school/approvals" className="block rounded-2xl border border-border bg-surface p-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <span className="font-semibold">{approvalCopy.queueTitle}</span>
       <span className="mt-1 block text-sm text-muted-foreground">{approvalCopy.queueDescription}</span>

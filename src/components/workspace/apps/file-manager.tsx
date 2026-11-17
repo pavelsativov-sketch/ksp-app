@@ -116,29 +116,22 @@ export function FileManagerApp() {
     setBusyOp(null);
   }
 
-  /** Переименование открытого файла: новая запись + удаление старой. */
+  /** Переименование выполняется на сервере: содержимое не режется лимитом предпросмотра. */
   async function renameFile(oldName: string) {
     const nextName = window.prompt('Новое имя файла:', oldName);
     if (!nextName || nextName === oldName) return;
     setBusyOp('rename');
     setNotice(null);
     try {
-      const getRes = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(oldName)}`, { cache: 'no-store' });
-      const getData = (await getRes.json()) as { content?: string; truncated?: boolean; error?: string };
-      if (!getRes.ok || getData.content === undefined) throw new Error(getData.error ?? 'Не удалось прочитать файл');
-      if (getData.truncated) {
-        throw new Error('Файл больше 20 КБ в предпросмотре; переименуйте его после перезагрузки страницы');
-      }
-      const putRes = await fetch('/api/agents/sandbox', {
-        method: 'PUT',
+      const response = await fetch('/api/agents/sandbox', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file: nextName, content: getData.content }),
+        body: JSON.stringify({ from: oldName, to: nextName }),
       });
-      if (!putRes.ok) {
-        const data = (await putRes.json()) as { error?: string };
-        throw new Error(data.error ?? 'Не удалось сохранить новое имя');
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? 'Не удалось переименовать файл');
       }
-      await fetch(`/api/agents/sandbox?file=${encodeURIComponent(oldName)}`, { method: 'DELETE' });
       setSelected(null);
       await load();
       setNotice(`Файл переименован: ${nextName}`);
@@ -165,13 +158,16 @@ export function FileManagerApp() {
     setLoadingFile(true);
     setSelected(null);
     setConfirmDelete(false);
+    setError(null);
     try {
       const res = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(name)}`, { cache: 'no-store' });
-      if (!res.ok) throw new Error('open failed');
-      const data = (await res.json()) as { content: string; truncated: boolean };
-      setSelected({ name, content: data.content, truncated: data.truncated });
-    } catch {
-      setSelected({ name, content: 'Не удалось прочитать файл', truncated: false });
+      const data = (await res.json().catch(() => ({}))) as { content?: string; truncated?: boolean; error?: string };
+      if (!res.ok || data.content === undefined) {
+        throw new Error(data.error ?? 'Не удалось прочитать файл');
+      }
+      setSelected({ name, content: data.content, truncated: Boolean(data.truncated) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось прочитать файл');
     }
     setLoadingFile(false);
   }
