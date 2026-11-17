@@ -38,6 +38,10 @@ function ownedBy(doc: AgentTaskDoc, userId: string): boolean {
 }
 
 const POLL_MS = 700;
+/** Комментарий-пинг раз в ~14 с: прокси не рвут «тихий» поток (пауза, очередь). */
+const KEEPALIVE_TICKS = 20;
+/** Потолок жизни одного потока; EventSource переподключится с Last-Event-ID. */
+const MAX_STREAM_MS = 30 * 60_000;
 
 /** GET — SSE-поток событий задачи в реальном времени. */
 export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
@@ -49,18 +53,31 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     return NextResponse.json({ error: "Invalid task id" }, { status: 400 });
   }
   const taskObjectId = new ObjectId(taskId);
+  // Переподключение EventSource: продолжаем с метки последнего отданного лога.
+  const resumeFrom = Number(req.headers.get("last-event-id"));
 
+  // Клиент ушёл (cancel/abort) — опрос базы должен остановиться сразу.
+  let cancelled = false;
+  let stopPolling: () => void = () => { cancelled = true; };
   const stream = new ReadableStream({
     async start(controller) {
       const db = await getDb();
       const agentExecutions = db.collection<AgentExecutionDoc>(COL.agentExecutions);
       const agentTasks = db.collection<AgentTaskDoc>(COL.agentTasks);
+      if (cancelled || req.signal.aborted) {
+        try { controller.close(); } catch { /* уже отменён */ }
+        return;
+      }
 
-      let lastCreatedAt = new Date(0);
+      let lastCreatedAt = new Date(Number.isFinite(resumeFrom) && resumeFrom > 0 ? resumeFrom : 0);
+      // Только id логов с меткой lastCreatedAt: запрос идёт по $gte, логи той же
+      // миллисекунды не теряются, а набор сбрасывается при сдвиге метки.
       const seen = new Set<string>();
       let closed = false;
       let metaSent = false;
       let queuedSent = false;
+      let ticks = 0;
+      const openedAt = Date.now();
 
       const close = () => {
         if (closed) return;
@@ -70,11 +87,18 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       };
 
       const push = (payload: unknown) => {
-        try { controller.enqueue(`data: ${JSON.stringify(payload)}\n\n`); } catch { closed = true; }
+        try { controller.enqueue(`data: ${JSON.stringify(payload)}\n\n`); } catch { close(); }
       };
 
       const interval = setInterval(async () => {
         if (closed) return;
+        if (Date.now() - openedAt > MAX_STREAM_MS) {
+          close();
+          return;
+        }
+        if (++ticks % KEEPALIVE_TICKS === 0) {
+          try { controller.enqueue(": keepalive\n\n"); } catch { close(); return; }
+        }
         try {
           const task = await agentTasks.findOne({ _id: taskObjectId });
           if (!task || !ownedBy(task, auth.user.id)) {
@@ -105,7 +129,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
             .find({
               $and: [
                 { $or: [{ task_id: taskObjectId }, { taskId: taskObjectId }] },
-                { $or: [{ created_at: { $gt: lastCreatedAt } }, { timestamp: { $gt: lastCreatedAt } }] },
+                { $or: [{ created_at: { $gte: lastCreatedAt } }, { timestamp: { $gte: lastCreatedAt } }] },
               ],
             })
             .sort({ created_at: 1, _id: 1 })
@@ -115,9 +139,13 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           for (const log of newLogs) {
             const id = String(log._id ?? "");
             if (id && seen.has(id)) continue;
-            if (id) seen.add(id);
             const at = log.created_at ?? log.timestamp;
-            if (at && at.getTime() > lastCreatedAt.getTime()) lastCreatedAt = at;
+            if (at && at.getTime() > lastCreatedAt.getTime()) {
+              lastCreatedAt = at;
+              seen.clear();
+            }
+            if (id) seen.add(id);
+            try { controller.enqueue(`id: ${lastCreatedAt.getTime()}\n`); } catch { close(); return; }
             push({
               type: log.type ?? "LOG",
               message: log.message ?? "",
@@ -157,10 +185,11 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         }
       }, POLL_MS);
 
-      req.signal.addEventListener("abort", () => {
-        closed = true;
-        clearInterval(interval);
-      });
+      stopPolling = close;
+      req.signal.addEventListener("abort", close);
+    },
+    cancel() {
+      stopPolling();
     },
   });
 
