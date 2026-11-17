@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { FlashcardSet, Handout, Worksheet } from "@/lib/handouts/types";
 import { HandoutPreview } from "./handout-preview";
+import { menuSide } from "@/lib/ui/menu-side";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import type { Dict } from "@/lib/i18n/dictionaries";
 
@@ -179,6 +180,7 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
   const cacheKey = `handout:${kind}:${base.planId}`;
 
   const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<"left-0" | "right-0">("right-0");
   const [count, setCount] = useState(meta.defaultCount);
   // Лист красочный по умолчанию: иллюстрация входит в образец учителя.
   const [withImages, setWithImages] = useState(kind === "worksheet");
@@ -305,12 +307,12 @@ function MaterialButton({ kind, ...base }: BaseProps & { kind: Kind }) {
           meta={{ topic: base.topic, subject: base.subject, grade: base.grade, language: base.language, footer: base.footer }}
         />
       )}
-      <Button variant="outline" onClick={() => setOpen((v) => !v)} disabled={!base.topic}>
+      <Button variant="outline" onClick={(e) => { setSide(menuSide(e.currentTarget)); setOpen((v) => !v); }} disabled={!base.topic}>
         <Icon />
         {meta.label}
       </Button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-border bg-surface p-4 shadow-lg">
+        <div className={`absolute ${side} z-50 mt-2 w-80 rounded-lg border border-border bg-surface p-4 shadow-lg`}>
           <div className="mb-3 flex items-center gap-2">
             <Icon className="h-5 w-5 text-ink" />
             <div>

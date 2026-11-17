@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { GroupCard, GroupMode, GroupWork } from "@/lib/handouts/group-work";
 import { downloadSheetImages } from "@/lib/handouts/sheet-export";
+import { menuSide } from "@/lib/ui/menu-side";
 import s from "./group-work.module.css";
 
 /** Цвета кружков-номеров заданий, как на образце: оранжевый, зелёный, розовый, синий, фиолетовый. */
@@ -100,6 +101,7 @@ function loadCached(planId: string): GroupWork | null {
 /** Кнопка «Групповая работа»: выбор групп или пар, генерация, предпросмотр, печать и PNG. */
 export function GroupWorkButton({ planId, topic, subject, grade, language, learningObjectives, values }: GroupWorkButtonProps) {
   const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<"left-0" | "right-0">("right-0");
   const [mode, setMode] = useState<GroupMode>("group");
   const [count, setCount] = useState(3);
   const [loading, setLoading] = useState(false);
@@ -149,11 +151,11 @@ export function GroupWorkButton({ planId, topic, subject, grade, language, learn
 
   return (
     <div className="relative">
-      <Button variant="outline" onClick={() => setOpen((v) => !v)} disabled={!topic}>
+      <Button variant="outline" onClick={(e) => { setSide(menuSide(e.currentTarget)); setOpen((v) => !v); }} disabled={!topic}>
         <Users /> Групповая работа
       </Button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-lg">
+        <div className={`absolute ${side} z-50 mt-2 w-80 space-y-3 rounded-lg border border-border bg-surface p-4 shadow-lg`}>
           <p className="text-xs text-muted-foreground">Ситуация, пять заданий, схема и ценность урока — на каждую {mode === "pair" ? "пару" : "группу"} своя карточка.</p>
           {saved && (
             <button type="button" onClick={() => { setWork(saved); setOpen(false); }} className="w-full rounded-md border border-violet-200 bg-violet-50/60 p-2 text-left text-sm hover:bg-violet-50">
