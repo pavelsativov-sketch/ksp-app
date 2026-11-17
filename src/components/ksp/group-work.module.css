@@ -87,10 +87,10 @@
 }
 .chipIcon { display: grid; place-items: center; width: 34px; height: 34px; font-size: 19px; border-radius: 50%; background: #fff; }
 
-.situation { display: flex; gap: 14px; min-height: 0; }
-.situationText { flex: 1; display: flex; flex-direction: column; gap: 9px; font-size: 18px; line-height: 1.45; }
+.situation { flex: 1; display: flex; gap: 14px; min-height: 0; }
+.situationText { flex: 1; display: flex; flex-direction: column; gap: 0.5em; min-height: 0; overflow: hidden; font-size: 18px; line-height: 1.42; }
 .situationText p { margin: 0; }
-.image { flex: 0 0 42%; min-width: 0; object-fit: cover; border-radius: 16px; }
+.image { flex: 0 0 38%; min-width: 0; align-self: flex-start; max-height: 100%; object-fit: cover; border-radius: 16px; }
 
 .value {
   display: flex;
@@ -106,14 +106,14 @@
 }
 .valueIcon { flex: none; font-size: 34px; }
 
-.tasks { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.tasks { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 0.6em; min-height: 0; overflow: hidden; margin: 0; padding: 0; list-style: none; font-size: 16.5px; }
 .task {
   display: grid;
   grid-template-columns: 38px 1fr;
   align-items: center;
   gap: 12px;
-  padding: 11px 14px;
-  font-size: 16.5px;
+  padding: 0.65em 0.85em;
+  font-size: inherit;
   line-height: 1.35;
   border: 1.5px solid #dde7fb;
   border-radius: 14px;

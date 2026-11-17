@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Image as ImageIcon, Loader2, Printer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -18,8 +18,38 @@ const PRINT_CSS = `@media print {
   [role="dialog"] { position: static !important; transform: none !important; width: auto !important; max-width: none !important; max-height: none !important; overflow: visible !important; }
 }`;
 
+/**
+ * Длина ситуации и заданий у карточек разная, а страница A4 фиксирована: шрифт
+ * уменьшается шагами, пока содержимое не перестанет вылезать за панель.
+ */
+function useFitText(ref: RefObject<HTMLElement | null>, max: number, min: number, deps: unknown[]) {
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const fit = () => {
+      let size = max;
+      box.style.fontSize = `${size}px`;
+      while (box.scrollHeight > box.clientHeight + 1 && size > min) {
+        size -= 0.5;
+        box.style.fontSize = `${size}px`;
+      }
+    };
+    fit();
+    // Картинка и шрифт догружаются позже и меняют место для текста.
+    void document.fonts?.ready.then(fit);
+    const observer = new ResizeObserver(fit);
+    observer.observe(box);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- пересчёт при смене содержимого карточки
+  }, deps);
+}
+
 function Card({ card, index, mode, language }: { card: GroupCard; index: number; mode: GroupMode; language: "ru" | "kz" }) {
   const label = mode === "pair" ? (language === "kz" ? "Жұп" : "Пара") : language === "kz" ? "Топ" : "Группа";
+  const situationRef = useRef<HTMLDivElement | null>(null);
+  const tasksRef = useRef<HTMLOListElement | null>(null);
+  useFitText(situationRef, 18, 12, [card.situation, card.imageBase64]);
+  useFitText(tasksRef, 16.5, 12, [card.tasks]);
   return (
     <article className={s.page} data-theme={index % 4} data-sheet-page>
       <header className={s.head}>
@@ -32,7 +62,7 @@ function Card({ card, index, mode, language }: { card: GroupCard; index: number;
           <section className={s.panel}>
             <div className={s.chip}><span className={s.chipIcon} aria-hidden="true">📖</span>{language === "kz" ? "Жағдаят" : "Ситуация"}</div>
             <div className={s.situation}>
-              <div className={s.situationText}>{card.situation.map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div>
+              <div ref={situationRef} className={s.situationText}>{card.situation.map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {card.imageBase64 && <img className={s.image} src={`data:${card.imageMime ?? "image/jpeg"};base64,${card.imageBase64}`} alt="" />}
             </div>
@@ -42,7 +72,7 @@ function Card({ card, index, mode, language }: { card: GroupCard; index: number;
         <div className={s.right}>
           <section className={s.panel}>
             <div className={s.chip}><span className={s.chipIcon} aria-hidden="true">⚙️</span>{language === "kz" ? "Топқа тапсырмалар" : mode === "pair" ? "Задания для пары" : "Задания для группы"}</div>
-            <ol className={s.tasks}>
+            <ol ref={tasksRef} className={s.tasks}>
               {card.tasks.map((task, i) => (
                 <li key={i} className={s.task}>
                   <span className={s.num} style={{ background: NUMBER_COLORS[i % NUMBER_COLORS.length] }}>{i + 1}</span>
