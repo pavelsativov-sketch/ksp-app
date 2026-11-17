@@ -51,7 +51,8 @@ export async function POST() {
         kind: "slot",
         createdAt: { $gte: new Date(now.getTime() - REFUND_WINDOW_MS) },
       },
-      { $set: { task: "generation_refund", kind: "refund", ok: true, createdAt: now } },
+      // month/seq снимаем: иначе второй возврат того же номера слота упрётся в уникальный индекс ai_events_quota_slot_unique.
+      { $set: { task: "generation_refund", kind: "refund", ok: true, createdAt: now }, $unset: { month: "", seq: "" } },
       { sort: { createdAt: -1 } },
     );
     if (!latest) {
@@ -66,6 +67,7 @@ export async function POST() {
       user_id: auth.user.id, task: "generation_refund", createdAt: { $gte: start, $lt: end },
     });
     if (refundsAfter > REFUNDS_PER_MONTH) {
+      // Слот возвращаем без seq: номер мог уже занять новый резерв, а учёт квоты идёт по kind: "slot".
       await events.updateOne(
         { _id: latest._id },
         { $set: { task: "generation", kind: "slot", ok: latest.ok, createdAt: latest.createdAt } },

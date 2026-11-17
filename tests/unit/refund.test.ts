@@ -32,7 +32,7 @@ beforeEach(() => {
             if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
             return e[k] === v;
           })) ?? null,
-        findOneAndUpdate: async (filter: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+        findOneAndUpdate: async (filter: Record<string, unknown>, update: { $set: Record<string, unknown>; $unset?: Record<string, unknown> }) => {
           const doc = events.find((e) => Object.entries(filter).every(([k, v]) => {
             if (typeof v === "object" && v !== null && ("$gte" in v || "$lt" in v)) return true;
             return e[k] === v;
@@ -40,6 +40,7 @@ beforeEach(() => {
           if (!doc) return null;
           const before = { ...doc };
           Object.assign(doc, update.$set);
+          for (const k of Object.keys(update.$unset ?? {})) delete doc[k];
           return before;
         },
         updateOne: async (filter: { _id: ObjectId }, update: { $set: Record<string, unknown> }) => {
@@ -94,9 +95,11 @@ beforeEach(() => {
 
 describe("POST /api/ai/refund", () => {
   it("refunds a fresh generation and returns remaining", async () => {
-    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", createdAt: new Date() });
+    events.push({ _id: new ObjectId(), user_id: userId, task: "generation", kind: "slot", month: "2026-11", seq: 1, createdAt: new Date() });
     const res = await POST();
     expect(res.status).toBe(200);
+    // Без seq маркер возврата не конфликтует с уникальным индексом слотов.
+    expect(events.find((e) => e.task === "generation_refund")?.seq).toBeUndefined();
     const body = await res.json();
     expect(body.ok).toBe(true);
     // Слот удалён, остался только маркер возврата.
