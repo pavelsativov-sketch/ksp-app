@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 import { getWorkspaceTarget } from "@/lib/agents/runtime-mode";
+import { randomUUID } from "node:crypto";
+import { LEGACY_PID_FILE, terminalPidFile, terminalRunId } from "@/lib/agents/terminal-pid";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,7 +22,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
-  let body: { command?: unknown; timeoutMs?: unknown };
+  let body: { command?: unknown; timeoutMs?: unknown; runId?: unknown };
   try { body = await req.json() as typeof body; }
   catch { return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 }); }
   if (typeof body.command !== "string" || !body.command.trim() || body.command.length > 8_000) {
@@ -28,12 +30,13 @@ export async function POST(req: Request) {
   }
   try {
     const runtime = await getWorkspaceRuntime(auth.user.id);
-    // Записываем PID процесса в /tmp/mekty-term.pid и заменяем оболочку
-    // командой (exec): теперь «Стоп» (/api/agents/terminal/stop) может
-    // послать SIGTERM именно процессу команды, а не обёртке.
-    const tracked = `echo $$ > /tmp/mekty-term.pid; exec ${body.command}`;
+    // PID пишется в файл своего запуска (runId от клиента или наш), и заменяем
+    // оболочку командой (exec): «Стоп» с этим runId убивает именно эту команду,
+    // а не последнюю из параллельных. Общий файл — для старого клиента без runId.
+    const runId = terminalRunId(body.runId) ?? randomUUID();
+    const tracked = `echo $$ > ${terminalPidFile(runId)}; echo $$ > ${LEGACY_PID_FILE}; exec ${body.command}`;
     const result = await runtime.runCommand(tracked, typeof body.timeoutMs === "number" ? body.timeoutMs : undefined);
-    return NextResponse.json({ success: result.exitCode === 0, ...result }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ success: result.exitCode === 0, runId, ...result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось выполнить команду";
     const sandboxConfigured = getWorkspaceTarget() !== "none";
