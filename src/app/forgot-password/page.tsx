@@ -1,27 +1,22 @@
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ForgotPasswordForm } from "./form";
+import { getDict } from "@/lib/i18n/server";
+import { AuthShell, authLinkClass, authNoteClass } from "@/components/auth/auth-shell";
 
 export const dynamic = "force-dynamic";
 
-export default function ForgotPasswordPage() {
+export default async function ForgotPasswordPage() {
+  const { locale } = await getDict();
   return (
-    <div className="mx-auto grid min-h-[calc(100vh-11rem)] max-w-[1200px] items-start px-4 py-16 md:px-6 md:py-24">
-      <Card className="mx-auto w-full max-w-md">
-        <CardHeader>
-          <p className="editorial-kicker">Восстановление доступа</p>
-          <CardTitle className="editorial-display mt-3 text-3xl">Забыли пароль?</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ForgotPasswordForm />
-          <p className="mt-6 text-sm text-muted-foreground">
-            Вспомнили пароль?{" "}
-            <Link className="editorial-link font-semibold" href="/login">
-              Войти
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthShell
+      mode="recover"
+      locale={locale}
+      title="Вернём доступ к урокам"
+      lead="Пришлём на почту ссылку для нового пароля. Уроки и материалы останутся на месте."
+      formTitle="Забыли пароль?"
+    >
+      <ForgotPasswordForm />
+      <p className={authNoteClass}>Вспомнили пароль? <Link className={authLinkClass} href="/login">Войти</Link></p>
+    </AuthShell>
   );
 }

@@ -2,49 +2,19 @@
 
 import { useActionState } from "react";
 import { loginAction, type AuthFormState } from "@/app/actions/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AuthField, AuthMessage, AuthSubmit, PasswordField } from "@/components/auth/auth-fields";
+import s from "@/components/auth/auth.module.css";
 
 export function LoginForm({ next }: { next?: string }) {
-  const [state, action, pending] = useActionState<AuthFormState, FormData>(
-    loginAction,
-    {},
-  );
+  const [state, action, pending] = useActionState<AuthFormState, FormData>(loginAction, {});
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className={s.form}>
       {next && <input type="hidden" name="next" value={next} />}
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-        />
-        {state.fieldErrors?.email && (
-          <p className="text-sm text-red-600">{state.fieldErrors.email}</p>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="password">Пароль</Label>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-        />
-        {state.fieldErrors?.password && (
-          <p className="text-sm text-red-600">{state.fieldErrors.password}</p>
-        )}
-      </div>
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Вход…" : "Войти"}
-      </Button>
+      <AuthField id="email" name="email" type="email" label="Email" required autoComplete="email" inputMode="email" placeholder="teacher@school.kz" error={state.fieldErrors?.email} />
+      <PasswordField id="password" name="password" label="Пароль" autoComplete="current-password" error={state.fieldErrors?.password} />
+      <AuthMessage error={state.error} info={state.info} />
+      <AuthSubmit pending={pending} idle="Войти" busy="Входим…" />
     </form>
   );
 }

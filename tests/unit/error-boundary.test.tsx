@@ -21,6 +21,6 @@ describe("Error boundary", () => {
     render(<AppError error={new Error("private")} reset={reset} />);
     fireEvent.click(screen.getByRole("button", { name: "Попробовать снова" }));
     expect(reset).toHaveBeenCalledOnce();
-    expect(screen.getByRole("link", { name: "Мои планы" }).getAttribute("href")).toBe("/dashboard");
+    expect(screen.getByRole("link", { name: "На главную" }).getAttribute("href")).toBe("/dashboard");
   });
 });

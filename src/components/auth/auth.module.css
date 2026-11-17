@@ -1,0 +1,145 @@
+/* Вход, регистрация, восстановление: лавандовая панель с роботом и форма рядом. */
+.stage {
+  --out: cubic-bezier(0.16, 1, 0.3, 1);
+  display: grid;
+  place-items: center;
+  min-height: calc(100dvh - 120px);
+  padding: 28px 16px 48px;
+  background:
+    radial-gradient(60% 50% at 15% 10%, rgb(167 139 250 / 22%), transparent 70%),
+    radial-gradient(50% 45% at 90% 90%, rgb(132 163 251 / 20%), transparent 70%),
+    var(--background);
+}
+
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: min(1040px, 100%);
+  /* clip, а не hidden: hidden делает карточку прокручиваемой, и фокус в поле сдвигал её содержимое. */
+  overflow: clip;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  box-shadow: 0 30px 70px rgb(40 24 110 / 16%);
+  animation: rise 0.6s var(--out) both;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(16px) scale(0.985); } }
+
+.art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 40px 36px;
+  color: #fff;
+  background: linear-gradient(150deg, #6a35e6 0%, #7a5bf2 50%, #84a3fb 100%);
+  isolation: isolate;
+}
+.art::after {
+  content: "";
+  position: absolute;
+  inset: auto -20% -30% auto;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / 22%), transparent 65%);
+  z-index: -1;
+}
+.robot { width: 190px; height: 190px; margin: -12px 0 -18px -10px; }
+.fill { width: 100%; height: 100%; }
+.artCopy { display: grid; gap: 10px; }
+.title { font-size: clamp(26px, 3vw, 34px); font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; }
+.lead { max-width: 40ch; font-size: 15.5px; line-height: 1.55; color: rgb(255 255 255 / 86%); }
+.perks { display: grid; gap: 12px; margin-top: auto; }
+.perks li { display: flex; align-items: center; gap: 12px; font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+.perks span { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 12px; background: rgb(255 255 255 / 18%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 30%); }
+.perks svg { width: 19px; height: 19px; }
+
+.panel { display: flex; flex-direction: column; justify-content: center; gap: 18px; padding: 40px 40px 36px; }
+
+/* Переключатель «Вход | Регистрация»: подложка переезжает к выбранной вкладке. */
+.switch { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; background: var(--muted); border-radius: 14px; }
+.switch a { position: relative; z-index: 1; display: grid; place-items: center; min-height: 40px; font-size: 14.5px; font-weight: 700; color: var(--muted-foreground); border-radius: 10px; transition: color 0.25s; }
+.switch a[aria-current="page"] { color: var(--ink); }
+.switch a:hover { color: var(--foreground); }
+.switch a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.switchThumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: var(--surface); border-radius: 10px; box-shadow: 0 3px 10px rgb(40 24 110 / 14%); transition: transform 0.45s var(--out); }
+.switchThumb[data-mode="register"] { transform: translateX(100%); }
+
+.formTitle { font-size: 24px; font-weight: 800; letter-spacing: -0.015em; }
+
+.form { display: grid; gap: 14px; }
+.field { display: grid; gap: 6px; }
+.field label { font-size: 13.5px; font-weight: 700; }
+.field input {
+  width: 100%;
+  height: 50px;
+  padding: 0 14px;
+  font-size: 16px;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1.5px solid var(--border);
+  border-radius: 13px;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+.field input::placeholder { color: var(--muted-foreground); }
+.field input:hover { border-color: var(--border-strong); }
+.field input:focus { outline: none; border-color: var(--ink); background: var(--surface); box-shadow: 0 0 0 4px var(--primary-soft); }
+.field input[aria-invalid="true"] { border-color: var(--danger); }
+.field input[aria-invalid="true"]:focus { box-shadow: 0 0 0 4px var(--danger-soft); }
+
+.passwordBox { position: relative; }
+.passwordBox input { padding-right: 50px; }
+.eye { position: absolute; top: 50%; right: 6px; display: grid; place-items: center; width: 38px; height: 38px; color: var(--muted-foreground); border-radius: 10px; transform: translateY(-50%); transition: color 0.2s, background-color 0.2s; }
+.eye:hover { color: var(--ink); background: var(--primary-soft); }
+.eye:focus-visible { outline: 3px solid var(--ink); outline-offset: 1px; }
+.eye svg { width: 19px; height: 19px; }
+
+.hint { font-size: 12.5px; color: var(--muted-foreground); }
+.hint[data-ok] { color: #167a4b; }
+.fieldError { font-size: 13px; font-weight: 600; color: var(--danger); }
+.formError, .formInfo { padding: 10px 12px; font-size: 13.5px; font-weight: 600; line-height: 1.45; border-radius: 12px; }
+.formError { color: var(--danger); background: var(--danger-soft); }
+.formInfo { color: #167a4b; background: #e1f6ec; }
+
+.submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(100deg, #7c4dff, #6d3bea);
+  border-radius: 14px;
+  box-shadow: 0 12px 24px rgb(109 59 234 / 30%);
+  transition: transform 0.3s var(--out), box-shadow 0.3s var(--out), opacity 0.2s;
+}
+.submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 30px rgb(109 59 234 / 38%); }
+.submit:disabled { opacity: 0.75; cursor: progress; }
+.submit:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.spin { width: 18px; height: 18px; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.note { font-size: 14px; color: var(--muted-foreground); }
+.link { font-weight: 700; color: var(--ink); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.link:hover { color: var(--ink-hover); }
+
+:global(.dark) .art { background: linear-gradient(150deg, #3d23a0 0%, #4a37b8 55%, #4b5fb8 100%); }
+:global(.dark) .formInfo { color: #6fdcaa; background: rgb(28 154 94 / 16%); }
+
+@media (max-width: 860px) {
+  .card { grid-template-columns: minmax(0, 1fr); border-radius: 24px; }
+  .art { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 14px; padding: 18px 20px; }
+  .robot { width: 84px; height: 84px; margin: 0; }
+  .title { font-size: 21px; }
+  .lead { font-size: 14px; }
+  .perks { display: none; }
+  .panel { padding: 24px 20px 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .switchThumb, .submit, .spin { animation: none; transition: none; }
+}
