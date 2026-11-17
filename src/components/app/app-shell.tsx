@@ -63,8 +63,9 @@ export function AppShell({
   const renderItem = (item: NavItem) => {
     const active = item.active(path);
     const Icon = item.icon;
+    // prefetch={false}: предзагрузка динамического раздела — отдельный рендер на сервере; меню давало ~20 рендеров на каждый показ страницы.
     return (
-      <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={active ? `${s.item} ${s.itemActive}` : s.item} onClick={() => setOpen(false)}>
+      <Link key={item.href} href={item.href} prefetch={false} aria-current={active ? "page" : undefined} className={active ? `${s.item} ${s.itemActive}` : s.item} onClick={() => setOpen(false)}>
         <Icon aria-hidden="true" className={s.itemIcon} />
         <span>{item.label}</span>
       </Link>
@@ -77,7 +78,7 @@ export function AppShell({
         <button type="button" className={s.burger} aria-label={c.menu} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
         </button>
-        <Link href="/dashboard" className={s.brand}>
+        <Link href="/dashboard" prefetch={false} className={s.brand}>
           <Image src="/mekty-icon.svg" alt="" width={40} height={40} priority />
           <span className={s.brandCopy}>
             <span className={s.brandName}>Mekty</span>
@@ -89,8 +90,8 @@ export function AppShell({
           <input name="q" type="search" aria-label={c.searchLabel} placeholder={c.search} className={s.searchInput} />
         </form>
         <div className={s.topActions}>
-          <Link href="/notifications" className={s.round} aria-label={c.notifications}><Bell aria-hidden="true" /></Link>
-          <Link href="/feedback" className={s.round} aria-label={c.help}><CircleHelp aria-hidden="true" /></Link>
+          <Link href="/notifications" prefetch={false} className={s.round} aria-label={c.notifications}><Bell aria-hidden="true" /></Link>
+          <Link href="/feedback" prefetch={false} className={s.round} aria-label={c.help}><CircleHelp aria-hidden="true" /></Link>
           <details className={s.user}>
             <summary className={s.userButton}>
               <span className={s.avatar}>{initials(userName || userEmail)}</span>
@@ -115,7 +116,7 @@ export function AppShell({
                 {item.href === "/school/dashboard" && item.active(path) && (
                   <div className={s.sub}>
                     {MORE_SECTIONS.map((section) => (
-                      <Link key={section.href} href={section.href} aria-current={path.startsWith(section.href) ? "page" : undefined} className={path.startsWith(section.href) ? `${s.subItem} ${s.subItemActive}` : s.subItem} onClick={() => setOpen(false)}>
+                      <Link key={section.href} href={section.href} prefetch={false} aria-current={path.startsWith(section.href) ? "page" : undefined} className={path.startsWith(section.href) ? `${s.subItem} ${s.subItemActive}` : s.subItem} onClick={() => setOpen(false)}>
                         {section.label}
                       </Link>
                     ))}
@@ -128,7 +129,7 @@ export function AppShell({
           </nav>
           {/* На экране агента робот уже есть, а в школе меню длиннее: второй не нужен. */}
           {!inSchool && (
-            <Link href="/school" className={s.mascot} onClick={() => setOpen(false)}>
+            <Link href="/school" prefetch={false} className={s.mascot} onClick={() => setOpen(false)}>
               <ThreeStage scene="robot" className={s.mascotModel} />
               <span className={s.mascotTitle}>{c.mascotTitle}</span>
               <span className={s.mascotText}>{c.mascotText}</span>
