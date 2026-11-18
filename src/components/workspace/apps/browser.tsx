@@ -5,8 +5,11 @@ import {
   ArrowLeft, ArrowRight, RotateCw, X, Home, Shield, LogOut,
   ExternalLink, Lock, Play, KeyRound, Check,
 } from 'lucide-react';
+import { clientPointToRemote, remoteBoxToOverlay } from '@/lib/agents/viewport-coords';
 
 const BASE = '/api/agents/browser-stream';
+const WARMUP_KEY = 'mekty:browser-warmup';
+const WARMUP_EVERY_MS = 9.5 * 60 * 1000;
 
 // Разрешение удалённого браузера
 const REMOTE_W = 1280;
@@ -50,7 +53,7 @@ function domainOf(pageUrl: string): string {
  * открывала тот же адрес второй раз и перезагружала страницу прямо под агентом:
  * net::ERR_ABORTED у агента, пустой экран и вечный индикатор загрузки у учителя.
  */
-export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: string; watchOnly?: boolean }) {
+export function BrowserApp({ initialUrl, watchOnly = false, active = true }: { initialUrl?: string; watchOnly?: boolean; active?: boolean }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState('');
   const [pageTitle, setPageTitle] = useState('');
@@ -107,6 +110,10 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
   const credCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInitialUrlRef = useRef(initialUrl?.trim() || '');
   const canvasFocusedRef = useRef(false);
+  const activeRef = useRef(active);
+  const watchOnlyRef = useRef(watchOnly);
+  const imgSrcRef = useRef<string | null>(null);
+  const lastBackspaceAtRef = useRef(0);
   // Пока учитель правит адрес, кадры не должны затирать его ввод. Раньше
   // acceptFrame подставлял адрес страницы в поле при КАЖДОМ ответе, включая
   // фоновый опрос раз в 1,2 с: набираешь адрес — текст прыгает назад, и
@@ -114,11 +121,13 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
   const addressFocusedRef = useRef(false);
 
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+  const [controlNotice, setControlNotice] = useState('');
 
   const landingUrl = initialUrl?.trim() || 'https://www.google.com';
   // Песочница поднимает Chromium с нуля: это занимает около минуты, и всё
-  // это время вкладка сама повторяет попытку подключения.
-  const isWarmingUp = /запускается|устанавливается|подождите|не установился/i.test(error);
+  // это время вкладка сама повторяет попытку подключения. Ошибка «не установился»
+  // окончательна — не уходим в бесконечный автоповтор.
+  const isWarmingUp = /запускается|устанавливается|подождите|прогревается/i.test(error);
   const isThrottled = /слишком много обращений|подождите минуту/i.test(error);
   const isSessionExpired = /сеанс браузера завершён|session expired|сессия истекла/i.test(error);
   const isRetryable = isWarmingUp || isThrottled;
@@ -139,19 +148,28 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
   }, []);
 
   useEffect(() => {
+    if (!waiting || !active) return;
     const id = setInterval(() => {
       if (waitingRef.current) setWaitSec((s) => s + 1);
     }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [waiting, active]);
 
-  // Keepalive: пингуем песочницу каждые 10 мин, чтобы она не остыла между занятиями
+  // Keepalive: пингуем песочницу не чаще раза в 9.5 минут (общий ключ с AppShell), чтобы не плодить холодные дубли
   useEffect(() => {
-    const ping = () => void fetch('/api/health/browser-keepalive', { cache: 'no-store' }).catch(() => {});
-    ping(); // сразу при открытии
+    if (!active) return;
+    const ping = () => {
+      try {
+        const last = Number(sessionStorage.getItem(WARMUP_KEY) ?? 0);
+        if (Date.now() - last < WARMUP_EVERY_MS) return;
+        sessionStorage.setItem(WARMUP_KEY, String(Date.now()));
+      } catch { /* ignore */ }
+      void fetch('/api/health/browser-keepalive', { cache: 'no-store' }).catch(() => {});
+    };
+    ping();
     const id = setInterval(ping, 10 * 60 * 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [active]);
 
 
   const acceptFrame = useCallback(async (res: Response) => {
@@ -228,6 +246,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
       }
     }
 
+    imgSrcRef.current = url;
     setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
     if (title) setPageTitle(title);
     if (currentUrl) {
@@ -241,7 +260,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
   }, [endWait]);
 
   const fetchFrame = useCallback(async () => {
-    if (pendingCountRef.current > 0 || typeBufferRef.current || frameInFlightRef.current) return undefined;
+    if (!activeRef.current || pendingCountRef.current > 0 || typeBufferRef.current || frameInFlightRef.current) return undefined;
     const ac = new AbortController();
     abortRef.current = ac;
     frameInFlightRef.current = true;
@@ -318,6 +337,11 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
   }, [fetchFrame]);
 
   useEffect(() => () => {
+    abortRef.current?.abort();
+    if (imgSrcRef.current) {
+      URL.revokeObjectURL(imgSrcRef.current);
+      imgSrcRef.current = null;
+    }
     if (frameSyncTimerRef.current) clearTimeout(frameSyncTimerRef.current);
     if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
     if (credCloseTimerRef.current) clearTimeout(credCloseTimerRef.current);
@@ -346,6 +370,18 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     void enqueueAction({ action: 'type', text, fast: '1' }).then(scheduleFrameSync);
   }, [enqueueAction, scheduleFrameSync]);
 
+  const isControlLocked = watchOnly && authBarrier?.requiresUserAction !== true;
+  const controlLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warnControlLocked = useCallback(() => {
+    setControlNotice('Сейчас экраном управляет ИИ — нажмите «Забрать управление себе», чтобы нажимать вручную.');
+    if (controlLockTimerRef.current) clearTimeout(controlLockTimerRef.current);
+    controlLockTimerRef.current = setTimeout(() => setControlNotice(''), 3500);
+  }, []);
+
+  useEffect(() => () => {
+    if (controlLockTimerRef.current) clearTimeout(controlLockTimerRef.current);
+  }, []);
+
   const doAction = useCallback((params: Record<string, string>) => {
     flushTypedBuffer();
     return enqueueAction(params);
@@ -363,16 +399,14 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     await enqueueAction({ action: 'navigate', url });
   }, [enqueueAction, flushTypedBuffer]);
 
-  // Обратный отсчёт автоповтора живёт в состоянии, а сброс при смене
-  // throttle-ошибки делается прямо во время рендера: синхронный setState
-  // внутри effect вызывал каскадные рендеры.
-  const [wasRetryable, setWasRetryable] = useState(isRetryable);
-  if (wasRetryable !== isRetryable) {
-    setWasRetryable(isRetryable);
-    setRetryCountdown(isRetryable ? (isThrottled ? 60 : 15) : null);
-  }
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setRetryCountdown(isRetryable ? (isThrottled ? 60 : 15) : null);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [isRetryable, isThrottled]);
 
-  const countdownActive = retryCountdown !== null;
+  const countdownActive = retryCountdown !== null && isRetryable;
   useEffect(() => {
     if (!countdownActive) return;
     const interval = setInterval(() => {
@@ -433,6 +467,10 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
    */
   const handleImageClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
     e.stopPropagation();
+    if (watchOnlyRef.current && authBarrier?.requiresUserAction !== true) {
+      warnControlLocked();
+      return;
+    }
     const img = imgRef.current;
     if (!img) return;
 
@@ -441,30 +479,19 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     setCanvasFocused(true);
     // Не сбрасываем liveText — поле могло уже содержать текст из activeField.value
 
-    // Рассчитываем реальные координаты пикселя в удалённом браузере
-    const rect = img.getBoundingClientRect();
-    // object-contain сохраняет пропорции: масштаб = min(scaleX, scaleY)
-    const scaleX = REMOTE_W / rect.width;
-    const scaleY = REMOTE_H / rect.height;
-    // Math.min — изображение вписывается в контейнер (object-fit:contain)
-    const scale = Math.min(scaleX, scaleY);
-    const renderedW = REMOTE_W / scale;
-    const renderedH = REMOTE_H / scale;
-    const offsetX = (rect.width - renderedW) / 2;
-    const offsetY = (rect.height - renderedH) / 2;
-
-    const rawX = (e.clientX - rect.left - offsetX) / (renderedW / REMOTE_W);
-    const rawY = (e.clientY - rect.top - offsetY) / (renderedH / REMOTE_H);
-
-    if (rawX < 0 || rawY < 0 || rawX >= REMOTE_W || rawY >= REMOTE_H) return;
-
-    const x = Math.round(rawX);
-    const y = Math.round(rawY);
+    const mapped = clientPointToRemote({
+      clientX: e.clientX,
+      clientY: e.clientY,
+      rect: img.getBoundingClientRect(),
+      remoteW: REMOTE_W,
+      remoteH: REMOTE_H,
+    });
+    if (!mapped) return;
 
     // Визуальная анимация клика (в координатах контейнера)
-    setClickPing({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: Date.now() });
-    void doAction({ action: 'click', x: x.toString(), y: y.toString() });
-  }, [doAction]);
+    setClickPing({ x: mapped.localX, y: mapped.localY, id: Date.now() });
+    void doAction({ action: 'click', x: mapped.x.toString(), y: mapped.y.toString() });
+  }, [doAction, authBarrier, warnControlLocked]);
 
   const queueCharacters = useCallback((chars: string) => {
     if (!chars) return;
@@ -479,6 +506,17 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     }, busy ? 250 : 40);
   }, [flushTypedBuffer]);
 
+  const triggerBackspace = useCallback(() => {
+    lastBackspaceAtRef.current = Date.now();
+    setLiveText((prev) => (prev.length > 0 ? prev.slice(0, -1) : ''));
+    if (typeBufferRef.current.length > 0) {
+      typeBufferRef.current = typeBufferRef.current.slice(0, -1);
+      return;
+    }
+    flushTypedBuffer();
+    void enqueueAction({ action: 'key', key: 'Backspace' });
+  }, [enqueueAction, flushTypedBuffer]);
+
   const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
     e.stopPropagation();
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
@@ -489,20 +527,24 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     if (specialKeys.includes(e.key)) {
       e.preventDefault();
       if (e.key === 'Backspace') {
-        setLiveText((prev) => (prev.length > 0 ? prev.slice(0, -1) : ''));
-        if (typeBufferRef.current.length > 0) {
-          typeBufferRef.current = typeBufferRef.current.slice(0, -1);
-          return;
-        }
-        flushTypedBuffer();
-        void enqueueAction({ action: 'key', key: 'Backspace' });
+        triggerBackspace();
         return;
       }
       flushTypedBuffer();
       void enqueueAction({ action: 'key', key: e.key });
       return;
     }
-  }, [enqueueAction, flushTypedBuffer]);
+  }, [enqueueAction, flushTypedBuffer, triggerBackspace]);
+
+  const handleCanvasBeforeInput = useCallback((e: React.FormEvent<HTMLInputElement>) => {
+    const inputEvent = e.nativeEvent as InputEvent | undefined;
+    if (inputEvent?.inputType === 'deleteContentBackward') {
+      e.preventDefault();
+      if (Date.now() - lastBackspaceAtRef.current >= 30) {
+        triggerBackspace();
+      }
+    }
+  }, [triggerBackspace]);
 
   const handleCanvasInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
@@ -536,6 +578,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (watchOnlyRef.current) return;
       wheelAccRef.current += e.deltaY;
       if (wheelTimerRef.current) return;
       wheelTimerRef.current = setTimeout(() => {
@@ -554,8 +597,6 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
 
   // Load on mount or sync when initialUrl changes
   const startedRef = useRef(false);
-  const watchOnlyRef = useRef(watchOnly);
-  useEffect(() => { watchOnlyRef.current = watchOnly; }, [watchOnly]);
   useEffect(() => {
     const trimmed = initialUrl?.trim() || '';
     if (!startedRef.current) {
@@ -580,14 +621,17 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
     }
   }, [fetchFrame, navigate, initialUrl]);
 
-  // Keep canvasFocusedRef in sync so the interval below can read it without stale closure
+  // Keep canvasFocusedRef, activeRef and watchOnlyRef in sync without stale closures
   useEffect(() => { canvasFocusedRef.current = canvasFocused; }, [canvasFocused]);
+  useEffect(() => { activeRef.current = active; }, [active]);
+  useEffect(() => { watchOnlyRef.current = watchOnly; }, [watchOnly]);
 
   // Periodic frame sync so live agent actions inside OS Workspace are visible immediately.
-  // Paused while user is actively controlling the browser to avoid refresh interruptions.
+  // Paused while inactive, minimized, hidden, or user is actively controlling the browser.
   useEffect(() => {
+    if (!active) return;
     const id = setInterval(() => {
-      if (unavailableRef.current) return;
+      if (unavailableRef.current || !activeRef.current) return;
       if (
         document.visibilityState === 'visible' &&
         pendingCountRef.current === 0 &&
@@ -598,7 +642,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
       }
     }, 1200);
     return () => clearInterval(id);
-  }, [fetchFrame]);
+  }, [active, fetchFrame]);
 
   useEffect(() => {
     const el = imgRef.current;
@@ -610,35 +654,24 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
       }
     };
     update();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [imgSrc]);
+  }, [imgSrc, active]);
 
   const fieldOverlayStyle = React.useMemo(() => {
     if (!activeField?.box || !imgLayout?.width || !imgLayout?.height) return null;
-
-    const scaleX = REMOTE_W / imgLayout.width;
-    const scaleY = REMOTE_H / imgLayout.height;
-    const scale = Math.min(scaleX, scaleY); // object-fit:contain → min
-    const renderedW = REMOTE_W / scale;
-    const renderedH = REMOTE_H / scale;
-    const offsetX = (imgLayout.width - renderedW) / 2;
-    const offsetY = (imgLayout.height - renderedH) / 2;
-
-    const b = activeField.box;
-    const x = offsetX + b.x * (renderedW / REMOTE_W);
-    const y = offsetY + b.y * (renderedH / REMOTE_H);
-    const w = b.width * (renderedW / REMOTE_W);
-    const h = b.height * (renderedH / REMOTE_H);
-
-    if (w <= 0 || h <= 0) return null;
-
-    return {
-      left: Math.round(x),
-      top: Math.round(y),
-      width: Math.max(80, Math.round(w)),
-      height: Math.max(26, Math.round(h)),
-    };
+    return remoteBoxToOverlay({
+      box: activeField.box,
+      containerW: imgLayout.width,
+      containerH: imgLayout.height,
+      remoteW: REMOTE_W,
+      remoteH: REMOTE_H,
+    });
   }, [activeField, imgLayout]);
 
   return (
@@ -659,16 +692,16 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
 
       {/* Navigation Bar */}
       <div className="h-11 bg-surface border-b border-black/30 flex items-center gap-1.5 px-2 shrink-0">
-        <button type="button" onClick={() => void doAction({ action: 'back' })} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Назад" aria-label="Назад">
+        <button type="button" onClick={() => { if (isControlLocked) { warnControlLocked(); return; } void doAction({ action: 'back' }); }} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Назад" aria-label="Назад">
           <ArrowLeft className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
         </button>
-        <button type="button" onClick={() => void doAction({ action: 'forward' })} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Вперёд" aria-label="Вперёд">
+        <button type="button" onClick={() => { if (isControlLocked) { warnControlLocked(); return; } void doAction({ action: 'forward' }); }} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Вперёд" aria-label="Вперёд">
           <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
         </button>
-        <button type="button" onClick={() => void doAction({ action: 'reload' })} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Обновить" aria-label="Обновить страницу">
+        <button type="button" onClick={() => { if (isControlLocked) { warnControlLocked(); return; } void doAction({ action: 'reload' }); }} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Обновить" aria-label="Обновить страницу">
           <RotateCw className={`w-4 h-4 text-muted-foreground group-hover:text-foreground ${loading ? 'animate-spin' : ''}`} />
         </button>
-        <button type="button" onClick={() => void navigate('https://www.google.com')} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Домашняя страница" aria-label="Домашняя страница">
+        <button type="button" onClick={() => { if (isControlLocked) { warnControlLocked(); return; } void navigate('https://www.google.com'); }} className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group" title="Домашняя страница" aria-label="Домашняя страница">
           <Home className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
         </button>
         <button type="button" onClick={() => void clearSession()} title="Завершить внешние сеансы и очистить сохранённые входы" aria-label="Завершить внешний сеанс" className="w-8 h-8 rounded-md hover:bg-muted flex items-center justify-center group">
@@ -680,6 +713,7 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
           className="flex-1 flex items-center h-8 bg-muted rounded-full px-3 gap-2 border border-transparent focus-within:border-primary-soft-hover transition-all"
           onSubmit={e => {
             e.preventDefault();
+            if (isControlLocked) { warnControlLocked(); return; }
             // После перехода поле должно снова следить за страницей, поэтому
             // снимаем фокус: иначе адрес останется тем, что учитель ввёл.
             (e.currentTarget.querySelector('input') as HTMLInputElement | null)?.blur();
@@ -714,14 +748,14 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
         <span className="text-muted-foreground mr-1 shrink-0 hidden sm:inline">Быстрый переход:</span>
         <button
           type="button"
-          onClick={() => void navigate('https://www.bilimclass.kz/2026/frontoffice/dashboard')}
+          onClick={() => { if (isControlLocked) { warnControlLocked(); return; } void navigate('https://www.bilimclass.kz/2026/frontoffice/dashboard'); }}
           className="shrink-0 whitespace-nowrap px-2 py-0.5 rounded bg-primary-soft text-primary hover:bg-primary-soft border border-primary-soft-hover font-medium transition-colors"
         >
           BilimClass — Дэшборд учителя
         </button>
         <button
           type="button"
-          onClick={() => void navigate('https://nobd.edu.kz/login')}
+          onClick={() => { if (isControlLocked) { warnControlLocked(); return; } void navigate('https://nobd.edu.kz/login'); }}
           className="shrink-0 whitespace-nowrap px-2 py-0.5 rounded bg-primary-soft text-primary hover:bg-primary-soft border border-primary-soft-hover font-medium transition-colors"
         >
           НОБД
@@ -873,12 +907,19 @@ export function BrowserApp({ initialUrl, watchOnly = false }: { initialUrl?: str
             setCanvasFocused(false);
             flushTypedBuffer();
           }}
+          onBeforeInput={handleCanvasBeforeInput}
           onKeyDown={handleCanvasKeyDown}
           onChange={handleCanvasInputChange}
           onPaste={handleCanvasPaste}
           className="absolute left-0 top-0 h-0 w-0 opacity-0 pointer-events-none p-0 m-0 border-0"
           tabIndex={-1}
         />
+
+        {controlNotice && (
+          <div role="status" className="pointer-events-none absolute bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-lg border border-warning/40 bg-surface/95 px-3 py-1.5 text-xs font-medium text-warning shadow-lg backdrop-blur">
+            {controlNotice}
+          </div>
+        )}
 
         {!imgSrc && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface flex-col gap-3 px-8 text-center">

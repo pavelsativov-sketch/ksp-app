@@ -9,11 +9,12 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const [pending, alwaysAllowed] = await Promise.all([
+    listPending(auth.user.id),
+    alwaysAllows(auth.user.id),
+  ]);
   return NextResponse.json(
-    {
-      pending: await listPending(auth.user.id),
-      alwaysAllowed: await alwaysAllows(auth.user.id),
-    },
+    { pending, alwaysAllowed },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

@@ -185,9 +185,11 @@ export async function GET(req: Request) {
     }
   }
 
-  const pending: ConfirmationRequest[] = await listPending(userId).catch(() => []);
-  const state = await getRunState(userId).catch(() => null);
-  const control = await getControlOwner(userId);
+  const [pending, state, control] = await Promise.all([
+    listPending(userId).catch(() => [] as ConfirmationRequest[]),
+    getRunState(userId).catch(() => null),
+    getControlOwner(userId),
+  ]);
   return NextResponse.json({
     pending,
     running: state?.active === true,

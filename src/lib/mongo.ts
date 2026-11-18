@@ -270,6 +270,8 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.vskInspections).createIndex({ school_id: 1 }, { name: "vsk_inspections_school" }),
     db.collection(COL.agentTasks).createIndex({ user_id: 1, created_at: -1 }, { name: "agent_tasks_user_created" }),
     db.collection(COL.agentTasks).createIndex({ school_id: 1, status: 1 }, { name: "agent_tasks_school_status" }),
+    db.collection(COL.agentTasks).createIndex({ status: 1, created_at: 1 }, { name: "agent_tasks_status_created" }),
+    db.collection(COL.agentTasks).createIndex({ user_id: 1, status: 1, updated_at: -1 }, { name: "agent_tasks_user_status_updated" }),
     // Один слот на пользователя: защита от гонки двух параллельных POST,
     // когда оба могли бы создать «running»-задачу и запустить два раннера.
     db.collection(COL.agentTasks).createIndex(
@@ -277,6 +279,9 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
       { unique: true, name: "agent_tasks_running_user_unique", partialFilterExpression: { status: "running" } },
     ),
     db.collection(COL.agentExecutions).createIndex({ task_id: 1, created_at: -1 }, { name: "agent_executions_task_created" }),
+    db.collection(COL.agentExecutions).createIndex({ task_id: 1, created_at: 1, _id: 1 }, { name: "agent_executions_sse_cursor" }),
+    db.collection(COL.agentExecutions).createIndex({ taskId: 1, createdAt: 1, _id: 1 }, { name: "agent_executions_legacy_sse_cursor" }),
+    db.collection(COL.agentExecutions).createIndex({ created_at: 1 }, { expireAfterSeconds: 30 * 24 * 3600, name: "agent_executions_ttl" }),
     db.collection(COL.agentBrowserSessions).createIndex({ user_id: 1 }, { unique: true, name: "agent_browser_sessions_user_unique" }),
     db.collection(COL.agentPermissionRequests).createIndex({ user_id: 1, status: 1, created_at: -1 }, { name: "agent_permissions_user_status_created" }),
     db.collection(COL.agentPermissionRequests).createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: "agent_permissions_expiry" }),
@@ -286,7 +291,9 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.agentComputerConfirms).createIndex({ user_id: 1, status: 1, created_at: 1 }, { name: "agent_computer_confirms_user_status" }),
     db.collection(COL.agentComputerConfirms).createIndex({ expires_at: 1 }, { expireAfterSeconds: 3600, name: "agent_computer_confirms_expiry" }),
     db.collection(COL.workspaceFiles).createIndex({ user_id: 1, path: 1 }, { name: "workspace_files_user_path" }),
+    db.collection(COL.workspaceFiles).createIndex({ user_id: 1, updated_at: -1 }, { name: "workspace_files_user_updated" }),
     db.collection(COL.workspaceFiles).createIndex({ user_id: 1, path: 1, name: 1 }, { unique: true, name: "workspace_files_user_path_name_unique" }),
+    db.collection(COL.browserCredentials).createIndex({ user_id: 1, domain: 1 }, { unique: true, name: "browser_credentials_user_domain_unique" }),
     db.collection(COL.workspaceSnapshots).createIndex({ user_id: 1, created_at: -1 }, { name: "workspace_snapshots_user_created" }),
     db.collection(COL.connectors).createIndex({ school_id: 1, type: 1 }, { name: "connectors_school_type" }),
     db.collection(COL.auditLog).createIndex({ school_id: 1, created_at: -1 }, { name: "audit_log_school_created" }),

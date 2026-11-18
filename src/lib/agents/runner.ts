@@ -154,10 +154,35 @@ export async function runAgentTask(
   }, 1200);
 
   try {
-    await beat(); // раннер поднялся — фиксируем жизнь до медленной проверки песочницы
-    await log({ type: 'START', message: `Задача запущена (${taskId})` }).catch(() => {});
-    const workspace = await getWorkspaceRuntime(userId);
-    const sandboxStatus = await workspace.getSandboxStatus();
+    await Promise.all([
+      beat(), // раннер поднялся — фиксируем жизнь до медленной проверки песочницы
+      log({ type: 'START', message: `Задача запущена (${taskId})` }).catch(() => {}),
+    ]);
+    const [wsBundle, recentRows, stored] = await Promise.all([
+      getWorkspaceRuntime(userId).then(async (ws) => ({
+        ws,
+        sandboxStatus: await ws.getSandboxStatus(),
+      })),
+      (async () => {
+        try {
+          return await agentTasks
+            .find(
+              {
+                user_id: new ObjectId(userId),
+                status: { $in: ['completed', 'stopped'] },
+              },
+              { projection: { title: 1, updated_at: 1 } }, // только тема, НЕ result
+            )
+            .sort({ updated_at: -1 })
+            .limit(3)
+            .toArray();
+        } catch {
+          return [] as Array<Record<string, unknown>>;
+        }
+      })(),
+      agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { checkpoint: 1 } }),
+    ]);
+    const { sandboxStatus } = wsBundle;
     const shellAvailable = sandboxStatus.available;
     const activeTools = shellAvailable
       ? tools
@@ -173,25 +198,12 @@ export async function runAgentTask(
     // поручению не начинать с нуля. Только заголовки (title) — без результатов,
     // чтобы исключить утечку персональных данных (имена учеников, оценки, URL).
     let memoryBlock = '';
-    try {
-      const recent = await agentTasks
-        .find(
-          {
-            user_id: new ObjectId(userId),
-            status: { $in: ['completed', 'stopped'] },
-          },
-          { projection: { title: 1, updated_at: 1 } }, // только тема, НЕ result
-        )
-        .sort({ updated_at: -1 })
-        .limit(3)
-        .toArray();
-      const parts = recent
-        .map((t) => String(t.title ?? '').trim().slice(0, 80))
-        .filter(Boolean);
-      if (parts.length) {
-        memoryBlock = `\nПоследние поручения (только темы, без результатов):\n${parts.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-      }
-    } catch { /* память некритична */ }
+    const recentParts = recentRows
+      .map((t) => String(t.title ?? '').trim().slice(0, 80))
+      .filter(Boolean);
+    if (recentParts.length) {
+      memoryBlock = `\nПоследние поручения (только темы, без результатов):\n${recentParts.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+    }
 
     const systemPrompt = (isBilimClassContext(prompt, '')
       ? `${baseSystemPrompt}\n\n${bilimClassInstructions(prompt)}`
@@ -200,7 +212,6 @@ export async function runAgentTask(
 
     // Контрольная точка: после падения функции или паузы агент продолжает с
     // сохранённого транскрипта, а не начинает задачу с нуля.
-    const stored = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { checkpoint: 1 } });
     const resumed = parseCheckpoint(stored?.checkpoint);
     let transcript: AgentMessage[] | null = resumed
       ? [{ role: 'system', content: systemPrompt }, ...resumed.messages.slice(1)]
@@ -287,8 +298,10 @@ export async function runAgentTask(
         }
 
         // Пользователь мог нажать «Остановить» — статус в БД меняется на stopped.
-        await beat(); // каждый виток цикла рапортует, что раннер жив
-        const current = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1, run_id: 1 } });
+        const [, current] = await Promise.all([
+          beat(), // каждый виток цикла рапортует, что раннер жив
+          agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1, run_id: 1 } }),
+        ]);
         // Задачу перехватил новый прогон — молча уступаем, ничего не пишем.
         if (superseded(current)) return 'Прогон заменён';
         if (current && current.status !== 'running') {
@@ -297,13 +310,15 @@ export async function runAgentTask(
           return 'Остановлено пользователем';
         }
 
-        // Страховка: состояние на начало шага. Если функция погибнет, новый
-        // раннер продолжит именно отсюда.
-        await saveCheckpoint(step - 1);
+        // Страховка: состояние на начало шага + проверка владельца управления.
+        const [, controlOwner] = await Promise.all([
+          saveCheckpoint(step - 1),
+          getControlOwner(userId),
+        ]);
 
         // TAKE CONTROL: пока управление у пользователя — агент стоит на паузе
         // (не выполняет ни одного действия) и ждёт «GIVE CONTROL TO AI».
-        if (await getControlOwner(userId) === 'user') {
+        if (controlOwner === 'user') {
           await log({ type: 'PAUSED', message: 'Пользователь забрал управление. Агент ожидает («GIVE CONTROL TO AI»).' });
           const outcome = await waitForControl(userId, async () => {
             const t = await agentTasks.findOne({ _id: new ObjectId(taskId) }, { projection: { status: 1 } });

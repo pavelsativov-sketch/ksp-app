@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { useWorkspaceStore, type AppType } from '@/lib/store/workspace';
 import {
   Globe, TerminalSquare, FolderOpen, Bot, Code2,
@@ -23,21 +23,38 @@ const DOCK_APPS: { id: string; title: string; type: AppType; url?: string; Icon:
   { id: 'terminal-main', title: 'Терминал', type: 'terminal', Icon: TerminalSquare },
 ];
 
-export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: () => void, copilotOpen?: boolean }) {
-  const { windows, activeWindowId, openWindow, focusWindow, minimizeWindow, minimizeAll, closeAll } = useWorkspaceStore();
-  const [time, setTime] = useState('');
-  const [date, setDate] = useState('');
+const TaskbarClock = memo(function TaskbarClock() {
+  const [clock, setClock] = useState({ time: '', date: '' });
 
   useEffect(() => {
     const update = () => {
       const now = new Date();
-      setTime(now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
-      setDate(now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }));
+      setClock({
+        time: now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+        date: now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }),
+      });
     };
     update();
     const int = setInterval(update, 10000);
     return () => clearInterval(int);
   }, []);
+
+  return (
+    <div className="flex flex-col items-end rounded px-2 py-1 select-none" aria-label={`Время ${clock.time}, ${clock.date}`}>
+      <span className="text-[11px] text-white/80 font-medium leading-tight">{clock.time}</span>
+      <span className="text-[10px] text-white/50 leading-tight">{clock.date}</span>
+    </div>
+  );
+});
+
+export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: () => void, copilotOpen?: boolean }) {
+  const windows = useWorkspaceStore((s) => s.windows);
+  const activeWindowId = useWorkspaceStore((s) => s.activeWindowId);
+  const openWindow = useWorkspaceStore((s) => s.openWindow);
+  const focusWindow = useWorkspaceStore((s) => s.focusWindow);
+  const minimizeWindow = useWorkspaceStore((s) => s.minimizeWindow);
+  const minimizeAll = useWorkspaceStore((s) => s.minimizeAll);
+  const closeAll = useWorkspaceStore((s) => s.closeAll);
 
   const handleDockClick = (app: typeof DOCK_APPS[number]) => {
     const existing = windows.find(w => w.id === app.id);
@@ -53,21 +70,21 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
   };
 
   return (
-    <div className="h-12 bg-[#1b1640]/80 backdrop-blur-2xl border-t border-white/[0.06] flex items-center justify-between px-3 shrink-0 relative z-[9999]">
+    <div className="h-12 bg-[#1b1640]/80 backdrop-blur-2xl border-t border-white/[0.06] flex items-center justify-between gap-2 px-3 shrink-0 relative z-[9999]">
       {/* Start/exit control stays explicit; an unlabeled icon was easy to miss. */}
-      <div className="flex w-52 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1 md:w-52">
         <Link href="/school" aria-label="Главное меню школы" className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-semibold text-white/75 transition-colors hover:bg-white/[0.08] hover:text-white" title="Вернуться в главное меню школы">
           <LayoutGrid className="size-4 text-violet-300" aria-hidden="true" />
-          <span>Главное меню</span>
+          <span className="hidden sm:inline">Главное меню</span>
         </Link>
         <button type="button" onClick={minimizeAll} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white" title="Свернуть окна и показать рабочий стол" aria-label="Показать рабочий стол">
           <MonitorPlay className="size-4 text-violet-300" aria-hidden="true" />
-          <span>Рабочий стол</span>
+          <span className="hidden md:inline">Рабочий стол</span>
         </button>
       </div>
 
       {/* Center: Dock */}
-      <div className="flex items-center gap-0.5 absolute left-1/2 -translate-x-1/2">
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
         {DOCK_APPS.map(app => {
           const isOpen = windows.some(w => w.id === app.id);
           const isActive = activeWindowId === app.id;
@@ -75,7 +92,7 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
             <button
               key={app.id}
               onClick={() => handleDockClick(app)}
-              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all relative group
+              className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center transition-all relative group
                 ${isActive ? 'bg-white/[0.14]' : 'hover:bg-white/[0.08]'}`}
               title={app.title}
             >
@@ -88,14 +105,14 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
         })}
 
         {/* Separator */}
-        <div className="w-px h-6 bg-white/10 mx-1" />
+        <div className="w-px h-6 bg-white/10 mx-1 shrink-0" />
 
         {/* Закрыть всё: окна сохраняются в браузере, поэтому без этой
             кнопки рабочую область приходилось чистить по одной. */}
         {windows.length > 1 && (
           <button
             onClick={closeAll}
-            className="flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/80"
+            className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/80"
             title="Закрыть все окна"
             aria-label="Закрыть все окна"
           >
@@ -111,7 +128,7 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
               if (activeWindowId === w.id && !w.isMinimized) minimizeWindow(w.id);
               else focusWindow(w.id);
             }}
-            className={`h-10 px-3 rounded-lg text-xs font-medium truncate max-w-[140px] transition-all relative
+            className={`h-10 shrink-0 px-3 rounded-lg text-xs font-medium truncate max-w-[140px] transition-all relative
               ${activeWindowId === w.id ? 'bg-white/[0.14] text-white' : 'hover:bg-white/[0.08] text-white/60'}`}
             title={w.title}
           >
@@ -122,7 +139,7 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
       </div>
 
       {/* Right: System Tray */}
-      <div className="flex items-center gap-2 w-52 justify-end">
+      <div className="flex shrink-0 items-center gap-2 justify-end md:w-52">
         <button
           onClick={onToggleCopilot ?? (() => handleDockClick(DOCK_APPS[0]))}
           className={`h-7 px-2 rounded flex items-center gap-1 transition-colors border ${copilotOpen ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'hover:bg-white/[0.08] border-transparent text-white/50'}`}
@@ -132,10 +149,7 @@ export function Taskbar({ onToggleCopilot, copilotOpen }: { onToggleCopilot?: ()
           <Sparkles className="w-3.5 h-3.5" />
           <span className="text-[10px] font-medium uppercase tracking-wider">AI</span>
         </button>
-        <div className="flex flex-col items-end rounded px-2 py-1 select-none" aria-label={`Время ${time}, ${date}`}>
-          <span className="text-[11px] text-white/80 font-medium leading-tight">{time}</span>
-          <span className="text-[10px] text-white/50 leading-tight">{date}</span>
-        </div>
+        <TaskbarClock />
       </div>
     </div>
   );

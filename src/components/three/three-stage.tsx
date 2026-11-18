@@ -37,7 +37,11 @@ export function ThreeStage({ scene, className }: { scene: SceneName; className?:
     const pointer = { x: 0, y: 0 };
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const started = performance.now();
+    let box = canvas.getBoundingClientRect();
 
+    const updateBox = () => {
+      box = canvas.getBoundingClientRect();
+    };
     const draw = () => {
       handle?.frame((performance.now() - started) / 1000, pointer);
     };
@@ -49,23 +53,25 @@ export function ThreeStage({ scene, className }: { scene: SceneName; className?:
       if (!still && handle && onScreen && !document.hidden && raf === 0) raf = requestAnimationFrame(loop);
     };
     const onMove = (event: PointerEvent) => {
-      const box = canvas.getBoundingClientRect();
       const clamp = (v: number) => Math.max(-1, Math.min(1, v));
       pointer.x = clamp((event.clientX - (box.left + box.width / 2)) / 520);
       pointer.y = clamp(-(event.clientY - (box.top + box.height / 2)) / 420);
     };
     const resize = new ResizeObserver(() => {
+      updateBox();
       handle?.resize(canvas.clientWidth, canvas.clientHeight);
       if (still) draw();
     });
     const visibility = new IntersectionObserver(([entry]) => {
       onScreen = Boolean(entry?.isIntersecting);
+      if (onScreen) updateBox();
       wake();
     });
 
     void import("./scenes")
       .then(({ mountScene }) => {
         if (disposed) return;
+        updateBox();
         handle = mountScene(canvas, scene);
         handle.resize(canvas.clientWidth, canvas.clientHeight);
         resize.observe(canvas);
@@ -76,6 +82,7 @@ export function ThreeStage({ scene, className }: { scene: SceneName; className?:
       .catch(() => setFailed(true));
 
     window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("scroll", updateBox, { passive: true });
     document.addEventListener("visibilitychange", wake);
     return () => {
       disposed = true;
@@ -83,6 +90,7 @@ export function ThreeStage({ scene, className }: { scene: SceneName; className?:
       resize.disconnect();
       visibility.disconnect();
       window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("scroll", updateBox);
       document.removeEventListener("visibilitychange", wake);
       handle?.dispose();
     };

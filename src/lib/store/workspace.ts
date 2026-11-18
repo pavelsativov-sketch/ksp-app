@@ -29,6 +29,7 @@ export interface WindowState {
 interface WorkspaceStore {
   windows: WindowState[];
   activeWindowId: string | null;
+  editorOpenSeq: number;
   openWindow: (id: string, title: string, type: AppType, url?: string, file?: string) => void;
   closeWindow: (id: string) => void;
   minimizeWindow: (id: string) => void;
@@ -50,6 +51,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
     (set, get) => ({
       windows: [],
       activeWindowId: null,
+      editorOpenSeq: 0,
       openWindow: (id, title, type, url, file) => set((state) => {
         const existing = state.windows.find(w => w.id === id);
         const maxZ = state.windows.length > 0 ? Math.max(...state.windows.map(w => w.zIndex)) : 0;
@@ -97,7 +99,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         windows: state.windows.map(w => w.id === id ? { ...w, isMaximized: !w.isMaximized } : w)
       })),
       focusWindow: (id) => set((state) => {
-        if (state.activeWindowId === id) return state;
+        const target = state.windows.find(w => w.id === id);
+        if (state.activeWindowId === id && target && !target.isMinimized) return state;
         const maxZ = state.windows.length > 0 ? Math.max(...state.windows.map(w => w.zIndex)) : 0;
         return {
           windows: state.windows.map(w => w.id === id ? { ...w, zIndex: maxZ + 1, isMinimized: false } : w),
@@ -108,7 +111,10 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         windows: state.windows.map((window) => ({ ...window, isMinimized: true, isMaximized: false })),
         activeWindowId: null,
       })),
-      openInEditor: (file) => get().openWindow(EDITOR_WINDOW_ID, EDITOR_TITLE, 'code-editor', undefined, file),
+      openInEditor: (file) => {
+        get().openWindow(EDITOR_WINDOW_ID, EDITOR_TITLE, 'code-editor', undefined, file);
+        set((state) => ({ editorOpenSeq: state.editorOpenSeq + 1 }));
+      },
       closeAll: () => set({ windows: [], activeWindowId: null }),
     }),
     {

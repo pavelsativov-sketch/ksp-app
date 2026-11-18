@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
-import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { checkPublicUrl } from "@/lib/agents/ssrf";
 import { log } from "@/lib/logger";
 import {
@@ -58,7 +58,7 @@ async function authorize(bucket: "frame" | "action" = "action") {
   const auth = await requireApiAuth();
   if (auth.response) return { response: auth.response } as const;
 
-  const rl = await checkRateLimitAsync(`agent:browser-stream:${bucket}:${auth.user.id}`, 300, 60_000);
+  const rl = checkRateLimit(`agent:browser-stream:${bucket}:${auth.user.id}`, 300, 60_000);
   if (!rl.ok) {
     return {
       response: NextResponse.json(

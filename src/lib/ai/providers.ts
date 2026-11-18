@@ -302,6 +302,24 @@ function isHostTimeoutOrStall(err: unknown): boolean {
   );
 }
 
+const COOLDOWN_TIMEOUT_MS = 45_000;
+const COOLDOWN_AUTH_MS = 120_000;
+const providerCooldownUntil = new Map<string, number>();
+
+function isAuthOrBillingFailure(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  if (status === 401 || status === 402 || status === 403) return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /insufficient.?quota|billing|payment|unauthorized|invalid.?api.?key|\b40[123]\b/i.test(message);
+}
+
+function isProviderInCooldown(config: ProviderConfig, now: number): boolean {
+  return (
+    (providerCooldownUntil.get(config.baseURL) ?? 0) > now ||
+    (providerCooldownUntil.get(`${config.baseURL}|${config.label}`) ?? 0) > now
+  );
+}
+
 export interface FallbackOptions {
   /** Общий бюджет на весь каскад (по умолчанию FALLBACK_BUDGET_MS). */
   budgetMs?: number;
@@ -323,6 +341,7 @@ export async function executeWithFallback<T>(
   }
 
   let lastError: unknown = new Error("Неизвестная ошибка фоллбэка");
+  const useCooldown = !process.env.VITEST && process.env.NODE_ENV !== "test";
 
   // Общий дедлайн на каскад. Повтор SDK выключен, иначе его внутренняя
   // попытка могла превысить оставшееся время до перехода на следующий ключ.
@@ -338,12 +357,17 @@ export async function executeWithFallback<T>(
   const timedOutHosts = new Set<string>();
   for (let cfgIdx = 0; cfgIdx < configs.length; cfgIdx++) {
     const config = configs[cfgIdx]!;
-    // Если этот хост (например mxr.one или apinex) только что завис по таймауту,
-    // не тратим ещё 20 с на вторую модель того же хоста — переходим к независимому провайдеру.
-    if (
+    const now = Date.now();
+    // Если этот хост (например mxr.one или apinex) только что завис по таймауту
+    // или недавно вернул системную/авторизационную ошибку — пропускаем, пока есть живые альтернативы.
+    const hostTimedOutThisCall =
       timedOutHosts.has(config.baseURL) &&
-      configs.slice(cfgIdx + 1).some((c) => !timedOutHosts.has(c.baseURL))
-    ) {
+      configs.slice(cfgIdx + 1).some((c) => !timedOutHosts.has(c.baseURL));
+    const cooledAcrossRequests =
+      useCooldown &&
+      isProviderInCooldown(config, now) &&
+      configs.some((c) => !isProviderInCooldown(c, now) && !timedOutHosts.has(c.baseURL));
+    if (hostTimedOutThisCall || cooledAcrossRequests) {
       continue;
     }
     // Ключи провайдера: первый основной, остальные резервные. Перебор идёт
@@ -384,6 +408,8 @@ export async function executeWithFallback<T>(
         // которые печатают ключ в текст ошибки.
         const withKey = apiKey === config.apiKey ? config : { ...config, apiKey };
         const result = await executeFn(client, config.model, withKey, signal);
+        providerCooldownUntil.delete(config.baseURL);
+        providerCooldownUntil.delete(`${config.baseURL}|${config.label}`);
         logAiEvent({
           task,
           provider: config.label,
@@ -425,11 +451,17 @@ export async function executeWithFallback<T>(
 
         if (!opts.signal?.aborted && isHostTimeoutOrStall(err)) {
           timedOutHosts.add(config.baseURL);
+          if (useCooldown) providerCooldownUntil.set(config.baseURL, Date.now() + COOLDOWN_TIMEOUT_MS);
           break;
         }
 
         // Ключи исчерпаны — переходим к следующему провайдеру каскада.
-        if (!tryNextKeyOnly) break;
+        if (!tryNextKeyOnly) {
+          if (useCooldown && !opts.signal?.aborted && isAuthOrBillingFailure(err)) {
+            providerCooldownUntil.set(`${config.baseURL}|${config.label}`, Date.now() + COOLDOWN_AUTH_MS);
+          }
+          break;
+        }
       }
     }
   }

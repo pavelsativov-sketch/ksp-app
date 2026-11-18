@@ -41,8 +41,17 @@ export function FileManagerApp() {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
+    if (!mountedRef.current) return;
     setFiles(null);
     setError(null);
     try {
@@ -53,8 +62,10 @@ export function FileManagerApp() {
         throw new Error(body.error ?? 'Не удалось прочитать рабочую область');
       }
       const data = (await res.json()) as { files: FsItem[] };
+      if (!mountedRef.current) return;
       setFiles(data.files ?? []);
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(e instanceof Error ? e.message : 'Не удалось прочитать рабочую область');
       setFiles([]);
     }
@@ -73,8 +84,17 @@ export function FileManagerApp() {
   // сразу показываем актуальный список, не дожидаясь кнопки «Обновить».
   useEffect(() => {
     const onVisible = () => { if (!document.hidden) void load(); };
+    const onChanged = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ source?: string }>).detail;
+      if (detail?.source === 'file-manager') return;
+      void load();
+    };
     document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+    window.addEventListener('mekty:workspace-files-changed', onChanged);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('mekty:workspace-files-changed', onChanged);
+    };
   }, [load]);
 
   /** Загрузка педагогом своих файлов: текстовые до 200 КБ, как и на API. */
@@ -110,10 +130,13 @@ export function FileManagerApp() {
         results.push(`${file.name}: не удалось прочитать файл`);
       }
     }
+    if (!mountedRef.current) return;
     setNotice(results.join(' · ') || null);
     if (uploadInputRef.current) uploadInputRef.current.value = '';
     await load();
+    if (!mountedRef.current) return;
     setBusyOp(null);
+    window.dispatchEvent(new CustomEvent('mekty:workspace-files-changed', { detail: { source: 'file-manager' } }));
   }
 
   /** Переименование выполняется на сервере: содержимое не режется лимитом предпросмотра. */
@@ -132,24 +155,31 @@ export function FileManagerApp() {
         const data = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? 'Не удалось переименовать файл');
       }
+      if (!mountedRef.current) return;
       setSelected(null);
       await load();
+      if (!mountedRef.current) return;
       setNotice(`Файл переименован: ${nextName}`);
+      window.dispatchEvent(new CustomEvent('mekty:workspace-files-changed', { detail: { source: 'file-manager' } }));
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(e instanceof Error ? e.message : 'Ошибка переименования');
     }
-    setBusyOp(null);
+    if (mountedRef.current) setBusyOp(null);
   }
 
   async function deleteFile(name: string) {
     try {
       const res = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(name)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Не удалось удалить файл');
+      if (!mountedRef.current) return;
       setSelected(null);
       setConfirmDelete(false);
       setNotice(`Файл удалён: ${name}`);
       await load();
+      window.dispatchEvent(new CustomEvent('mekty:workspace-files-changed', { detail: { source: 'file-manager' } }));
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(e instanceof Error ? e.message : 'Не удалось удалить файл');
     }
   }
@@ -165,11 +195,13 @@ export function FileManagerApp() {
       if (!res.ok || data.content === undefined) {
         throw new Error(data.error ?? 'Не удалось прочитать файл');
       }
+      if (!mountedRef.current) return;
       setSelected({ name, content: data.content, truncated: Boolean(data.truncated) });
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(e instanceof Error ? e.message : 'Не удалось прочитать файл');
     }
-    setLoadingFile(false);
+    if (mountedRef.current) setLoadingFile(false);
   }
 
   const visibleFiles = (files ?? []).filter((f) => f.name.toLowerCase().includes(filter.trim().toLowerCase()));

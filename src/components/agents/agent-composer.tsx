@@ -90,7 +90,7 @@ export function AgentComposer({ compact = false, running = false, stopping = fal
     }
     useOsShellStore.getState().setTab("os");
     useWorkspaceStore.getState().openWindow("computer-use", "Работа с компьютером", "computer-use");
-    router.push("/school?os=computer-use");
+    router.push("/school/workspace?os=computer-use");
   }
 
   const currentExamples = wantsBrowser ? BROWSER_EXAMPLES : PEDAGOGICAL_EXAMPLES;

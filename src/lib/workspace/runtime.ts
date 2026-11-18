@@ -15,6 +15,7 @@ interface WorkspaceFileDoc {
   path: string;
   name: string;
   content: string;
+  size_bytes?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -65,9 +66,13 @@ function sandboxName(userId: string): string {
   return `mekty-ws-${SANDBOX_REGION}-${suffix}`;
 }
 
+const SANDBOX_CACHE_TTL_MS = 60_000;
+const sandboxHandleCache = new Map<string, { sandbox: Sandbox; at: number }>();
+
 /** Best-effort cleanup for the persistent VM when the account is deleted. */
 export async function deleteAccountWorkspaceSandbox(userId: string): Promise<void> {
   validateOwner(userId);
+  sandboxHandleCache.delete(userId);
   if (!usesVercelSandbox()) return;
   const { Sandbox: VercelSandbox } = await import("@vercel/sandbox");
   try {
@@ -82,6 +87,13 @@ export async function deleteAccountWorkspaceSandbox(userId: string): Promise<voi
 export async function getAccountSandbox(userId: string): Promise<Sandbox> {
   validateOwner(userId);
   if (!usesVercelSandbox()) throw new Error(workspaceUnavailableMessage());
+  const bypassCache = Boolean(process.env.VITEST) || process.env.NODE_ENV === "test";
+  if (!bypassCache) {
+    const cached = sandboxHandleCache.get(userId);
+    if (cached && Date.now() - cached.at < SANDBOX_CACHE_TTL_MS) {
+      return cached.sandbox;
+    }
+  }
   const files = await ownedFiles(userId);
   const { Sandbox: VercelSandbox } = await import("@vercel/sandbox");
   let sandbox = await VercelSandbox.getOrCreate({
@@ -132,6 +144,9 @@ export async function getAccountSandbox(userId: string): Promise<Sandbox> {
   }
 
   await sandbox.fs.mkdir(WORKSPACE_ROOT, { recursive: true });
+  if (!bypassCache) {
+    sandboxHandleCache.set(userId, { sandbox, at: Date.now() });
+  }
   return sandbox;
 }
 
@@ -194,16 +209,26 @@ async function makeVercelRuntime(userId: string) {
       cmd: "find", args: [WORKSPACE_ROOT, "-type", "f", "-print"], cwd: WORKSPACE_ROOT, timeoutMs: 15_000,
     });
     if (result.exitCode !== 0) throw new Error((await result.stderr()).slice(0, 500) || "Не удалось прочитать список файлов");
-    const paths = (await result.stdout()).split("\n").map((path) => path.trim()).filter(Boolean).slice(0, 500);
+    const paths = (await result.stdout())
+      .split("\n")
+      .map((path) => path.trim())
+      .filter((path) => path.startsWith(`${WORKSPACE_ROOT}/`))
+      .slice(0, 500);
     const rows: Array<Pick<WorkspaceFileDoc, "path" | "name" | "content"> & { updated_at: Date }> = [];
-    for (const absolutePath of paths) {
-      if (!absolutePath.startsWith(`${WORKSPACE_ROOT}/`)) continue;
-      const relative = absolutePath.slice(WORKSPACE_ROOT.length + 1);
-      const content = await sandbox.fs.readFile(absolutePath, "utf8");
-      const key = splitFileName(relative);
-      let updatedAt = new Date();
-      try { updatedAt = (await sandbox.fs.stat(absolutePath)).mtime; } catch { /* свежесозданный файл */ }
-      rows.push({ ...key, content, updated_at: updatedAt });
+    for (let i = 0; i < paths.length; i += 8) {
+      const batch = paths.slice(i, i + 8);
+      const settled = await Promise.all(
+        batch.map(async (absolutePath) => {
+          const relative = absolutePath.slice(WORKSPACE_ROOT.length + 1);
+          const key = splitFileName(relative);
+          const [content, stat] = await Promise.all([
+            sandbox.fs.readFile(absolutePath, "utf8"),
+            sandbox.fs.stat(absolutePath).catch(() => null),
+          ]);
+          return { ...key, content, updated_at: stat?.mtime ?? new Date() };
+        }),
+      );
+      rows.push(...settled);
     }
     return rows;
   }
@@ -220,11 +245,70 @@ async function makeVercelRuntime(userId: string) {
       catch { throw new Error("Файл не найден"); }
     },
     async listFiles(): Promise<Array<{ name: string; size: number; modified: string }>> {
-      return (await readWorkspaceFiles()).map((row) => ({
-        name: `${row.path === ROOT ? "" : `${row.path.slice(ROOT.length + 1)}/`}${row.name}`,
-        size: Buffer.byteLength(row.content, "utf8"),
-        modified: row.updated_at.toISOString(),
-      }));
+      const result = await sandbox.runCommand({
+        cmd: "find",
+        args: [WORKSPACE_ROOT, "-maxdepth", "4", "-type", "f", "-printf", "%s\\t%T@\\t%P\\n"],
+        cwd: WORKSPACE_ROOT,
+        timeoutMs: 15_000,
+      }).catch(() => null);
+      if (result && result.exitCode === 0) {
+        const out: Array<{ name: string; size: number; modified: string }> = [];
+        for (const rawLine of (await result.stdout()).split("\n")) {
+          const line = rawLine.trim();
+          if (!line) continue;
+          const tab1 = line.indexOf("\t");
+          const tab2 = tab1 >= 0 ? line.indexOf("\t", tab1 + 1) : -1;
+          if (tab1 <= 0 || tab2 <= tab1) continue;
+          const size = Number(line.slice(0, tab1));
+          const epochSec = Number(line.slice(tab1 + 1, tab2));
+          const relative = line.slice(tab2 + 1);
+          if (!relative) continue;
+          try {
+            const key = splitFileName(relative);
+            const name = `${key.path === ROOT ? "" : `${key.path.slice(ROOT.length + 1)}/`}${key.name}`;
+            out.push({
+              name,
+              size: Number.isFinite(size) && size >= 0 ? size : 0,
+              modified: Number.isFinite(epochSec) && epochSec > 0
+                ? new Date(epochSec * 1000).toISOString()
+                : new Date().toISOString(),
+            });
+            if (out.length >= 500) break;
+          } catch {
+            // пропускаем небезопасные имена
+          }
+        }
+        return out;
+      }
+
+      // Запасной путь, если find не поддерживает -printf: читаем только stat без содержимого.
+      const fallback = await sandbox.runCommand({
+        cmd: "find", args: [WORKSPACE_ROOT, "-maxdepth", "4", "-type", "f", "-print"], cwd: WORKSPACE_ROOT, timeoutMs: 15_000,
+      });
+      if (fallback.exitCode !== 0) throw new Error((await fallback.stderr()).slice(0, 500) || "Не удалось прочитать список файлов");
+      const paths = (await fallback.stdout())
+        .split("\n")
+        .map((path) => path.trim())
+        .filter((path) => path.startsWith(`${WORKSPACE_ROOT}/`))
+        .slice(0, 500);
+      const out: Array<{ name: string; size: number; modified: string }> = [];
+      for (let i = 0; i < paths.length; i += 8) {
+        const batch = paths.slice(i, i + 8);
+        const stats = await Promise.all(
+          batch.map(async (absolutePath) => {
+            const relative = absolutePath.slice(WORKSPACE_ROOT.length + 1);
+            const key = splitFileName(relative);
+            const stat = await sandbox.fs.stat(absolutePath).catch(() => null);
+            return {
+              name: `${key.path === ROOT ? "" : `${key.path.slice(ROOT.length + 1)}/`}${key.name}`,
+              size: typeof (stat as { size?: number } | null)?.size === "number" ? (stat as { size: number }).size : 0,
+              modified: (stat?.mtime ?? new Date()).toISOString(),
+            };
+          }),
+        );
+        out.push(...stats);
+      }
+      return out;
     },
     async deleteFile(filename: string): Promise<void> {
       try { await sandbox.fs.unlink(sandboxPath(filename)); }
@@ -322,11 +406,15 @@ export async function getWorkspaceRuntime(userId: string) {
   return {
     async writeFile(filename: string, content: string): Promise<void> {
       const key = splitFileName(filename);
-      if (Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES) throw new Error("Файл больше 200 КБ");
+      const sizeBytes = Buffer.byteLength(content, "utf8");
+      if (sizeBytes > MAX_FILE_BYTES) throw new Error("Файл больше 200 КБ");
       const now = new Date();
       await files.updateOne(
         { user_id: userId, path: key.path, name: key.name },
-        { $set: { content, updated_at: now }, $setOnInsert: { user_id: userId, path: key.path, name: key.name, created_at: now } },
+        {
+          $set: { content, size_bytes: sizeBytes, updated_at: now },
+          $setOnInsert: { user_id: userId, path: key.path, name: key.name, created_at: now },
+        },
         { upsert: true },
       );
     },
@@ -339,11 +427,38 @@ export async function getWorkspaceRuntime(userId: string) {
     },
 
     async listFiles(): Promise<Array<{ name: string; size: number; modified: string }>> {
-      const rows = await files.find({ user_id: userId, path: { $regex: "^workspace(?:/|$)" } }, { projection: { path: 1, name: 1, content: 1, updated_at: 1 } })
+      const filter = { user_id: userId, path: { $regex: "^workspace(?:/|$)" } };
+      if (typeof (files as unknown as { aggregate?: unknown }).aggregate === "function") {
+        try {
+          const rows = await files
+            .aggregate<{ path: string; name: string; updated_at: Date; size: number }>([
+              { $match: filter },
+              { $sort: { updated_at: -1 } },
+              { $limit: 500 },
+              {
+                $project: {
+                  path: 1,
+                  name: 1,
+                  updated_at: 1,
+                  size: { $ifNull: ["$size_bytes", { $strLenBytes: { $ifNull: ["$content", ""] } }] },
+                },
+              },
+            ])
+            .toArray();
+          return rows.map((row) => ({
+            name: `${row.path === ROOT ? "" : `${row.path.slice(ROOT.length + 1)}/`}${row.name}`,
+            size: typeof row.size === "number" ? row.size : 0,
+            modified: row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(row.updated_at).toISOString(),
+          }));
+        } catch {
+          // Фолбэк для тестовых БД или сред без поддержки $strLenBytes.
+        }
+      }
+      const rows = await files.find(filter, { projection: { path: 1, name: 1, content: 1, size_bytes: 1, updated_at: 1 } })
         .sort({ updated_at: -1 }).limit(500).toArray();
       return rows.map((row) => ({
         name: `${row.path === ROOT ? "" : `${row.path.slice(ROOT.length + 1)}/`}${row.name}`,
-        size: Buffer.byteLength(row.content, "utf8"),
+        size: typeof row.size_bytes === "number" ? row.size_bytes : Buffer.byteLength(row.content, "utf8"),
         modified: row.updated_at.toISOString(),
       }));
     },

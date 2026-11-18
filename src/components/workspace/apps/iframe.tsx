@@ -14,12 +14,10 @@ export function IframeApp({ url, title = 'Страница Mekty' }: { url: stri
         // Hide global site header and footer
         const style = doc.createElement('style');
         style.textContent = `
-          header, footer, .no-print { display: none !important; }
-          main { padding: 0 !important; }
-          /* Hide school layout sidebar/topbar if they exist */
-          [class*="school-layout_sidebar"], [class*="school-layout_topbar"] { display: none !important; }
-          [class*="school-layout_content"] { padding: 1rem !important; }
-          /* Adjust layout */
+          [class*="app-shell_top"], [class*="app-shell_side"], [class*="app-shell_scrim"], .no-print { display: none !important; }
+          [class*="app-shell_shell"] { min-height: 100% !important; }
+          [class*="app-shell_body"], [class*="app-shell_content"] { display: block !important; padding: 0 !important; height: auto !important; min-height: 100% !important; }
+          main { padding-top: 0.75rem !important; }
           body { background: transparent !important; }
         `;
         doc.head.appendChild(style);

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, CircleCheck, CircleX, Globe, Lock, ExternalLink, FileText, Download, Presentation } from "lucide-react";
 import { currentActivity, extractDeliverables, extractTaskFiles, finalSummary, partialSummary } from "@/lib/agents/deliverables";
 import { useWorkspaceStore } from "@/lib/store/workspace";
 import { useOsShellStore } from "@/lib/store/os-shell";
+import { fetchTasksShared } from "./agent-dock";
 
 export interface AgentEvent {
   type: string;
@@ -40,6 +41,7 @@ export function AgentSession(props: AgentSessionProps) {
     <AgentSessionStream
       key={props.taskId}
       taskId={props.taskId}
+      variant={props.variant ?? "chat"}
       onStatus={props.onStatus}
       onBrowserActivity={props.onBrowserActivity}
     />
@@ -48,11 +50,13 @@ export function AgentSession(props: AgentSessionProps) {
 
 function AgentSessionStream({
   taskId,
+  variant = "chat",
   onStatus,
   onBrowserActivity,
-}: Pick<AgentSessionProps, "taskId" | "onStatus" | "onBrowserActivity">) {
+}: Pick<AgentSessionProps, "taskId" | "variant" | "onStatus" | "onBrowserActivity">) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [status, setStatus] = useState<Status>("running");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const onBrowserActivityRef = useRef(onBrowserActivity);
@@ -142,8 +146,7 @@ function AgentSessionStream({
   // окончена, панель узнаёт это из списка задач сразу, а не висит на «Агент запускается…».
   useEffect(() => {
     let active = true;
-    void fetch("/api/agents/task", { cache: "no-store" })
-      .then((res) => (res.ok ? (res.json() as Promise<{ tasks?: Array<{ id?: string; status?: string }> }>) : null))
+    void fetchTasksShared(1500)
       .then((data) => {
         const task = data?.tasks?.find((t) => t.id === taskId);
         if (active && (task?.status === "completed" || task?.status === "failed" || task?.status === "stopped")) setStatus(task.status);
@@ -157,33 +160,66 @@ function AgentSessionStream({
   }, [status, onStatus]);
 
   useEffect(() => {
+    if (!detailsOpen) return;
     const el = scrollRef.current;
     if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [events.length]);
+  }, [events.length, detailsOpen]);
 
-  const metaEv = events.find((e) => e.type === "META") as unknown as (AgentEvent & { plan?: string[] }) | undefined;
-  const plan = metaEv?.plan ?? (metaEv?.data as unknown as { plan?: string[] } | undefined)?.plan ?? null;
-  // Шагом считается только удачный результат инструмента: ошибки («сеанс истёк»,
-  // «нет квоты») раньше засчитывались, и остановленная задача показывала 100%.
-  const doneSteps = events.filter((e) => e.type === "TOOL_RESULT" && !/"success"\s*:\s*false/.test(String(e.data?.result ?? ""))).length;
-  const summary = status === "completed" ? finalSummary(events) : "";
-  // Модель могла завершить задачу ответом «не удалось»: это не успех, что бы ни говорил статус.
-  const summaryFailed = /^(не удалось|не смог|невозможно)/i.test(summary);
-  const finishedOk = status === "completed" && !summaryFailed;
-  const progress = plan && plan.length
-    ? finishedOk ? 100 : Math.min(95, Math.round((doneSteps / plan.length) * 100))
-    : null;
   const running = status === "running";
-  // Созданные агентом КСП и КТП: готовые ссылки, чтобы не искать результат в логе.
-  const deliverables = extractDeliverables(events);
-  const taskFiles = extractTaskFiles(events);
-  const activity = running ? currentActivity(events) : "";
-  // Незавершённая задача всё равно показывает, что сделано и где остановились.
-  const partial = status === "failed" ? partialSummary(events) : "";
+  const {
+    plan, doneSteps, summary, summaryFailed, finishedOk, progress,
+    deliverables, taskFiles, activity, partial, latestPaused, latestError,
+    logEvents, lastBrowserIdx,
+  } = useMemo(() => {
+    const metaEv = events.find((e) => e.type === "META") as unknown as (AgentEvent & { plan?: string[] }) | undefined;
+    const planList = metaEv?.plan ?? (metaEv?.data as unknown as { plan?: string[] } | undefined)?.plan ?? null;
+    // Шагом считается только удачный результат инструмента: ошибки («сеанс истёк»,
+    // «нет квоты») раньше засчитывались, и остановленная задача показывала 100%.
+    const done = events.filter((e) => e.type === "TOOL_RESULT" && !/"success"\s*:\s*false/.test(String(e.data?.result ?? ""))).length;
+    const sum = status === "completed" ? finalSummary(events) : "";
+    // Модель могла завершить задачу ответом «не удалось»: это не успех, что бы ни говорил статус.
+    const sumFailed = /^(не удалось|не смог|невозможно)/i.test(sum);
+    const ok = status === "completed" && !sumFailed;
+    const prog = planList && planList.length
+      ? ok ? 100 : Math.min(95, Math.round((done / planList.length) * 100))
+      : null;
+    // Созданные агентом КСП и КТП: готовые ссылки, чтобы не искать результат в логе.
+    const deliv = extractDeliverables(events);
+    const files = extractTaskFiles(events);
+    const act = running ? currentActivity(events) : "";
+    // Незавершённая задача всё равно показывает, что сделано и где остановились.
+    const part = status === "failed" ? partialSummary(events) : "";
+    const paused = events.filter((e) => e.type === "PAUSED").slice(-1);
+    const err = events.filter((e) => e.type === "ERROR").slice(-1);
+    const logs = events.filter((e) => e.type !== "META");
+    let lastBrowser = -1;
+    for (let i = logs.length - 1; i >= 0; i -= 1) {
+      if (extractBrowserMeta(logs[i]!) !== null) {
+        lastBrowser = i;
+        break;
+      }
+    }
+    return {
+      plan: planList,
+      doneSteps: done,
+      summary: sum,
+      summaryFailed: sumFailed,
+      finishedOk: ok,
+      progress: prog,
+      deliverables: deliv,
+      taskFiles: files,
+      activity: act,
+      partial: part,
+      latestPaused: paused,
+      latestError: err,
+      logEvents: logs,
+      lastBrowserIdx: lastBrowser,
+    };
+  }, [events, status, running]);
   const openInEditor = useWorkspaceStore((s) => s.openInEditor);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={`flex min-h-0 flex-1 flex-col ${variant === "compact" ? "text-[12px]" : ""}`}>
       {activity && (
         <p role="status" className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-primary-soft-hover bg-primary-soft px-3 py-2 text-[13px] leading-snug text-primary">
           <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin" />
@@ -288,39 +324,54 @@ function AgentSessionStream({
         </p>
       )}
       {/* Паузу и запрос входа учитель должен увидеть сразу, а не внутри подробностей. */}
-      {events.filter((e) => e.type === "PAUSED").slice(-1).map((ev, i) => (
-        <div key={i} className="mx-3 mt-3 shrink-0"><EventLine ev={ev} previewIndex={i} /></div>
+      {latestPaused.map((ev, i) => (
+        <div key={`paused-${i}`} className="mx-3 mt-3 shrink-0"><EventLine ev={ev} previewIndex={i} showLivePreview={false} /></div>
       ))}
-      <details className="mx-3 mb-3 mt-3 min-h-0 rounded-xl border border-border bg-surface text-xs">
-        <summary className="cursor-pointer px-3 py-2 font-semibold text-muted-foreground">Подробности работы</summary>
-      <div
-        ref={scrollRef}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-        }}
-        className="max-h-[420px] space-y-2 overflow-y-auto px-3 pb-3 text-[12px] leading-relaxed"
+      {!detailsOpen && latestError.map((ev, i) => (
+        <div key={`err-${i}`} className="mx-3 mt-3 shrink-0"><EventLine ev={ev} previewIndex={i} showLivePreview={false} /></div>
+      ))}
+      <details
+        open={detailsOpen}
+        onToggle={(e) => setDetailsOpen(e.currentTarget.open)}
+        className="mx-3 mb-3 mt-3 min-h-0 rounded-xl border border-border bg-surface text-xs"
       >
-        {events.filter((e) => e.type !== "META").map((ev, i) => (
-          <EventLine key={i} ev={ev} previewIndex={i} />
-        ))}
-        {status === "completed" && (
-          <p className="flex items-center gap-1.5 pt-1 text-emerald-700"><CircleCheck className="size-3.5" /> Задача завершена</p>
+        <summary className="cursor-pointer px-3 py-2 font-semibold text-muted-foreground">Подробности работы</summary>
+        {detailsOpen && (
+          <div
+            ref={scrollRef}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+            }}
+            className="max-h-[420px] space-y-2 overflow-y-auto px-3 pb-3 text-[12px] leading-relaxed"
+          >
+            {logEvents.map((ev, i) => (
+              <EventLine key={i} ev={ev} previewIndex={i} showLivePreview={running && i === lastBrowserIdx} />
+            ))}
+            {status === "completed" && (
+              <p className="flex items-center gap-1.5 pt-1 text-emerald-700"><CircleCheck className="size-3.5" /> Задача завершена</p>
+            )}
+            {status === "failed" && (
+              <p className="flex items-center gap-1.5 pt-1 text-danger"><CircleX className="size-3.5" /> Задача завершилась с ошибкой</p>
+            )}
+            {status === "stopped" && (
+              <p className="flex items-center gap-1.5 pt-1 text-muted-foreground"><CircleX className="size-3.5" /> Задача остановлена</p>
+            )}
+          </div>
         )}
-        {status === "failed" && (
-          <p className="flex items-center gap-1.5 pt-1 text-danger"><CircleX className="size-3.5" /> Задача завершилась с ошибкой</p>
-        )}
-        {status === "stopped" && (
-          <p className="flex items-center gap-1.5 pt-1 text-muted-foreground"><CircleX className="size-3.5" /> Задача остановлена</p>
-        )}
-      </div>
       </details>
     </div>
   );
 }
 
-function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number }) {
+function EventLine({ ev, previewIndex, showLivePreview }: { ev: AgentEvent; previewIndex: number; showLivePreview: boolean }) {
   const setTab = useOsShellStore((s) => s.setTab);
+  const openBrowserWorkspace = () => {
+    setTab("browser");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("mekty:open-workspace-tab", { detail: { tab: "browser" } }));
+    }
+  };
   const tool = ev.data?.tool;
   if (ev.type === "THINK") {
     return <p className="text-muted-foreground/70 italic">· {ev.message}</p>;
@@ -337,7 +388,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
             <p className="font-medium leading-snug">{ev.message}</p>
             <button
               type="button"
-              onClick={() => setTab("browser")}
+              onClick={openBrowserWorkspace}
               className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-warning-soft px-2.5 py-1 text-[11px] font-semibold text-warning hover:bg-warning-soft"
             >
               <Globe className="size-3" /> Открыть экран на рабочем месте →
@@ -383,7 +434,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
               </span>
               <button
                 type="button"
-                onClick={() => setTab("browser")}
+                onClick={openBrowserWorkspace}
                 className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary-soft"
               >
                 На рабочем месте <ExternalLink className="size-2.5" />
@@ -398,7 +449,7 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
                 {browserInfo.authBarrier.kind === "login" && (
                   <button
                     type="button"
-                    onClick={() => setTab("browser")}
+                    onClick={openBrowserWorkspace}
                     className="ml-auto shrink-0 rounded-md bg-warning-soft px-2 py-0.5 text-[10px] font-semibold text-warning hover:bg-warning-soft"
                   >
                     Ввести данные
@@ -406,19 +457,31 @@ function EventLine({ ev, previewIndex }: { ev: AgentEvent; previewIndex: number 
                 )}
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => setTab("browser")}
-              title="Перейти к интерактивному экрану в рабочей области ОС"
-              className="block w-full bg-muted text-left"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/agents/browser-stream?action=screenshot&v=${previewIndex}`}
-                alt={browserInfo.title || "Снимок страницы в браузере ОС"}
-                className="max-h-44 w-full object-cover object-top opacity-90 transition-opacity hover:opacity-100"
-              />
-            </button>
+            {showLivePreview ? (
+              <button
+                type="button"
+                onClick={openBrowserWorkspace}
+                title="Перейти к интерактивному экрану в рабочей области ОС"
+                className="block w-full bg-muted text-left"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/agents/browser-stream?action=screenshot&v=${previewIndex}`}
+                  alt={browserInfo.title || "Снимок страницы в браузере ОС"}
+                  loading="lazy"
+                  className="max-h-44 w-full object-cover object-top opacity-90 transition-opacity hover:opacity-100"
+                />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={openBrowserWorkspace}
+                className="flex w-full items-center justify-between gap-2 bg-muted/60 px-2.5 py-2 text-left text-[11px] font-medium text-primary hover:bg-muted"
+              >
+                <span>Открыть интерактивный экран браузера</span>
+                <ExternalLink className="size-3 shrink-0" />
+              </button>
+            )}
           </div>
         )}
       </div>

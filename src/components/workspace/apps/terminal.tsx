@@ -27,8 +27,14 @@ export function TerminalApp() {
   const [copied, setCopied] = useState<number | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const runIdRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const known = info !== null;
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -52,8 +58,17 @@ export function TerminalApp() {
   useEffect(() => { if (available) inputRef.current?.focus(); }, [available]);
 
   async function stop() {
+    const runId = runIdRef.current;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    runIdRef.current = null;
+    setBusy(false);
+    inputRef.current?.focus();
     try {
-      await fetch("/api/agents/terminal/stop", { method: "POST" });
+      await fetch("/api/agents/terminal/stop", {
+        method: "POST",
+        ...(runId ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runId }) } : {}),
+      });
     } catch {
       // команда могла завершиться сама — игнорируем
     }
@@ -68,24 +83,42 @@ export function TerminalApp() {
       clear();
       return;
     }
+    const runId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const controller = new AbortController();
+    runIdRef.current = runId;
+    abortRef.current = controller;
     setCommand("");
     addHistory(requested);
     setHistoryIndex(-1);
     setBusy(true);
     try {
       const response = await fetch("/api/agents/terminal", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: requested, timeoutMs: 90_000 }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: requested, timeoutMs: 90_000, runId }),
+        signal: controller.signal,
       });
       const data = await response.json() as { stdout?: string; stderr?: string; exitCode?: number; error?: string };
       addEntry({
         command: requested, stdout: data.stdout ?? "", stderr: data.stderr ?? "", exitCode: data.exitCode, error: data.error,
       });
       if (!response.ok && data.error) setStatusText(data.error);
-    } catch {
-      addEntry({ command: requested, stdout: "", stderr: "", error: "Не удалось отправить команду" });
+    } catch (err) {
+      const aborted = (err as { name?: string } | null)?.name === "AbortError";
+      addEntry({
+        command: requested,
+        stdout: "",
+        stderr: "",
+        error: aborted ? "Команда остановлена" : "Не удалось отправить команду",
+      });
     } finally {
-      setBusy(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        runIdRef.current = null;
+        setBusy(false);
+      }
       inputRef.current?.focus();
     }
   }
@@ -175,7 +208,7 @@ export function TerminalApp() {
             <LoaderCircle className="size-4 animate-spin" /> Выполняю…
             <button
               type="button"
-              onClick={stop}
+              onClick={() => void stop()}
               className="rounded bg-white/10 px-2 py-0.5 text-xs text-white/70 hover:bg-white/20"
               aria-label="Остановить команду"
             >

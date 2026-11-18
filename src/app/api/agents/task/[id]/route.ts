@@ -76,6 +76,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       let closed = false;
       let metaSent = false;
       let queuedSent = false;
+      let tickInFlight = false;
       let ticks = 0;
       const openedAt = Date.now();
 
@@ -91,16 +92,31 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       };
 
       const interval = setInterval(async () => {
-        if (closed) return;
+        if (closed || tickInFlight) return;
+        tickInFlight = true;
         if (Date.now() - openedAt > MAX_STREAM_MS) {
           close();
+          tickInFlight = false;
           return;
         }
         if (++ticks % KEEPALIVE_TICKS === 0) {
-          try { controller.enqueue(": keepalive\n\n"); } catch { close(); return; }
+          try { controller.enqueue(": keepalive\n\n"); } catch { close(); tickInFlight = false; return; }
         }
         try {
-          const task = await agentTasks.findOne({ _id: taskObjectId });
+          const [task, newLogs] = await Promise.all([
+            agentTasks.findOne({ _id: taskObjectId }),
+            // Пишем task_id + created_at (см. runner). Фолбэк на старые поля — для ранних логов.
+            agentExecutions
+              .find({
+                $and: [
+                  { $or: [{ task_id: taskObjectId }, { taskId: taskObjectId }] },
+                  { $or: [{ created_at: { $gte: lastCreatedAt } }, { timestamp: { $gte: lastCreatedAt } }] },
+                ],
+              })
+              .sort({ created_at: 1, _id: 1 })
+              .limit(100)
+              .toArray(),
+          ]);
           if (!task || !ownedBy(task, auth.user.id)) {
             push({ type: "ERROR", message: "Задача не найдена" });
             close();
@@ -123,18 +139,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
             queuedSent = true;
             push({ type: "STATUS_UPDATE", status: "queued" });
           }
-
-          // Пишем task_id + created_at (см. runner). Фолбэк на старые поля — для ранних логов.
-          const newLogs = await agentExecutions
-            .find({
-              $and: [
-                { $or: [{ task_id: taskObjectId }, { taskId: taskObjectId }] },
-                { $or: [{ created_at: { $gte: lastCreatedAt } }, { timestamp: { $gte: lastCreatedAt } }] },
-              ],
-            })
-            .sort({ created_at: 1, _id: 1 })
-            .limit(100)
-            .toArray();
 
           for (const log of newLogs) {
             const id = String(log._id ?? "");
@@ -182,6 +186,8 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
           }
         } catch {
           // кратковременный сбой БД: не роняем поток — попробуем на следующем тике
+        } finally {
+          tickInFlight = false;
         }
       }, POLL_MS);
 

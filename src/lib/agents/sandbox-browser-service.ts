@@ -121,6 +121,10 @@ if sudo -n true 2>/dev/null; then SUDO="sudo -n"; else SUDO=""; fi
 if [ ! -f "$READY" ] && [ -d /tmp/node_modules/playwright ]; then touch "$READY"; fi
 if [ ! -f "$DEPS" ] && ldconfig -p 2>/dev/null | grep -q libglib-2.0; then touch "$DEPS"; fi
 
+# Зависший lock от прерванного холодного старта старше 5 минут не должен
+# вечно блокировать установку Chromium для следующего запроса.
+find /tmp -maxdepth 1 -name pw-lock -mmin +5 -exec rmdir {} + 2>/dev/null || true
+
 if mkdir "$LOCK" 2>/dev/null; then
   cd /tmp
   if [ ! -f "$READY" ]; then
@@ -160,7 +164,7 @@ if [ -f "$READY" ] && [ -f "$DEPS" ]; then echo READY; else echo NOT_READY; fi
     const install = await sandbox.runCommand({
       cmd: "bash",
       args: ["-lc", INSTALL_SCRIPT],
-      timeoutMs: 420_000,
+      timeoutMs: 240_000,
     }).catch(() => null);
 
     if (!install || !(await install.stdout()).includes("READY")) {

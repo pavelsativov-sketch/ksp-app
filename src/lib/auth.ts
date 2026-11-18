@@ -57,11 +57,30 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
+const SESSION_CACHE_TTL_MS = 5_000;
+const SESSION_CACHE_MAX = 500;
+const verifiedSessionCache = new Map<string, { user: SessionUser; expiresAt: number }>();
+
+/**
+ * Сбросить кратковременный кеш проверенной сессии в процессе: вызываем при смене
+ * пароля, сбросе пароля, входе или удалении аккаунта.
+ */
+export function invalidateUserSessionCache(userId?: string): void {
+  if (!userId) {
+    verifiedSessionCache.clear();
+    return;
+  }
+  for (const [token, entry] of verifiedSessionCache) {
+    if (entry.user.id === userId) verifiedSessionCache.delete(token);
+  }
+}
+
 export async function createSession(
   userId: string,
   sessionVersion = 0,
   identity?: SessionIdentity,
 ): Promise<void> {
+  invalidateUserSessionCache(userId);
   const token = await new SignJWT({
     sub: userId,
     sessionVersion,
@@ -83,6 +102,8 @@ export async function createSession(
 
 export async function clearSession(): Promise<void> {
   const store = await cookies();
+  const token = store.get?.(COOKIE_NAME)?.value;
+  if (token) verifiedSessionCache.delete(token);
   store.delete(COOKIE_NAME);
 }
 
@@ -133,25 +154,37 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
         if (typeof email !== "string" || email.length > 320 || !/^\S+@\S+\.\S+$/.test(email)) result = null;
         else if (fullName !== null && typeof fullName !== "string") result = null;
         else {
-          // Ensure the account still exists and the token's version is current.
-          const db = await getDb();
-          const account = await db.collection<UserDoc>(COL.users).findOne(
-            { _id: new ObjectId(payload.sub) },
-            { projection: { session_version: 1, full_name: 1 } },
-          );
-          const tokenVersion = typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0;
-          if (!account || (account.session_version ?? 0) !== tokenVersion) {
-            // Просроченный/невалидный токен: чистим cookie, чтобы не повторять
-            // jwtVerify + запрос к Mongo на каждом вызове.
-            try { store.delete(COOKIE_NAME); } catch { /* cookie недоступна */ }
-            result = null;
+          const bypassCache = Boolean(process.env.VITEST) || process.env.NODE_ENV === "test";
+          const cached = !bypassCache ? verifiedSessionCache.get(token) : undefined;
+          if (cached && cached.expiresAt > Date.now()) {
+            result = cached.user;
           } else {
-            // Имя берём из БД, а не из JWT.
-            result = { id: payload.sub, email, fullName: account.full_name ?? null };
+            // Ensure the account still exists and the token's version is current.
+            const db = await getDb();
+            const account = await db.collection<UserDoc>(COL.users).findOne(
+              { _id: new ObjectId(payload.sub) },
+              { projection: { session_version: 1, full_name: 1 } },
+            );
+            const tokenVersion = typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0;
+            if (!account || (account.session_version ?? 0) !== tokenVersion) {
+              // Просроченный/невалидный токен: чистим cookie, чтобы не повторять
+              // jwtVerify + запрос к Mongo на каждом вызове.
+              verifiedSessionCache.delete(token);
+              try { store.delete(COOKIE_NAME); } catch { /* cookie недоступна */ }
+              result = null;
+            } else {
+              // Имя берём из БД, а не из JWT.
+              result = { id: payload.sub, email, fullName: account.full_name ?? null };
+              if (!bypassCache) {
+                if (verifiedSessionCache.size >= SESSION_CACHE_MAX) verifiedSessionCache.clear();
+                verifiedSessionCache.set(token, { user: result, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+              }
+            }
           }
         }
       }
     } catch {
+      verifiedSessionCache.delete(token);
       try { store.delete(COOKIE_NAME); } catch { /* cookie недоступна */ }
       result = null;
     }

@@ -19,6 +19,7 @@ interface OpenFile {
   name: string;
   content: string;
   dirty: boolean;
+  rev: number;
 }
 
 const LANG: Record<string, string> = {
@@ -38,6 +39,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   // файлового менеджера — раньше он открывался только вторым способом и только
   // в двухпанельной раскладке.
   const windowFile = useWorkspaceStore((s) => s.windows.find((w) => w.type === "code-editor")?.file);
+  const editorOpenSeq = useWorkspaceStore((s) => s.editorOpenSeq);
   const effectiveFile = requestedFile ?? windowFile ?? null;
   const [open, setOpen] = useState<OpenFile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -50,6 +52,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
   const editorInstance = useRef<{ getValue: () => string } | null>(null);
   const saveRef = useRef<() => void>(() => {});
   const openRef = useRef<OpenFile | null>(null);
+  const revRef = useRef(0);
 
   useEffect(() => { openRef.current = open; }, [open]);
 
@@ -66,7 +69,12 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
 
   useEffect(() => {
     const timer = setTimeout(() => void refreshFiles(), 0);
-    return () => clearTimeout(timer);
+    const onChanged = () => { void refreshFiles(); };
+    window.addEventListener("mekty:workspace-files-changed", onChanged);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("mekty:workspace-files-changed", onChanged);
+    };
   }, [refreshFiles]);
 
   const openFile = useCallback(async (name: string) => {
@@ -80,7 +88,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
       const res = await fetch(`/api/agents/sandbox?file=${encodeURIComponent(name)}`, { cache: "no-store" });
       const data = (await res.json()) as { content?: string; error?: string };
       if (!res.ok || data.content === undefined) throw new Error(data.error ?? "Не удалось открыть");
-      setOpen({ name, content: data.content, dirty: false });
+      setOpen({ name, content: data.content, dirty: false, rev: ++revRef.current });
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Ошибка открытия");
       setOpen(null);
@@ -103,7 +111,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
     return () => {
       cancelled = true;
     };
-  }, [effectiveFile, openFile]);
+  }, [effectiveFile, editorOpenSeq, openFile]);
 
   const save = useCallback(async () => {
     const editor = editorInstance.current;
@@ -121,14 +129,21 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? "Не удалось сохранить");
       }
-      setOpen({ ...open, dirty: false, content });
+      setOpen((prev) => (prev ? { ...prev, dirty: false, content } : prev));
       setNotice("Сохранено");
       void refreshFiles();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("mekty:workspace-files-changed"));
+      }
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Ошибка сохранения");
     }
     setSaving(false);
   }, [open, saving, refreshFiles]);
+
+  const handleEditorChange = useCallback(() => {
+    setOpen((o) => (o && !o.dirty ? { ...o, dirty: true } : o));
+  }, []);
 
   useEffect(() => { saveRef.current = () => { void save(); }; }, [save]);
 
@@ -146,7 +161,7 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
     if (current?.dirty && !window.confirm(`В «${current.name}» есть несохранённые изменения. Создать новый файл без сохранения?`)) return;
     const name = window.prompt("Имя нового файла:", "script.js");
     if (!name) return;
-    setOpen({ name, content: "", dirty: true });
+    setOpen({ name, content: "", dirty: true, rev: ++revRef.current });
     setNotice("Введите содержимое и нажмите «Сохранить» (Ctrl+S)");
   }
 
@@ -204,12 +219,13 @@ export function CodeEditorApp({ requestedFile }: { requestedFile?: string | null
       {open && !loading && (
         <div className="min-h-0 flex-1">
           <Editor
+            key={`${open.name}:${open.rev}`}
             height="100%"
             theme="vs-dark"
             language={LANG[ext] ?? "plaintext"}
             value={open.content}
             onMount={onMount}
-            onChange={(v) => setOpen((o) => (o ? { ...o, content: v ?? "", dirty: true } : o))}
+            onChange={handleEditorChange}
             options={{ fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, wordWrap: "on" }}
             loading={<p className="flex h-full items-center justify-center text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Загрузка редактора…</p>}
           />

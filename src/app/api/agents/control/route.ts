@@ -21,10 +21,13 @@ export const maxDuration = 300;
 export async function GET() {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
-  const stored = await getControlOwner(auth.user.id);
-  const owner = resolveControlOwner(stored, await hasLiveAgentTask(auth.user.id));
+  const [stored, live, pending] = await Promise.all([
+    getControlOwner(auth.user.id),
+    hasLiveAgentTask(auth.user.id),
+    listPending(auth.user.id).catch(() => []),
+  ]);
+  const owner = resolveControlOwner(stored, live);
   if (owner !== stored) await setControlOwner(auth.user.id, owner).catch(() => {});
-  const pending = await listPending(auth.user.id).catch(() => []);
   return NextResponse.json(
     { control: owner, pendingCount: pending.length, mode: getAgentRuntimeMode() },
     { headers: { "Cache-Control": "no-store" } },

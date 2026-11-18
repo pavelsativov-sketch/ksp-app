@@ -7,7 +7,7 @@ import { log } from "@/lib/logger";
 import { randomBytes, createHash } from "node:crypto";
 import { MongoServerError, ObjectId } from "mongodb";
 import { getDb, COL } from "@/lib/mongo";
-import { createSession, clearSession, findUserByEmail, hashPassword, verifyPassword } from "@/lib/auth";
+import { createSession, clearSession, findUserByEmail, hashPassword, invalidateUserSessionCache, verifyPassword } from "@/lib/auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { sendEmail } from "@/lib/mailer";
 
@@ -188,6 +188,7 @@ export async function changePasswordAction(
       { _id: new ObjectId(user.id) },
       { $set: { password_hash: await hashPassword(parsed.data.password) }, $inc: { session_version: 1 } },
     );
+    invalidateUserSessionCache(user.id);
     // Все сессии, включая текущую, инвалидируются — входим заново.
     await createSession(user.id, (doc.session_version ?? 0) + 1, {
       email: user.email,
@@ -357,6 +358,7 @@ export async function deleteAccountAction(
       .then(({ deleteAccountWorkspaceSandbox }) => deleteAccountWorkspaceSandbox(user.id))
       .catch(() => log.warn("Не удалось удалить Linux-среду удалённого аккаунта", { userId: user.id }));
     await import("@/lib/agents/browser-session").then(({ clearAgentBrowserSession }) => clearAgentBrowserSession(user.id)).catch(() => {});
+    invalidateUserSessionCache(user.id);
     await clearSession();
   } catch (error) {
     log.error("deleteAccountAction failed", { error: error instanceof Error ? error.message : String(error) });
@@ -505,6 +507,7 @@ export async function resetPasswordAction(
       userId: String(doc.userId),
       $expr: { $lte: [{ $ifNull: ["$sessionVersion", 0] }, doc.sessionVersion ?? 0] },
     });
+    invalidateUserSessionCache(String(doc.userId));
     await clearSession();
   } catch (error) {
     log.error("resetPasswordAction failed", { error: error instanceof Error ? error.message : String(error) });

@@ -333,8 +333,10 @@ export function pruneImages(messages: OpenAI.Chat.Completions.ChatCompletionMess
  */
 async function observation(page: AgentPage): Promise<string> {
   const url = currentUrl(page as never);
-  const title = await page.title().catch(() => "");
-  const items = await readInteractables(page as never);
+  const [title, items] = await Promise.all([
+    page.title().catch(() => ""),
+    readInteractables(page as never),
+  ]);
   const parts = [`Адрес: ${url}`];
   if (title) parts.push(`Заголовок вкладки (document.title): ${title}`);
   if (items) parts.push(`Элементы страницы (номер в скобках — координаты):\n${items}`);
@@ -399,16 +401,17 @@ export async function runComputerUse(opts: RunOptions): Promise<string> {
     });
   }
 
+  const [initialObs, initialShot] = await Promise.all([observation(page), shot(page)]);
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
       content: [
         { type: "text", text: `Задача: ${clean.text}` },
-        { type: "text", text: await observation(page) },
+        { type: "text", text: initialObs },
         {
           type: "image_url",
-          image_url: { url: `data:image/jpeg;base64,${await shot(page)}` },
+          image_url: { url: `data:image/jpeg;base64,${initialShot}` },
         },
       ],
     },
@@ -503,11 +506,12 @@ export async function runComputerUse(opts: RunOptions): Promise<string> {
         }
       }
       await log({ type: "RESUMED", message: "Управление возвращено агенту — продолжаю работу с обновлённым экраном." });
+      const [resumedObs, resumedShot] = await Promise.all([observation(page), shot(page)]);
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: `Учитель завершил действие в рабочей области ОС. Текущее состояние экрана:\n${await observation(page)}` },
-          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${await shot(page)}` } },
+          { type: "text", text: `Учитель завершил действие в рабочей области ОС. Текущее состояние экрана:\n${resumedObs}` },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${resumedShot}` } },
         ],
       });
     }
@@ -613,11 +617,12 @@ export async function runComputerUse(opts: RunOptions): Promise<string> {
 
     // Следующий ход: модель должна увидеть актуальный экран и текущий
     // список элементов — по нему она попадает в кнопки точнее, чем по пикселям.
+    const [nextObs, nextShot] = await Promise.all([observation(page), shot(page)]);
     messages.push({
       role: "user",
       content: [
-        { type: "text", text: await observation(page) },
-        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${await shot(page)}` } },
+        { type: "text", text: nextObs },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${nextShot}` } },
       ],
     });
   }

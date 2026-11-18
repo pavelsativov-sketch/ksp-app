@@ -20,6 +20,12 @@ export interface TerminalInfo {
 
 const MAX_ENTRIES = 200;
 const MAX_HISTORY = 100;
+const MAX_OUTPUT_CHARS = 24_000;
+
+function trimOutput(text: string): string {
+  if (text.length <= MAX_OUTPUT_CHARS) return text;
+  return `… [вывод обрезан до последних ${MAX_OUTPUT_CHARS} символов]\n` + text.slice(-MAX_OUTPUT_CHARS);
+}
 
 interface TerminalStore {
   entries: TerminalEntry[];
@@ -42,7 +48,16 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
   history: [],
   info: null,
   setInfo: (info) => set({ info }),
-  addEntry: (entry) => set((state) => ({ entries: [...state.entries, entry].slice(-MAX_ENTRIES) })),
+  addEntry: (entry) => set((state) => ({
+    entries: [
+      ...state.entries,
+      {
+        ...entry,
+        stdout: trimOutput(entry.stdout),
+        stderr: trimOutput(entry.stderr),
+      },
+    ].slice(-MAX_ENTRIES),
+  })),
   addHistory: (command) => set((state) => ({
     history: (state.history[state.history.length - 1] === command ? state.history : [...state.history, command]).slice(-MAX_HISTORY),
   })),

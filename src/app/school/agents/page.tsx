@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 interface TaskRow {
   id: string;
   title: string;
+  prompt?: string;
   status: string;
   result: string | null;
   error: string | null;
@@ -74,7 +75,14 @@ export default function AgentHistoryPage() {
               {t.status === "completed" && <CircleCheck className="size-4 text-emerald-500" aria-label="готово" />}
               {t.status === "failed" && <CircleX className="size-4 text-red-500" aria-label="ошибка" />}
               {t.status === "stopped" && <CircleX className="size-4 text-muted-foreground" aria-label="остановлена" />}
-              <Button variant="outline" size="sm" onClick={() => setActiveAgentTask(t.id, t.title)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setActiveAgentTask(t.id, t.title, t.prompt ?? t.title);
+                  router.push("/school");
+                }}
+              >
                 Открыть сессию
               </Button>
             </div>

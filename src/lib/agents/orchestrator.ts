@@ -321,13 +321,17 @@ export async function listAgentTasks(userId: string, limit = 20) {
   const db = await getDb();
   const docs = await db
     .collection(COL.agentTasks)
-    .find({ user_id: new ObjectId(userId) })
+    .find(
+      { user_id: new ObjectId(userId) },
+      { projection: { title: 1, prompt: 1, status: 1, result: 1, error: 1, created_at: 1 } },
+    )
     .sort({ created_at: -1 })
     .limit(limit)
     .toArray();
   return docs.map((d) => ({
     id: d._id.toString(),
     title: (d.title as string) ?? (d.prompt as string)?.slice(0, 80) ?? 'Задача',
+    prompt: typeof d.prompt === 'string' ? d.prompt.slice(0, 4000) : undefined,
     status: (d.status as string) ?? 'running',
     result: (d.result as string | null) ?? null,
     error: (d.error as string | null) ?? null,
@@ -420,7 +424,17 @@ export async function resurrectStalePausedTask(userId: string): Promise<{ task: 
  * поллят GET /api/agents/task, тем самым «пробуждают» очередь и дожидаются
  * выполнения следующей задачи.
  */
+let lastQueueDispatchAt = 0;
+
 export async function maybeDispatchQueuedFromRequest(): Promise<string | null> {
+  // Троттлинг внутри процесса: частые опросы GET /api/agents/task из нескольких
+  // компонентов не должны бить по Mongo на каждый запрос.
+  const bypassThrottle = Boolean(process.env.VITEST) || process.env.NODE_ENV === "test";
+  const now = Date.now();
+  if (!bypassThrottle && now - lastQueueDispatchAt < 3_000) {
+    return null;
+  }
+  lastQueueDispatchAt = now;
   // «Будильник»: планируем попытку запуска (атомарную) в фоне и сразу
   // возвращаем управление запросу — долгие задачи не блокируют GET.
   tryStartNextFromQueue();

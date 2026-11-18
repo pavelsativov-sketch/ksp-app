@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect } from "react";
+import React, { memo, useCallback, useEffect } from "react";
 import { LayoutGrid, Minus, X } from "lucide-react";
 import { useWorkspaceStore, type AppType, type WindowState } from "@/lib/store/workspace";
 import { Desktop } from "./desktop";
@@ -16,10 +16,16 @@ import { IframeApp } from "./apps/iframe";
 import { APP_ICONS } from "./app-icons";
 
 /** Соберёт содержимое окна по его типу. */
-function AppContent({ win }: { win: WindowState }) {
-  switch (win.type) {
+const AppContent = memo(function AppContent({
+  type,
+  url,
+  title,
+  isMinimized,
+}: Pick<WindowState, "type" | "url" | "title" | "isMinimized">) {
+  const active = !isMinimized;
+  switch (type) {
     case "browser":
-      return <BrowserApp initialUrl={win.url} />;
+      return <BrowserApp initialUrl={url} active={active} />;
     case "terminal":
       return <TerminalApp />;
     case "file-manager":
@@ -30,15 +36,15 @@ function AppContent({ win }: { win: WindowState }) {
       return <CodeEditorApp />;
     // Агент «Использование компьютера»: смотрит на экран и выполняет задачи.
     case "computer-use":
-      return <ComputerUseApp initialUrl={win.url} />;
+      return <ComputerUseApp initialUrl={url} active={active} />;
     case "agent-log":
       return <AgentLogApp />;
     case "iframe":
-      return win.url ? <IframeApp url={win.url} title={win.title} /> : null;
+      return url ? <IframeApp url={url} title={title} /> : null;
     default:
       return null;
   }
-}
+});
 
 /** Окна, сохранённые в браузере, один раз за загрузку страницы возвращаются свёрнутыми. */
 let restoredThisPageLoad = false;
@@ -82,9 +88,7 @@ export function WorkspaceSurface({ showDesktop = true, showTray = true }: { show
       <div className="sky-night relative min-h-0 flex-1 overflow-hidden">
         {showDesktop && <Desktop />}
         {open.map((win) => (
-          <Window key={win.id} id={win.id} title={win.title} onClose={() => handleClose(win.id)}>
-            <AppContent win={win} />
-          </Window>
+          <WorkspaceWindowItem key={win.id} win={win} onClose={handleClose} />
         ))}
         {visible.length === 0 && showDesktop && <EmptyHint hasWindows={open.length > 0} />}
       </div>
@@ -92,6 +96,26 @@ export function WorkspaceSurface({ showDesktop = true, showTray = true }: { show
     </div>
   );
 }
+
+const WorkspaceWindowItem = memo(function WorkspaceWindowItem({
+  win,
+  onClose,
+}: {
+  win: WindowState;
+  onClose: (id: string) => void;
+}) {
+  const handleWindowClose = useCallback(() => onClose(win.id), [onClose, win.id]);
+  return (
+    <Window id={win.id} title={win.title} onClose={handleWindowClose}>
+      <AppContent
+        type={win.type}
+        url={win.url}
+        title={win.title}
+        isMinimized={win.isMinimized}
+      />
+    </Window>
+  );
+});
 
 /** Панель окон: вернуть свёрнутое окно, переключиться, закрыть, показать рабочий стол. */
 function WindowTray() {
@@ -179,7 +203,25 @@ function EmptyHint({ hasWindows = false }: { hasWindows?: boolean }) {
  * Полноэкранная рабочая область: сама занимает окно браузера.
  * Используется на /school/workspace, где раздел открыт как отдельная ОС.
  */
-export function Workspace() {
+export function Workspace({ initialApp, initialUrl }: { initialApp?: string; initialUrl?: string } = {}) {
+  useEffect(() => {
+    if (!initialApp) return;
+    const store = useWorkspaceStore.getState();
+    if (initialApp === "computer-use") {
+      store.openWindow("computer-use", "Работа с компьютером", "computer-use", initialUrl);
+    } else if (initialApp === "browser") {
+      store.openWindow("browser-main", "Браузер", "browser", initialUrl);
+    } else if (initialApp === "files" || initialApp === "file-manager") {
+      store.openWindow("files-main", "Файлы задачи", "file-manager");
+    } else if (initialApp === "terminal") {
+      store.openWindow("terminal-main", "Терминал", "terminal");
+    } else if (initialApp === "editor" || initialApp === "code-editor") {
+      store.openWindow("sandbox-editor", "Редактор кода", "code-editor");
+    } else if (initialApp === "log" || initialApp === "agent-log") {
+      store.openWindow("ai-assistant", "Журнал агента", "agent-log");
+    }
+  }, [initialApp, initialUrl]);
+
   return (
     <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[#0f0b26] text-white">
       <WorkspaceSurface showTray={false} />

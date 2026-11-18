@@ -5,6 +5,12 @@ import {
   MonitorPlay, Loader2, Play, ShieldAlert, ShieldCheck, Check, X,
   Lock, Hand, Square,
 } from "lucide-react";
+import {
+  clientPointToRemote,
+  REMOTE_SCREEN_HEIGHT,
+  REMOTE_SCREEN_WIDTH,
+  remoteBoxToOverlay,
+} from "@/lib/agents/viewport-coords";
 
 /**
  * Панель агента «Использование компьютера».
@@ -82,7 +88,7 @@ const GOAL_EXAMPLES = [
   { label: "Найти материалы", goal: "Найти на открытой странице материалы по теме «Дроби» и открыть раздел с упражнениями", url: "" },
 ] as const;
 
-export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: string; initialUrl?: string } = {}) {
+export function ComputerUseApp({ initialGoal, initialUrl, active = true }: { initialGoal?: string; initialUrl?: string; active?: boolean } = {}) {
   const [goal, setGoal] = useState(
     initialGoal ?? (initialUrl?.includes("bilimclass")
       ? "Открыть дэшборд учителя в BilimClass и отметить урок проведённым"
@@ -126,6 +132,20 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const typeBufferRef = useRef("");
   const typeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRef = useRef(active);
+  const screenshotUrlRef = useRef<string | null>(null);
+  const frameInFlightRef = useRef(false);
+  const statusInFlightRef = useRef(false);
+  const lastBackspaceAtRef = useRef(0);
+
+  useEffect(() => { activeRef.current = active; }, [active]);
+  useEffect(() => () => {
+    if (typeTimerRef.current) clearTimeout(typeTimerRef.current);
+    if (screenshotUrlRef.current) {
+      URL.revokeObjectURL(screenshotUrlRef.current);
+      screenshotUrlRef.current = null;
+    }
+  }, []);
 
   const appendLog = useCallback((line: LogLine) => {
     setLog((prev) => [...prev, line].slice(-200));
@@ -161,20 +181,25 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       } catch { /* ignore */ }
     }
     const blob = await res.blob();
+    const nextUrl = URL.createObjectURL(blob);
+    screenshotUrlRef.current = nextUrl;
     setScreenshot((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(blob);
+      return nextUrl;
     });
   }, []);
 
   // Загружаем текущий снимок экрана при открытии окна и пока агент работает
   const refreshScreenshot = useCallback(async () => {
-    if (typeBufferRef.current || document.activeElement === kbInputRef.current) return;
+    if (!activeRef.current || frameInFlightRef.current || typeBufferRef.current || document.activeElement === kbInputRef.current) return;
+    frameInFlightRef.current = true;
     try {
       const res = await fetch("/api/agents/computer?action=screenshot", { cache: "no-store" });
       await applyFrameResponse(res);
     } catch {
       // Снимок вспомогательный
+    } finally {
+      frameInFlightRef.current = false;
     }
   }, [applyFrameResponse]);
 
@@ -184,13 +209,13 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
   }, [refreshScreenshot]);
 
   useEffect(() => {
-    if (!running) return;
+    if (!running || !active) return;
     const poll = window.setInterval(() => {
-      if (typeBufferRef.current || document.activeElement === kbInputRef.current) return;
+      if (!activeRef.current || document.hidden || frameInFlightRef.current || typeBufferRef.current || document.activeElement === kbInputRef.current) return;
       void refreshScreenshot();
     }, 1200);
     return () => window.clearInterval(poll);
-  }, [running, refreshScreenshot]);
+  }, [running, active, refreshScreenshot]);
 
   // Окно могли закрыть и открыть снова, пока агент работает на сервере:
   // возвращаем состояние «работает», чтобы не запустить второго агента и
@@ -216,8 +241,10 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
 
   // Опрашиваем живые события, барьер входа и запросы подтверждения
   useEffect(() => {
-    if (!running) return;
+    if (!running || !active) return;
     const poll = window.setInterval(async () => {
+      if (!activeRef.current || document.hidden || statusInFlightRef.current) return;
+      statusInFlightRef.current = true;
       try {
         const res = await fetch("/api/agents/computer", { cache: "no-store" });
         if (!res.ok) return;
@@ -247,10 +274,12 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
         if (data.control) setControl(data.control);
       } catch {
         // Опрос не обязан быть надёжным
+      } finally {
+        statusInFlightRef.current = false;
       }
     }, 1500);
     return () => window.clearInterval(poll);
-  }, [running, refreshScreenshot]);
+  }, [running, active, refreshScreenshot]);
 
   const enqueueScreenAction = useCallback((params: Record<string, string>) => {
     setScreenBusy(true);
@@ -289,22 +318,26 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     kbInputRef.current?.focus({ preventScroll: true });
     setLiveText("");
     flushTypedBuffer();
-    const rect = imgRef.current.getBoundingClientRect();
-    const scaleX = 1280 / rect.width;
-    const scaleY = 800 / rect.height;
-    const scale = Math.min(scaleX, scaleY); // object-fit:contain → min
-    const renderedW = 1280 / scale;
-    const renderedH = 800 / scale;
-    const offsetX = (rect.width - renderedW) / 2;
-    const offsetY = (rect.height - renderedH) / 2;
+    const mapped = clientPointToRemote({
+      clientX: e.clientX,
+      clientY: e.clientY,
+      rect: imgRef.current.getBoundingClientRect(),
+      remoteW: REMOTE_SCREEN_WIDTH,
+      remoteH: REMOTE_SCREEN_HEIGHT,
+    });
+    if (!mapped) return;
+    void enqueueScreenAction({ action: "click", x: String(mapped.x), y: String(mapped.y) });
+  }, [enqueueScreenAction, flushTypedBuffer]);
 
-    const rawX = (e.clientX - rect.left - offsetX) / (renderedW / 1280);
-    const rawY = (e.clientY - rect.top - offsetY) / (renderedH / 800);
-
-    if (rawX < 0 || rawY < 0 || rawX >= 1280 || rawY >= 800) return;
-    const x = Math.round(rawX);
-    const y = Math.round(rawY);
-    void enqueueScreenAction({ action: "click", x: String(x), y: String(y) });
+  const triggerBackspace = useCallback(() => {
+    lastBackspaceAtRef.current = Date.now();
+    setLiveText((prev) => (prev.length > 0 ? prev.slice(0, -1) : ""));
+    if (typeBufferRef.current.length > 0) {
+      typeBufferRef.current = typeBufferRef.current.slice(0, -1);
+      return;
+    }
+    flushTypedBuffer();
+    void enqueueScreenAction({ action: "key", key: "Backspace" });
   }, [enqueueScreenAction, flushTypedBuffer]);
 
   const handleScreenKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -314,19 +347,23 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
     if (specialKeys.includes(e.key)) {
       e.preventDefault();
       if (e.key === "Backspace") {
-        setLiveText((prev) => (prev.length > 0 ? prev.slice(0, -1) : ""));
-        if (typeBufferRef.current.length > 0) {
-          typeBufferRef.current = typeBufferRef.current.slice(0, -1);
-          return;
-        }
-        flushTypedBuffer();
-        void enqueueScreenAction({ action: "key", key: "Backspace" });
+        triggerBackspace();
         return;
       }
       flushTypedBuffer();
       void enqueueScreenAction({ action: "key", key: e.key });
     }
-  }, [enqueueScreenAction, flushTypedBuffer]);
+  }, [enqueueScreenAction, flushTypedBuffer, triggerBackspace]);
+
+  const handleScreenBeforeInput = useCallback((e: React.FormEvent<HTMLInputElement>) => {
+    const inputEvent = e.nativeEvent as InputEvent | undefined;
+    if (inputEvent?.inputType === "deleteContentBackward") {
+      e.preventDefault();
+      if (Date.now() - lastBackspaceAtRef.current >= 30) {
+        triggerBackspace();
+      }
+    }
+  }, [triggerBackspace]);
 
   const handleScreenInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
@@ -439,35 +476,24 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
       }
     };
     update();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [screenshot]);
+  }, [screenshot, active]);
 
   const fieldOverlayStyle = React.useMemo(() => {
     if (!activeField?.box || !imgLayout?.width || !imgLayout?.height) return null;
-
-    const scaleX = 1280 / imgLayout.width;
-    const scaleY = 800 / imgLayout.height;
-    const scale = Math.min(scaleX, scaleY); // object-fit:contain → min
-    const renderedW = 1280 / scale;
-    const renderedH = 800 / scale;
-    const offsetX = (imgLayout.width - renderedW) / 2;
-    const offsetY = (imgLayout.height - renderedH) / 2;
-
-    const b = activeField.box;
-    const x = offsetX + b.x * (renderedW / 1280);
-    const y = offsetY + b.y * (renderedH / 800);
-    const w = b.width * (renderedW / 1280);
-    const h = b.height * (renderedH / 800);
-
-    if (w <= 0 || h <= 0) return null;
-
-    return {
-      left: Math.round(x),
-      top: Math.round(y),
-      width: Math.max(80, Math.round(w)),
-      height: Math.max(26, Math.round(h)),
-    };
+    return remoteBoxToOverlay({
+      box: activeField.box,
+      containerW: imgLayout.width,
+      containerH: imgLayout.height,
+      remoteW: REMOTE_SCREEN_WIDTH,
+      remoteH: REMOTE_SCREEN_HEIGHT,
+    });
   }, [activeField, imgLayout]);
 
   return (
@@ -611,6 +637,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
           spellCheck={false}
           aria-label="Прямой ввод с клавиатуры на экран агента"
           onBlur={flushTypedBuffer}
+          onBeforeInput={handleScreenBeforeInput}
           onKeyDown={handleScreenKeyDown}
           onChange={handleScreenInputChange}
           onPaste={handleScreenPaste}
@@ -633,7 +660,7 @@ export function ComputerUseApp({ initialGoal, initialUrl }: { initialGoal?: stri
               alt="Текущий экран, которым управляет агент"
               onClick={handleScreenClick}
               draggable={false}
-              className="w-full cursor-text rounded-lg border border-white/10"
+              className="aspect-[8/5] w-full cursor-text rounded-lg border border-white/10 object-contain"
             />
             {screenBusy && (
               <div className="absolute right-2 top-2 h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />

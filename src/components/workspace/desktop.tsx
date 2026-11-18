@@ -83,12 +83,17 @@ export function Desktop() {
   const openWindow = useWorkspaceStore((s) => s.openWindow);
   const windows = useWorkspaceStore((s) => s.windows);
   // Прогрев дорогой только на холодной песочнице. Начинаем его при явном
-  // намерении открыть внешний сервис (наведение / фокус), но не для каждого
-  // посетителя рабочего стола. На клик браузер уже часто успевает подняться.
+  // намерении открыть внешний сервис (наведение / фокус), синхронизируя окно
+  // с AppShell через общий sessionStorage-ключ.
   const warmupStarted = useRef(false);
   const warmBrowser = useCallback(() => {
     if (warmupStarted.current) return;
     warmupStarted.current = true;
+    try {
+      const last = Number(sessionStorage.getItem('mekty:browser-warmup') ?? 0);
+      if (Date.now() - last < 9.5 * 60_000) return;
+      sessionStorage.setItem('mekty:browser-warmup', String(Date.now()));
+    } catch { /* ignore */ }
     void fetch('/api/health/browser-keepalive', { cache: 'no-store' }).catch(() => {
       // Основной экран браузера покажет понятную причину, если среда недоступна.
     });

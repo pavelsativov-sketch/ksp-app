@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,13 +9,12 @@ import {
   BarChart3, ClipboardList, UserRound, Users, Target, SquarePen,
 } from "lucide-react";
 import { AgentComposer } from "@/components/agents/agent-composer";
-import { clearActiveAgentTask, setActiveAgentTask, useActiveAgentTask } from "@/components/agents/agent-dock";
+import { clearActiveAgentTask, fetchTasksShared, setActiveAgentTask, useActiveAgentTask } from "@/components/agents/agent-dock";
 import { AgentSession, StatusDot, type AgentStatus } from "@/components/agents/agent-session";
 import { CodeEditorApp } from "@/components/workspace/apps/code-editor";
 import { PermissionCard } from "@/components/agents/permission-card";
 import { useOsShellStore, type OsTab } from "@/lib/store/os-shell";
 import { useWorkspaceStore } from "@/lib/store/workspace";
-import { ThreeStage } from "@/components/three/three-stage";
 import { BrowserApp } from "@/components/workspace/apps/browser";
 import { FileManagerApp } from "@/components/workspace/apps/file-manager";
 import { TerminalApp } from "@/components/workspace/apps/terminal";
@@ -53,6 +52,69 @@ const EXTRA_TABS: TabDef[] = [
   { id: "log", label: "Журнал задачи", icon: ScrollText },
 ];
 
+const TaskElapsedBadge = memo(function TaskElapsedBadge({
+  taskId,
+  active,
+  initialStartedAt,
+}: {
+  taskId: string;
+  active: boolean;
+  initialStartedAt?: number;
+}) {
+  const [elapsed, setElapsed] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    let alive = true;
+    let iv: ReturnType<typeof setInterval> | undefined;
+
+    const startTimer = (startedMs: number) => {
+      const fmt = (ms: number) => {
+        const s = Math.max(0, Math.floor(ms / 1000));
+        return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+      };
+      setElapsed(fmt(Date.now() - startedMs));
+      iv = setInterval(() => {
+        if (alive) setElapsed(fmt(Date.now() - startedMs));
+      }, 1000);
+    };
+
+    if (initialStartedAt && Number.isFinite(initialStartedAt)) {
+      const kick = setTimeout(() => {
+        if (alive) startTimer(initialStartedAt);
+      }, 0);
+      return () => {
+        alive = false;
+        clearTimeout(kick);
+        if (iv) clearInterval(iv);
+      };
+    }
+
+    void fetchTasksShared(1500)
+      .then((data) => {
+        if (!alive) return;
+        const found = data?.tasks?.find((t) => t.id === taskId);
+        if (!found?.createdAt) return;
+        const parsed = new Date(found.createdAt).getTime();
+        if (Number.isFinite(parsed)) startTimer(parsed);
+      })
+      .catch(() => { /* таймер некритичен */ });
+
+    return () => {
+      alive = false;
+      if (iv) clearInterval(iv);
+    };
+  }, [taskId, active, initialStartedAt]);
+
+  if (!active || !elapsed) return null;
+  return (
+    <span className="hidden items-center gap-1.5 px-2 text-xs font-semibold tabular-nums text-muted-foreground md:inline-flex">
+      <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+      Работает {elapsed}
+    </span>
+  );
+});
+
 /**
  * Рабочая область как в референсе: слева чат с агентом (пузырь запроса,
  * план-чеклист, прогресс, отмена задачи), справа — рабочий стол с вкладками
@@ -74,49 +136,95 @@ export function SchoolWorkspace({
   const task = useActiveAgentTask();
   const tab = useOsShellStore((s) => s.tab);
   const setTab = useOsShellStore((s) => s.setTab);
-  const [extraTabs, setExtraTabs] = useState<OsTab[]>([]);
+  const [extraTabs, setExtraTabs] = useState<OsTab[]>(() => (
+    EXTRA_TABS.some((t) => t.id === initialTab) ? [initialTab] : []
+  ));
+  const [visitedTabs, setVisitedTabs] = useState<OsTab[]>(() => [initialTab]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [starting, setStarting] = useState(false);
   const [status, setStatus] = useState<AgentStatus>("completed");
-  const [elapsed, setElapsed] = useState<string | null>(null);
   const [control, setControlState] = useState<"user" | "ai">("user");
   const [controlLoaded, setControlLoaded] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [editorFile, setEditorFile] = useState<string | null>(null);
   const [browserUrl, setBrowserUrl] = useState<string | undefined>(initialUrl);
   const [notice, setNotice] = useState<string | null>(null);
+  const menuBoxRef = useRef<HTMLDivElement>(null);
 
-  // Прогревать браузер здесь было незачем: действие "warmup" роут отклонял
-  // как неизвестное (400), но успевал запустить персональную песочницу —
-  // то есть платили за холодный старт все, кто открыл /school, даже не
-  // открывая вкладку «Браузер». Прогрев делает сам BrowserApp при монтировании.
+  const activateTab = useCallback((next: OsTab) => {
+    setVisitedTabs((prev) => (prev.includes(next) ? prev : [...prev, next]));
+    if (EXTRA_TABS.some((t) => t.id === next)) {
+      setExtraTabs((prev) => (prev.includes(next) ? prev : [...prev, next]));
+    }
+    setTab(next);
+  }, [setTab]);
+
+  const running = Boolean(task) && status === "running";
 
   // «В редактор» из файл-менеджера: в двухпанельной раскладке редактор — это
-  // вкладка, а не окно, поэтому переключаем вкладку. Реагируем на хранилище
-  // рабочей области, а не на событие window: событие слушал только этот
-  // компонент, и на полноэкранной странице кнопка «В редактор» не работала.
+  // вкладка, а не окно, поэтому переключаем вкладку по изменению editorOpenSeq
+  // даже если пользователь повторно нажал на тот же файл.
   useEffect(() => {
     return useWorkspaceStore.subscribe((state, prev) => {
       const now = state.windows.find((w) => w.type === "code-editor")?.file;
       const before = prev.windows.find((w) => w.type === "code-editor")?.file;
-      if (now && now !== before) {
+      if (now && (now !== before || state.editorOpenSeq !== prev.editorOpenSeq)) {
         setEditorFile(now);
-        setTab("editor");
+        activateTab("editor");
+        setMobileWorkspaceOpen(true);
       }
     });
-  }, [setTab]);
+  }, [activateTab]);
 
-  // Владелец управления: опрос + локальное применение кнопок.
+  // Переключение вкладки из компактного лога / чата агента с поддержкой мобильного экрана.
   useEffect(() => {
+    const onOpenTab = (ev: Event) => {
+      const next = (ev as CustomEvent<{ tab?: OsTab }>).detail?.tab;
+      if (!next) return;
+      activateTab(next);
+      setMobileWorkspaceOpen(true);
+    };
+    window.addEventListener("mekty:open-workspace-tab", onOpenTab);
+    return () => window.removeEventListener("mekty:open-workspace-tab", onOpenTab);
+  }, [activateTab]);
+
+  // Закрытие меню «Ещё» по клику снаружи и Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuBoxRef.current && !menuBoxRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  // Владелец управления: опрос идёт только пока задача активно работает.
+  useEffect(() => {
+    if (!running) return;
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+
     const poll = async () => {
-      if (document.hidden) { if (alive) timer = setTimeout(() => void poll(), 4000); return; }
+      if (!alive) return;
+      if (document.hidden) {
+        timer = setTimeout(() => void poll(), 4000);
+        return;
+      }
       try {
-        const res = await fetch("/api/agents/control", { cache: "no-store" });
+        const res = await fetch("/api/agents/control", { cache: "no-store", signal: controller.signal });
         if (res.ok && alive) {
           const data = (await res.json()) as { control?: "user" | "ai"; pendingCount?: number };
           if (data.control) setControlState(data.control);
@@ -126,9 +234,14 @@ export function SchoolWorkspace({
       } catch { /* некритично */ }
       if (alive) timer = setTimeout(() => void poll(), 4000);
     };
+
     void poll();
-    return () => { alive = false; if (timer) clearTimeout(timer); };
-  }, []);
+    return () => {
+      alive = false;
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [running]);
 
   const setControl = async (mode: "user" | "ai") => {
     setNotice(null);
@@ -139,39 +252,20 @@ export function SchoolWorkspace({
     } catch { setNotice("Не удалось изменить режим управления. Проверьте соединение."); }
   };
 
-  // Таймер «Работает MM:SS» — от createdAt активной задачи (история задач).
-  useEffect(() => {
-    if (!task) return;
-    let alive = true;
-    void (async () => {
-      try {
-        const res = await fetch("/api/agents/task", { cache: "no-store" });
-        if (!res.ok || !alive) return;
-        const data = (await res.json()) as { tasks?: { id: string; createdAt: string }[] };
-        const found = data.tasks?.find((t) => t.id === task.id);
-        if (!alive || !found) return;
-        const started = new Date(found.createdAt).getTime();
-        const fmt = (ms: number) => {
-          const s = Math.max(0, Math.floor(ms / 1000));
-          return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-        };
-        setElapsed(fmt(Date.now() - started));
-        const iv = setInterval(() => {
-          if (!alive) { clearInterval(iv); return; }
-          setElapsed(fmt(Date.now() - started));
-        }, 1000);
-      } catch { /* таймер некритичен */ }
-    })();
-    return () => { alive = false; };
-  }, [task]);
+  const appliedInitialTabRef = useRef<OsTab | null>(null);
+  const appliedComputerUseRef = useRef(false);
 
-  // Deep-link `?os=files` или `?os=computer-use` из серверной страницы
+  // Deep-link `?os=files` или `?os=computer-use` из серверной страницы —
+  // применяем ровно один раз при входе/смене query, чтобы перерендер не сбрасывал выбранную вкладку.
   useEffect(() => {
-    if (initialTab) setTab(initialTab);
-    if (openComputerUse) {
-      // «Работа с компьютером» живёт в окне рабочего стола: он открыт на отдельной странице.
+    if (initialTab && appliedInitialTabRef.current !== initialTab) {
+      appliedInitialTabRef.current = initialTab;
+      setTab(initialTab);
+    }
+    if (openComputerUse && !appliedComputerUseRef.current) {
+      appliedComputerUseRef.current = true;
       useWorkspaceStore.getState().openWindow("computer-use", "Работа с компьютером", "computer-use");
-      router.push("/school/workspace");
+      router.push("/school/workspace?os=computer-use");
     }
   }, [initialTab, openComputerUse, router, setTab]);
 
@@ -208,9 +302,8 @@ export function SchoolWorkspace({
     finally { setStarting(false); }
   }
 
-  const running = Boolean(task) && status === "running";
-
   const idle = tab === "os";
+  const isMounted = (id: OsTab) => tab === id || visitedTabs.includes(id);
 
   return (
     <div className="flex h-full min-h-0 gap-3 p-3 pl-0">
@@ -267,7 +360,7 @@ export function SchoolWorkspace({
                   onStatus={setStatus}
                   onBrowserActivity={({ requiresUserAction, reason }) => {
                     // Адрес не передаём: страницу уже открыл агент, вкладка только смотрит.
-                    setTab("browser");
+                    activateTab("browser");
                     if (requiresUserAction) {
                       setControlState("user");
                       setMobileWorkspaceOpen(true);
@@ -323,7 +416,7 @@ export function SchoolWorkspace({
                 aria-selected={tab === id}
                 aria-label={label}
                 title={label}
-                onClick={() => setTab(id)}
+                onClick={() => activateTab(id)}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${tab === id ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
               >
                 <Icon className="size-4" /> <span>{label}</span>
@@ -331,7 +424,7 @@ export function SchoolWorkspace({
             ))}
           </div>
 
-          <div className="relative">
+          <div ref={menuBoxRef} className="relative">
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
@@ -347,7 +440,7 @@ export function SchoolWorkspace({
                   <button
                     key={id}
                     type="button"
-                    onClick={() => { setExtraTabs((prev) => (prev.includes(id) ? prev : [...prev, id])); setTab(id); setMenuOpen(false); }}
+                    onClick={() => { activateTab(id); setMenuOpen(false); }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                   >
                     <Icon className="size-4 text-muted-foreground" /> {label}
@@ -377,19 +470,33 @@ export function SchoolWorkspace({
                   onClick={() => {
                     setMenuOpen(false);
                     void (async () => {
-                      const res = await fetch("/api/agents/snapshots");
-                      const data = (await res.json()) as { snapshots?: { id: string }[] };
-                      const last = data.snapshots?.[0];
-                      if (!last) { setNotice("Снимков пока нет"); return; }
-                      await fetch("/api/agents/snapshots", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: last.id }) });
-                      setNotice("Рабочая область восстановлена из снимка");
+                      try {
+                        const res = await fetch("/api/agents/snapshots");
+                        const data = (await res.json()) as { snapshots?: { id: string }[]; error?: string };
+                        if (!res.ok) throw new Error(data.error ?? "Не удалось получить список снимков");
+                        const last = data.snapshots?.[0];
+                        if (!last) { setNotice("Снимков пока нет"); return; }
+                        const putRes = await fetch("/api/agents/snapshots", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: last.id }),
+                        });
+                        const putData = (await putRes.json().catch(() => ({}))) as { error?: string };
+                        if (!putRes.ok) throw new Error(putData.error ?? "Не удалось восстановить снимок");
+                        setNotice("Рабочая область восстановлена из снимка");
+                        if (typeof window !== "undefined") {
+                          window.dispatchEvent(new Event("mekty:workspace-files-changed"));
+                        }
+                      } catch (error) {
+                        setNotice(error instanceof Error ? error.message : "Не удалось восстановить снимок");
+                      }
                     })();
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                 >
                   <Undo2 className="size-4 text-muted-foreground" /> Восстановить последний снимок
                 </button>
-                <Link href="/school/workspace" onClick={() => setMenuOpen(false)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted">
+                <Link href="/school/workspace?mode=desktop" onClick={() => setMenuOpen(false)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted">
                   <LayoutGrid className="size-4 text-muted-foreground" /> Рабочий стол на весь экран
                 </Link>
               </div>
@@ -398,7 +505,7 @@ export function SchoolWorkspace({
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {notice && <span className="hidden max-w-[320px] truncate px-2 text-xs text-muted-foreground xl:inline" title={notice}>{notice}</span>}
-            {running && elapsed && <span className="hidden items-center gap-1.5 px-2 text-xs font-semibold tabular-nums text-muted-foreground md:inline-flex"><span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />Работает {elapsed}</span>}
+            {task && <TaskElapsedBadge taskId={task.id} active={running} initialStartedAt={task.startedAt} />}
             <button type="button" onClick={() => setMobileWorkspaceOpen(false)} className="rounded-lg px-2 py-1 text-xs font-semibold hover:bg-muted lg:hidden">Чат агента</button>
             {task?.prompt && (
               <button type="button" onClick={() => void startLast()} disabled={starting || running} title="Повторить последнюю задачу агента" className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft disabled:opacity-40">
@@ -424,7 +531,18 @@ export function SchoolWorkspace({
         <div className="relative flex min-h-0 flex-1 flex-col">
           {idle && (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-y-auto bg-gradient-to-br from-primary-soft/60 via-surface to-cyan-soft/40 p-6 text-center">
-              <div className="size-56 shrink-0"><ThreeStage scene="robot" className="block size-full" /></div>
+              <div className="flex size-36 shrink-0 items-center justify-center rounded-3xl border border-primary/15 bg-surface/80 shadow-card" aria-hidden>
+                <svg viewBox="0 0 120 120" className="size-24 text-primary" fill="none">
+                  <rect x="24" y="34" width="72" height="54" rx="18" className="fill-primary/10 stroke-current" strokeWidth="3.5" />
+                  <line x1="60" y1="18" x2="60" y2="34" className="stroke-current" strokeWidth="3.5" strokeLinecap="round" />
+                  <circle cx="60" cy="15" r="5" className="fill-emerald-400 stroke-current" strokeWidth="2.5" />
+                  <circle cx="45" cy="57" r="6" className="fill-current" />
+                  <circle cx="75" cy="57" r="6" className="fill-current" />
+                  <path d="M46 73C51 78 69 78 74 73" className="stroke-current" strokeWidth="3.5" strokeLinecap="round" />
+                  <rect x="14" y="50" width="10" height="22" rx="5" className="fill-primary/20 stroke-current" strokeWidth="3" />
+                  <rect x="96" y="50" width="10" height="22" rx="5" className="fill-primary/20 stroke-current" strokeWidth="3" />
+                </svg>
+              </div>
               <h2 className="text-2xl font-extrabold tracking-tight">{task && running ? "Агент работает" : "Рабочее место агента"}</h2>
               <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
                 {task && running
@@ -432,23 +550,42 @@ export function SchoolWorkspace({
                   : "Дайте задачу слева. Агент откроет браузер прямо здесь, и вы увидите каждое действие. Управление можно забрать в любой момент."}
               </p>
               <div className="flex flex-wrap justify-center gap-2">
-                <button type="button" onClick={() => { setBrowserUrl(BILIMCLASS_URL); setTab("browser"); }} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-button transition-transform hover:-translate-y-0.5 hover:bg-primary-hover">
+                <button type="button" onClick={() => { setBrowserUrl(BILIMCLASS_URL); activateTab("browser"); }} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-button transition-transform hover:-translate-y-0.5 hover:bg-primary-hover">
                   <Globe className="size-4" /> Открыть BilimClass
                 </button>
-                <button type="button" onClick={() => setTab("files")} className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-bold transition-transform hover:-translate-y-0.5">
+                <button type="button" onClick={() => activateTab("files")} className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-bold transition-transform hover:-translate-y-0.5">
                   <FolderOpen className="size-4" /> Мои файлы
                 </button>
+                <Link href="/school/workspace?mode=desktop" className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-bold transition-transform hover:-translate-y-0.5">
+                  <LayoutGrid className="size-4" /> Рабочий стол ОС
+                </Link>
               </div>
             </div>
           )}
-          {tab === "browser" && <BrowserApp initialUrl={browserUrl} watchOnly={running} />}
-          {tab === "files" && <FileManagerApp />}
-          {tab === "terminal" && <TerminalApp />}
-          {tab === "editor" && <CodeEditorApp requestedFile={editorFile} />}
+          {isMounted("browser") && (
+            <div className={tab === "browser" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+              <BrowserApp initialUrl={browserUrl} watchOnly={running} active={tab === "browser"} />
+            </div>
+          )}
+          {isMounted("files") && (
+            <div className={tab === "files" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+              <FileManagerApp />
+            </div>
+          )}
+          {isMounted("terminal") && (
+            <div className={tab === "terminal" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+              <TerminalApp />
+            </div>
+          )}
+          {isMounted("editor") && (
+            <div className={tab === "editor" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+              <CodeEditorApp requestedFile={editorFile} />
+            </div>
+          )}
           {tab === "log" && (
             task ? (
               <div className="flex h-full flex-col overflow-y-auto">
-                <AgentSession taskId={task.id} onStatus={setStatus} />
+                <AgentSession taskId={task.id} variant="compact" onStatus={setStatus} />
               </div>
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">

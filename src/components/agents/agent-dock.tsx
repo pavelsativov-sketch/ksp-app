@@ -8,10 +8,71 @@ import type { AgentRuntimeMode } from "@/lib/agents/runtime-mode";
 
 const KEY = "mekty:agent-task";
 
-interface ActiveTask { id: string; title: string; prompt?: string }
+export interface ActiveTask {
+  id: string;
+  title: string;
+  prompt?: string;
+  startedAt?: number;
+}
+
+export interface SharedTaskSummary {
+  id: string;
+  title?: string;
+  prompt?: string;
+  status: string;
+  result?: string | null;
+  error?: string | null;
+  createdAt: string;
+}
 
 let cache: ActiveTask | null = null;
 let cacheRaw: string | null = null;
+
+let lastFetchFn: unknown = null;
+let tasksInFlight: Promise<{ tasks?: SharedTaskSummary[] } | null> | null = null;
+let tasksCache: { data: { tasks?: SharedTaskSummary[] }; at: number } | null = null;
+const verifiedTaskIds = new Set<string>();
+
+function resetIfFetchChanged() {
+  if (typeof fetch !== "undefined" && lastFetchFn !== fetch) {
+    lastFetchFn = fetch;
+    tasksInFlight = null;
+    tasksCache = null;
+    verifiedTaskIds.clear();
+  }
+}
+
+export function invalidateSharedTasksCache(): void {
+  tasksInFlight = null;
+  tasksCache = null;
+}
+
+/**
+ * Дедуплицированный запрос списка задач: параллельные вызовы из нескольких
+ * компонентов делят один HTTP-запрос и короткий кэш, не перегружая БД.
+ */
+export async function fetchTasksShared(maxAgeMs = 1500): Promise<{ tasks?: SharedTaskSummary[] } | null> {
+  resetIfFetchChanged();
+  if (tasksCache && Date.now() - tasksCache.at < maxAgeMs) {
+    return tasksCache.data;
+  }
+  if (tasksInFlight) return tasksInFlight;
+
+  const pending = fetch("/api/agents/task", { cache: "no-store" })
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const data = (await response.json()) as { tasks?: SharedTaskSummary[] };
+      tasksCache = { data, at: Date.now() };
+      return data;
+    })
+    .catch(() => null)
+    .finally(() => {
+      if (tasksInFlight === pending) tasksInFlight = null;
+    });
+
+  tasksInFlight = pending;
+  return pending;
+}
 
 function read(): ActiveTask | null {
   try {
@@ -43,25 +104,22 @@ export function useActiveAgentTask(): ActiveTask | null {
 
   // localStorage принадлежит браузерному профилю, а не аккаунту Mekty. После
   // выхода и входа под другим пользователем там может остаться чужая задача.
-  // Сверяем id с серверным списком задач текущего пользователя, чтобы старая
-  // запись не показывала ложный прогресс и не блокировала запуск агента.
+  // Сверяем id с серверным списком один раз на taskId (через общий кэш).
   useEffect(() => {
     if (!taskId) return;
+    resetIfFetchChanged();
+    if (verifiedTaskIds.has(taskId)) return;
     let active = true;
 
-    void fetch("/api/agents/task", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) return null;
-        return response.json() as Promise<{ tasks?: Array<{ id?: string }> }>;
-      })
-      .then((data) => {
-        if (!active || !data) return;
-        if (!data.tasks?.some((candidate) => candidate.id === taskId)) {
-          clearActiveAgentTask();
-        }
-      })
-      // A transient network error must not hide an active task.
-      .catch(() => {});
+    void fetchTasksShared(1500).then((data) => {
+      if (!active || !data) return;
+      if (!data.tasks?.some((candidate) => candidate.id === taskId)) {
+        verifiedTaskIds.delete(taskId);
+        clearActiveAgentTask();
+      } else {
+        verifiedTaskIds.add(taskId);
+      }
+    });
 
     return () => { active = false; };
   }, [taskId]);
@@ -75,18 +133,24 @@ export function useActiveAgentTask(): ActiveTask | null {
  * в панели ОС может повторить последнюю задачу.
  */
 export function setActiveAgentTask(id: string, title: string, prompt?: string): void {
+  const entry: ActiveTask = { id, title, prompt, startedAt: Date.now() };
   try {
-    const raw = JSON.stringify({ id, title, prompt });
+    const raw = JSON.stringify(entry);
     window.localStorage.setItem(KEY, raw);
-    cache = JSON.parse(raw) as ActiveTask;
+    cache = entry;
     cacheRaw = raw;
   } catch { /* приватный режим — док просто не появится */ }
+  verifiedTaskIds.add(id);
+  invalidateSharedTasksCache();
   window.dispatchEvent(new Event("mekty:agent-task"));
 }
 
 export function clearActiveAgentTask(): void {
   try { window.localStorage.removeItem(KEY); } catch { /* ignore */ }
-  cache = null; cacheRaw = null;
+  cache = null;
+  cacheRaw = null;
+  verifiedTaskIds.clear();
+  invalidateSharedTasksCache();
   window.dispatchEvent(new Event("mekty:agent-task"));
 }
 
@@ -139,7 +203,7 @@ export function AgentDock() {
             <X className="size-4" />
           </button>
         </header>
-        <AgentSession taskId={task.id} onStatus={setStatus} />
+        <AgentSession taskId={task.id} variant="compact" onStatus={setStatus} />
       </section>
     </>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useActiveAgentTask } from "./agent-dock";
+import { fetchTasksShared, useActiveAgentTask } from "./agent-dock";
 
 export type ActiveTaskStatus = "idle" | "queued" | "running" | "completed" | "failed" | "stopped";
 
@@ -17,6 +17,10 @@ function normalize(raw: string | undefined): ActiveTaskStatus {
   return (raw && API_STATUS[raw]) || "running";
 }
 
+function isTerminalStatus(s: ActiveTaskStatus): boolean {
+  return s === "completed" || s === "failed" || s === "stopped" || s === "idle";
+}
+
 function formatHms(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
@@ -26,10 +30,8 @@ function formatHms(totalSeconds: number): string {
 
 /**
  * Статус активной задачи агента для статус-бара и кнопок «Запустить» /
- * «Остановить»: опрашивает список задач пользователя, пока задача жива.
- *
- * Внутри чата тот же статус приходит по SSE (AgentSession) — здесь нужен
- * независимый источник для элементов вне чата.
+ * «Остановить»: опрашивает список задач пользователя, пока задача жива,
+ * и сразу прекращает опрос при терминальном статусе.
  */
 export function useActiveTaskStatus(): {
   status: ActiveTaskStatus;
@@ -44,28 +46,37 @@ export function useActiveTaskStatus(): {
   useEffect(() => {
     if (!task) return;
     let alive = true;
+    let inFlight = false;
+    let poll: ReturnType<typeof setInterval> | undefined;
 
     const read = async () => {
+      if (inFlight) return;
       if (typeof document !== "undefined" && document.hidden) return;
+      inFlight = true;
       try {
-        const res = await fetch("/api/agents/task", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { tasks?: { id: string; status: string; createdAt: string }[] };
-        const found = data.tasks?.find((t) => t.id === task.id);
+        const data = await fetchTasksShared(1500);
+        const found = data?.tasks?.find((t) => t.id === task.id);
         if (!alive || !found) return;
-        setStatus(normalize(found.status));
+        const nextStatus = normalize(found.status);
+        setStatus(nextStatus);
         setStartedAt(new Date(found.createdAt).getTime());
         setNow(Date.now());
+        if (isTerminalStatus(nextStatus) && poll) {
+          clearInterval(poll);
+          poll = undefined;
+        }
       } catch {
         // статус не критичен: оставляем предыдущее значение
+      } finally {
+        inFlight = false;
       }
     };
 
     void read();
-    const poll = setInterval(() => void read(), 3000);
+    poll = setInterval(() => void read(), 3000);
     return () => {
       alive = false;
-      clearInterval(poll);
+      if (poll) clearInterval(poll);
     };
   }, [task]);
 
