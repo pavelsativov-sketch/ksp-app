@@ -9,6 +9,8 @@ import {
   PersonalSchoolDashboard,
 } from "@/components/school/personal-school-views";
 import type { TeacherJournalAnalytics } from "@/lib/journal";
+import { buildPresentonLessonContent } from "@/lib/materials/presenton";
+import { emptyKsp } from "@/lib/types/ksp";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -118,5 +120,31 @@ describe("Phase 3 audit fixes", () => {
 
     render(<PersonalAttendanceView data={sampleAnalytics} />);
     expect(screen.getAllByText("75%").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("formats lesson content for Presenton AI deck generation", () => {
+    const content = emptyKsp();
+    content.topic = "Обыкновенные дроби";
+    content.lessonObjectives = ["Складывать дроби с одинаковыми знаменателями"];
+    const prompt = buildPresentonLessonContent(
+      {
+        id: "66f000000000000000000001",
+        owner_id: "u1",
+        title: "Обыкновенные дроби",
+        subject_id: null,
+        grade: 5,
+        quarter: 2,
+        section: "Дроби",
+        language: "ru",
+        visibility: "private",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        content,
+      },
+      "Математика",
+    );
+    expect(prompt).toContain("Обыкновенные дроби");
+    expect(prompt).toContain("Математика, 5 класс");
+    expect(prompt).toContain("Складывать дроби");
   });
 });

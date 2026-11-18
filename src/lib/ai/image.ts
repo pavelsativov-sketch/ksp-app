@@ -177,8 +177,11 @@ export async function generateImage(
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const openaiKeys = parseApiKeys(process.env.OPENAI_API_KEY);
+  const pollinationsEnabled = process.env.POLLINATIONS_ENABLED === "1";
 
-  const configured = Boolean(geminiKeys.length || (accountId && token) || openaiKeys.length);
+  const configured = Boolean(
+    geminiKeys.length || (accountId && token) || openaiKeys.length || pollinationsEnabled,
+  );
   if (!configured) {
     throw new Error(
       "Не настроены ключи для генерации изображений (GEMINI_API_KEY, OPENAI_API_KEY или CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN)",
@@ -231,10 +234,16 @@ export async function generateImage(
     if (result) return result;
   }
 
-  // 4. DALL-E 3 — последний резерв.
+  // 4. DALL-E 3 — резерв OpenAI.
   for (const [idx, oKey] of openaiKeys.entries()) {
     const label = openaiKeys.length > 1 ? `DALL-E 3 #${idx + 1}` : "DALL-E 3";
     const result = await attempt(label, () => generateWithDallE(input, oKey));
+    if (result) return result;
+  }
+
+  // 5. Pollinations Flux — бесплатный резерв без API-ключа (когда дневные 10 000 нейронов Cloudflare исчерпаны).
+  if (pollinationsEnabled) {
+    const result = await attempt("Pollinations Flux", () => generateWithPollinations(input));
     if (result) return result;
   }
 
@@ -517,6 +526,37 @@ async function generateWithDallE(
     mimeType: "image/png",
     provider: "OpenAI",
     model: "dall-e-3",
+  };
+}
+
+// ── Pollinations Flux (бесплатный резерв без ключа) ─────────────
+
+async function generateWithPollinations(
+  input: GenerateImageInput,
+): Promise<GenerateImageResult> {
+  const concisePrompt = [
+    "Colorful educational flat vector illustration for school students, pure visual scene without any text, letters, or numbers:",
+    input.prompt.slice(0, 350),
+  ].join(" ");
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(concisePrompt)}?width=896&height=576&nologo=true&model=flux`;
+  const response = await fetch(url, {
+    method: "GET",
+    signal: AbortSignal.timeout(28_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Pollinations error ${response.status}`);
+  }
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  const buf = Buffer.from(await response.arrayBuffer());
+  const base64 = buf.toString("base64");
+  if (!validateImageQuality(base64)) {
+    throw new Error("Pollinations вернул некорректное изображение");
+  }
+  return {
+    base64,
+    mimeType: contentType.includes("png") ? "image/png" : "image/jpeg",
+    provider: "Pollinations",
+    model: "flux",
   };
 }
 

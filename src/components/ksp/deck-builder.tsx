@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Check, Loader2, Plus, Presentation, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DECK_PALETTES, DECK_THEMES, SLIDE_FIELDS, SLIDE_KINDS, SLIDE_KIND_LABELS, descriptorPoints, parseBranch, splitThesis, type DeckSlide, type DeckTheme, type SlideKind } from "@/lib/materials/deck-types";
+import { PRESENTON_TEMPLATES, PRESENTON_TEMPLATE_LABELS, type PresentonTemplateId } from "@/lib/materials/presenton";
 import { fetchPlanMaterial, savePlanMaterialClient } from "@/lib/materials/plan-material-client";
 import { MathText } from "@/lib/math/render-math";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
@@ -170,6 +171,9 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
   const [selected, setSelected] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [presentonBusy, setPresentonBusy] = useState(false);
+  const [presentonTemplate, setPresentonTemplate] = useState<PresentonTemplateId>("modern");
+  const [presentonSlides, setPresentonSlides] = useState(8);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [newKind, setNewKind] = useState<SlideKind>("list");
@@ -265,6 +269,50 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
     }
   }
 
+  async function buildWithPresenton() {
+    setPresentonBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch("/api/materials/presenton", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId,
+          template: presentonTemplate,
+          slideCount: slides.length > 0 ? Math.min(12, Math.max(4, slides.length)) : presentonSlides,
+          ...(slides.length > 0 ? { slides: slides.map(clean) } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const errData = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errData.error ?? "Не удалось сгенерировать презентацию");
+      }
+      const engine = res.headers.get("X-Deck-Engine");
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Презентация AI - ${topic}.pptx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMessage(
+        engine === "presenton-v3"
+          ? isKk
+            ? "Дизайнерлік .pptx презентациясы жүктелді (Presenton AI)."
+            : "Дизайнерская презентация .pptx успешно создана и скачана (Presenton AI)!"
+          : isKk
+            ? "Презентация .pptx жүктелді."
+            : "Презентация .pptx скачана.",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setPresentonBusy(false);
+    }
+  }
+
   const current = slides[Math.min(selected, slides.length - 1)];
 
   function patch(change: Partial<DeckSlide>) {
@@ -330,19 +378,85 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
                 : "Файл с картинками, переходами и появлением элементов."}
             </div>
           </div>
-          <Button onClick={analyze} disabled={analyzing}>
-            {analyzing ? (
-              <>
-                <Loader2 className="animate-spin" />{" "}
-                {isKk ? "Жоспар талдануда…" : "Разбираем план…"}
-              </>
-            ) : (
-              <>
-                <Sparkles />{" "}
-                {isKk ? "ҚМЖ негізінде слайдтар ұсыну" : "Разобрать план и предложить слайды"}
-              </>
-            )}
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={analyze} disabled={analyzing || presentonBusy}>
+              {analyzing ? (
+                <>
+                  <Loader2 className="animate-spin" />{" "}
+                  {isKk ? "Жоспар талдануда…" : "Разбираем план…"}
+                </>
+              ) : (
+                <>
+                  <Sparkles />{" "}
+                  {isKk ? "ҚМЖ негізінде слайдтар ұсыну (Конструктор)" : "Разобрать план и править слайды вручную"}
+                </>
+              )}
+            </Button>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-primary/25 bg-primary/5 p-4 text-left text-sm">
+            <div className="font-semibold">
+              {isKk
+                ? "✨ Немесе дайын дизайнерлік .pptx презентациясын 1 батырмамен жасау (Presenton AI)"
+                : "✨ Или скачайте готовую дизайнерскую презентацию .pptx в 1 клик (Presenton AI)"}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {isKk
+                ? "ЖИ сабақ жоспары бойынша иллюстрациялары мен заманауи версткасы бар толық өңделетін PowerPoint файлын жинайды."
+                : "ИИ оформит цели, этапы урока и задания в современном дизайнерском шаблоне с иллюстрациями (редактируемый PowerPoint)."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="grid gap-1 text-xs font-medium">
+                {isKk ? "Дизайн үлгісі" : "Шаблон дизайна"}
+                <select
+                  value={presentonTemplate}
+                  onChange={(e) => setPresentonTemplate(e.target.value as PresentonTemplateId)}
+                  disabled={presentonBusy}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  {PRESENTON_TEMPLATES.map((tpl) => (
+                    <option key={tpl} value={tpl}>
+                      {PRESENTON_TEMPLATE_LABELS[tpl][isKk ? "kk" : "ru"]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs font-medium">
+                {isKk ? "Слайдтар саны" : "Слайдов"}
+                <select
+                  value={presentonSlides}
+                  onChange={(e) => setPresentonSlides(Number(e.target.value))}
+                  disabled={presentonBusy}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  {[6, 8, 10, 12].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void buildWithPresenton()}
+                disabled={presentonBusy || analyzing}
+              >
+                {presentonBusy ? (
+                  <>
+                    <Loader2 className="animate-spin" />{" "}
+                    {isKk ? "Дизайн жасалуда (~20 с)…" : "Создаём дизайн (~20 с)…"}
+                  </>
+                ) : (
+                  <>
+                    <Presentation />{" "}
+                    {isKk ? "Дизайнерлік .pptx жүктеу" : "Скачать дизайнерский .pptx (AI)"}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          {message && <p role="status" className={s.note}>{message}</p>}
           {error && <p role="alert" className={s.error}>{error}</p>}
         </section>
       ) : (
@@ -371,8 +485,11 @@ export function DeckBuilder({ planId, topic }: { planId: string; topic: string }
                 )}
               </span>
             )}
-            <Button variant="outline" onClick={analyze} disabled={analyzing || building}>{analyzing ? <Loader2 className="animate-spin" /> : <Sparkles />} {isKk ? "Жоспардан қайта жинау" : "Заново из плана"}</Button>
-            <Button onClick={build} disabled={building || analyzing}>{building ? <><Loader2 className="animate-spin" /> {isKk ? "Жиналуда…" : "Собираем…"}</> : <><Presentation /> {isKk ? "Презентацияны жүктеу (.pptx)" : "Создать презентацию"}</>}</Button>
+            <Button variant="outline" onClick={analyze} disabled={analyzing || building || presentonBusy}>{analyzing ? <Loader2 className="animate-spin" /> : <Sparkles />} {isKk ? "Жоспардан қайта жинау" : "Заново из плана"}</Button>
+            <Button variant="outline" onClick={() => void buildWithPresenton()} disabled={presentonBusy || building || analyzing}>
+              {presentonBusy ? <><Loader2 className="animate-spin" /> {isKk ? "AI дизайн…" : "AI-дизайн…"}</> : <><Sparkles /> {isKk ? "Presenton AI (.pptx)" : "Дизайн AI (.pptx)"}</>}
+            </Button>
+            <Button onClick={build} disabled={building || analyzing || presentonBusy}>{building ? <><Loader2 className="animate-spin" /> {isKk ? "Жиналуда…" : "Собираем…"}</> : <><Presentation /> {isKk ? "Презентацияны жүктеу (.pptx)" : "Создать презентацию"}</>}</Button>
           </div>
           {message && <p role="status" className={s.note}>{message}</p>}
           {error && <p role="alert" className={s.error}>{error}</p>}
