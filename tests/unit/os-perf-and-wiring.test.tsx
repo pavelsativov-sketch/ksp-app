@@ -152,8 +152,12 @@ describe("SchoolWorkspace & /school/workspace routing", () => {
     expect(useOsShellStore.getState().tab).toBe("editor");
   });
 
-  it("renders floating desktop OS by default and SchoolWorkspace split view for ?tab=browser", async () => {
-    const desktopEl = await WorkspacePage({ searchParams: Promise.resolve({}) });
+  it("renders SchoolWorkspace by default and floating desktop OS for ?mode=desktop or ?os=computer-use", async () => {
+    const defaultEl = await WorkspacePage({ searchParams: Promise.resolve({}) });
+    expect(defaultEl.type).toBe(SchoolWorkspace);
+    expect(defaultEl.props.initialTab).toBe("os");
+
+    const desktopEl = await WorkspacePage({ searchParams: Promise.resolve({ mode: "desktop" }) });
     expect(desktopEl.type).toBe(Workspace);
 
     const computerUseEl = await WorkspacePage({ searchParams: Promise.resolve({ os: "computer-use" }) });

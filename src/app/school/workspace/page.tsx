@@ -9,10 +9,10 @@ export const metadata = { title: "Рабочая область — Mekty" };
 
 /**
  * Рабочая область ОС:
- * - `?tab=browser&url=...` (например, из /school/connectors) открывает
- *   двухпанельную рабочую область на нужной вкладке;
- * - без `tab` или с `mode=desktop` / `os=computer-use` открывает полный
- *   плавающий рабочий стол ОС с окнами, панелью задач и «Работа с компьютером».
+ * - `?mode=desktop`, `?os=computer-use` или `?app=...` открывают полный
+ *   плавающий рабочий стол ОС с окнами, панелью задач и «Работа с компьютером»;
+ * - по умолчанию и с `?tab=...` / `?os=files` открывает двухпанельную
+ *   рабочую область со вкладками ОС и чатом агента.
  */
 export default async function WorkspacePage({
   searchParams,
@@ -23,35 +23,31 @@ export default async function WorkspacePage({
   if (!user) redirect("/login?next=/school/workspace");
 
   const sp = await searchParams;
-  const tabParam = sp.tab;
-  const wantsSplitTab =
-    typeof tabParam === "string" &&
-    tabParam.length > 0 &&
-    sp.mode !== "desktop" &&
-    sp.os !== "computer-use";
+  if (sp.mode === "desktop" || sp.os === "computer-use" || Boolean(sp.app)) {
+    return <Workspace initialApp={sp.os ?? sp.app} initialUrl={sp.url} />;
+  }
 
-  if (wantsSplitTab) {
-    const initialTab: OsTab =
-      tabParam === "files"
+  const rawTab = sp.tab ?? sp.os;
+  const initialTab: OsTab =
+    !rawTab
+      ? "os"
+      : rawTab === "files"
         ? "files"
-        : tabParam === "terminal"
+        : rawTab === "terminal"
           ? "terminal"
-          : tabParam === "editor"
+          : rawTab === "editor"
             ? "editor"
-            : tabParam === "log"
+            : rawTab === "log"
               ? "log"
-              : tabParam === "os"
+              : rawTab === "os"
                 ? "os"
                 : "browser";
 
-    return (
-      <SchoolWorkspace
-        sysInfo={await sysInfo()}
-        initialTab={initialTab}
-        initialUrl={sp.url}
-      />
-    );
-  }
-
-  return <Workspace initialApp={sp.os ?? sp.app} initialUrl={sp.url} />;
+  return (
+    <SchoolWorkspace
+      sysInfo={await sysInfo()}
+      initialTab={initialTab}
+      initialUrl={sp.url}
+    />
+  );
 }
