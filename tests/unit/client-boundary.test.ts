@@ -70,4 +70,46 @@ describe("клиентские хуки только в клиентских к�
     expect(/^\s*["']use client["']/.test("'use client'\n" + sample)).toBe(true);
     expect(/^\s*["']use client["']/.test(sample)).toBe(false);
   });
+
+  it("серверные страницы не вызывают методы констант, импортированных из 'use client' модулей", () => {
+    const clientFiles = new Set<string>();
+    for (const file of tsxFiles(SRC)) {
+      const source = readFileSync(file, "utf8");
+      if (/^\s*["']use client["']/.test(source)) {
+        const rel = file
+          .slice(SRC.length + 1)
+          .replace(/\\/g, "/")
+          .replace(/\.tsx$/, "");
+        clientFiles.add(`@/${rel}`);
+      }
+    }
+
+    const violations: string[] = [];
+    for (const file of tsxFiles(join(SRC, "app"))) {
+      const source = readFileSync(file, "utf8");
+      if (/^\s*["']use client["']/.test(source)) continue;
+
+      const importRe = /import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g;
+      let match: RegExpExecArray | null;
+      while ((match = importRe.exec(source)) !== null) {
+        const specifiers = match[1]!;
+        const mod = match[2]!;
+        if (!clientFiles.has(mod)) continue;
+        for (const raw of specifiers.split(",")) {
+          const trimmed = raw.trim();
+          if (!trimmed || trimmed.startsWith("type ")) continue;
+          const localName = trimmed.split(/\s+as\s+/).pop()!.trim();
+          // UPPER_SNAKE_CASE из 'use client' на сервере превращается в Client Reference Proxy (нет .includes/.map)
+          if (/^[A-Z][A-Z0-9_]+$/.test(localName)) {
+            violations.push(`${file.slice(process.cwd().length + 1)}: ${localName} from ${mod}`);
+          }
+        }
+      }
+    }
+
+    expect(
+      violations,
+      `Серверный компонент импортирует константу из 'use client' модуля (в рантайме RSC это Proxy без методов):\n${violations.join("\n")}`,
+    ).toEqual([]);
+  });
 });

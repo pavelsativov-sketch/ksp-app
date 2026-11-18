@@ -18,11 +18,7 @@ import {
   type AdminControlCenterExtras,
 } from "@/lib/admin/control-center";
 import { type AdminFeedbackRow } from "@/components/admin/feedback-inbox";
-import {
-  ADMIN_TABS,
-  AdminShell,
-  type AdminTabId,
-} from "@/components/admin/admin-shell";
+import { AdminShell, type AdminTabId } from "@/components/admin/admin-shell";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,9 +27,19 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+const VALID_ADMIN_TABS: readonly AdminTabId[] = [
+  "overview",
+  "inbox",
+  "users",
+  "billing",
+  "ai",
+  "content",
+  "audit",
+];
+
 function resolveInitialTab(params: AdminSearchParams): AdminTabId {
   const rawTab = typeof params.tab === "string" ? params.tab : "";
-  if ((ADMIN_TABS as readonly string[]).includes(rawTab)) {
+  if ((VALID_ADMIN_TABS as readonly string[]).includes(rawTab)) {
     return rawTab as AdminTabId;
   }
   if (typeof params.q === "string" && params.q.trim()) return "users";

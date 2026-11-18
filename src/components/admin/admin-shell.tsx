@@ -57,16 +57,6 @@ export type AdminTabId =
   | "content"
   | "audit";
 
-export const ADMIN_TABS: readonly AdminTabId[] = [
-  "overview",
-  "inbox",
-  "users",
-  "billing",
-  "ai",
-  "content",
-  "audit",
-] as const;
-
 type DashboardData = Awaited<ReturnType<typeof getAdminDashboard>>;
 
 interface AdminShellProps {
