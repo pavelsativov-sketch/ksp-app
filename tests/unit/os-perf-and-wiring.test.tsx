@@ -171,6 +171,19 @@ describe("SchoolWorkspace & /school/workspace routing", () => {
     expect(splitEl.props.initialTab).toBe("browser");
     expect(splitEl.props.initialUrl).toBe("https://example.com");
   });
+
+  it("marks fullscreen OS surfaces with data-os-fullscreen so AppShell header does not block pointer clicks", () => {
+    const ws = render(<Workspace />);
+    expect(ws.container.querySelector('[data-os-fullscreen="true"]')).toBeTruthy();
+    cleanup();
+
+    render(<SchoolWorkspace />);
+    const osRegion = screen.getByRole("region", { name: "Рабочая область ОС" });
+    expect(osRegion.getAttribute("data-os-fullscreen")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть ОС" }));
+    expect(osRegion.getAttribute("data-os-fullscreen")).toBe("true");
+  });
 });
 
 function TaskStatusProbe() {

@@ -400,6 +400,7 @@ export function SchoolWorkspace({
       {/* ── Справа: рабочее место агента ── */}
       <section
         aria-label="Рабочая область ОС"
+        data-os-fullscreen={fullscreen ? "true" : undefined}
         className={
           fullscreen
             ? "fixed inset-0 z-[80] flex min-w-0 flex-1 flex-col bg-background"

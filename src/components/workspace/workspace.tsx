@@ -223,7 +223,7 @@ export function Workspace({ initialApp, initialUrl }: { initialApp?: string; ini
   }, [initialApp, initialUrl]);
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-[#0f0b26] text-white">
+    <div data-os-fullscreen="true" className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[#0f0b26] text-white">
       <WorkspaceSurface showTray={false} />
       <Taskbar />
     </div>

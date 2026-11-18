@@ -237,6 +237,9 @@
 
 /* Общий слой движения кабинета: страницы появляются одинаково, карточки отзываются на наведение. */
 .content { position: relative; isolation: isolate; }
+/* Полноэкранный рабочий стол ОС и режим разворота панели должны перекрывать sticky-шапку AppShell (z-index: 40). */
+.content:has([data-os-fullscreen="true"]) { z-index: 60; }
+.content:has([data-os-fullscreen="true"]) > * > * { animation: none; }
 .content::before {
   content: "";
   position: fixed;
