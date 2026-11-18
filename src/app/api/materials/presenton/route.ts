@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   }
 
   const qGate = await reserveQuotaOrResponse(auth.user, "assist");
-  if (qGate) return qGate;
+  if (!qGate.ok) return qGate.response;
 
   const topic = plan.content.topic || plan.title || "Урок";
   const filename = `Презентация - ${topic}.pptx`.replace(/[^\p{L}\p{N}_\-. ]/gu, "_");
