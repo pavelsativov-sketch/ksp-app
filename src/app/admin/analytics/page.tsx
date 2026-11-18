@@ -42,12 +42,17 @@ export default async function AdminAnalyticsPage() {
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-10 px-4 py-12 md:px-6">
-      <header>
-        <p className="editorial-kicker">Mekty</p>
-        <h1 className="editorial-display mt-3 text-4xl">Аналитика</h1>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Использование приложения за последние {DAYS} дней.
-        </p>
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="editorial-kicker">Mekty · Администрирование</p>
+          <h1 className="editorial-display mt-2 text-4xl">Аналитика событий</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Использование приложения за последние {DAYS} дней.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link prefetch={false} href="/admin?tab=audit">← Назад в Админ-панель</Link>
+        </Button>
       </header>
 
       {/* Summary Cards */}

@@ -9,8 +9,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const metadata: Metadata = { title: "Пользователь — Mekty", robots: { index: false, follow: false } };
 
-const date = (value: string | null) => value ? new Date(value).toLocaleString("ru-RU", { timeZone: "UTC" }) : "—";
-const ACTIONS: Record<string, string> = { grant_tokens: "Бонус КСП", set_subscription: "Подписка" };
+const date = (value: string | null) => value ? new Date(value).toLocaleString("ru-RU", { timeZone: "Asia/Almaty" }) : "—";
+const ACTIONS: Record<string, string> = {
+  grant_tokens: "Бонус КСП",
+  set_subscription: "Подписка",
+  grant_pro: "Выдача Pro",
+  password_reset_link: "Ссылка сброса пароля",
+};
 
 function Usage({ label, used, limit }: { label: string; used: number; limit: number | null }) {
   return <div className={s.card}>
@@ -31,10 +36,15 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       <p role="alert" className="mt-4">{message}</p>
       <Link href="/admin/users" prefetch={false} className="mt-4 inline-block underline">К списку</Link></main>;
   }
-  return <main className="mx-auto max-w-[1200px] space-y-6 px-4 py-12 md:px-6">
-    <header><p className="editorial-kicker"><Link prefetch={false} href="/admin/users" className="underline">Пользователи</Link></p>
-      <h1 className="editorial-display mt-3 text-4xl">{user.name || "Без имени"}</h1>
-      <p className="mt-3 text-sm text-muted-foreground">{user.email} · ID <span className="tabular-nums">{user.id}</span> · регистрация {date(user.createdAt)} UTC</p></header>
+  return <main className="mx-auto max-w-[1200px] space-y-6 px-4 py-10 md:px-6">
+    <header className="space-y-2">
+      <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
+        <Link prefetch={false} href="/admin?tab=users" className="rounded-lg border border-border bg-surface px-3 py-1.5 hover:bg-muted">← В Админ-панель (Пользователи)</Link>
+        <Link prefetch={false} href="/admin" className="text-muted-foreground underline hover:text-foreground">Дашборд</Link>
+      </div>
+      <h1 className="editorial-display mt-2 text-3xl sm:text-4xl">{user.name || "Без имени"}</h1>
+      <p className="text-sm text-muted-foreground">{user.email} · ID <span className="tabular-nums">{user.id}</span> · регистрация {date(user.createdAt)}</p>
+    </header>
 
     <section aria-label="Расход в текущем месяце" className={s.cards}>
       <div className={s.card}><p className={s.cardLabel}>Тариф</p><p className={s.cardValue}>{user.plan === "pro" ? "Pro" : "Free"}</p>
