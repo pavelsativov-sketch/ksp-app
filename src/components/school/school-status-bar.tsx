@@ -1,13 +1,22 @@
 "use client";
 
 import { useActiveTaskStatus } from "@/components/agents/use-task-status";
+import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
-const LABELS: Record<string, string> = {
+const LABELS_RU: Record<string, string> = {
   running: "Работает",
   completed: "Завершено",
   failed: "Ошибка",
   stopped: "Остановлено",
   idle: "Ожидание",
+};
+
+const LABELS_KK: Record<string, string> = {
+  running: "Жұмыс істеуде",
+  completed: "Аяқталды",
+  failed: "Қате",
+  stopped: "Тоқтатылды",
+  idle: "Күтуде",
 };
 
 /**
@@ -16,7 +25,9 @@ const LABELS: Record<string, string> = {
  * время работы в формате чч:мм:сс.
  */
 export function SchoolStatusBar({ sysInfo }: { sysInfo: string }) {
+  const { locale } = useUiLocale();
   const { status, elapsed } = useActiveTaskStatus();
+  const labels = locale === "kk" ? LABELS_KK : LABELS_RU;
   const dotClass =
     status === "running"
       ? "bg-emerald-400 animate-pulse"
@@ -33,7 +44,7 @@ export function SchoolStatusBar({ sysInfo }: { sysInfo: string }) {
       <span className="truncate" title={sysInfo}>{sysInfo}</span>
       <span className="ml-auto inline-flex shrink-0 items-center gap-1.5" aria-live="polite">
         <span className={`inline-block size-1.5 rounded-full ${dotClass}`} aria-hidden />
-        {LABELS[status]}
+        {labels[status]}
         {status === "running" && elapsed && <span className="text-muted-foreground">{elapsed}</span>}
       </span>
     </footer>

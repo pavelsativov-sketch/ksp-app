@@ -33,7 +33,7 @@ export default async function AssignmentResultsPage({ params }: { params: Promis
           {r.passedW}: {data.studentCount} · {r.avgW}: {avg} / {data.maxScore}
         </p>
         <div className="mt-4">
-          <AssignmentActions id={data.id} code={data.code} status={data.status === "open" ? "open" : "closed"} />
+          <AssignmentActions id={data.id} code={data.code} status={data.status === "open" ? "open" : "closed"} title={data.title} />
           <div className="mt-3">
             <EditedReissueForm
               sourceId={data.id}

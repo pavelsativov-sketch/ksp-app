@@ -7,6 +7,7 @@ import "./globals.css";
 import { isMongoConfigured } from "@/lib/mongo";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdminUserId } from "@/lib/admin/auth";
+import { getUnreadNotificationCount } from "@/lib/notifications";
 import { logoutAction } from "./actions/auth";
 import { SITE_NAME, SITE_DESCRIPTION, siteUrl } from "@/lib/site";
 import { getDict } from "@/lib/i18n/server";
@@ -63,7 +64,10 @@ const logoutClass = styles.logout;
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const configured = isMongoConfigured();
   const user = await getCurrentUser();
-  const { locale, t } = await getDict();
+  const [{ locale, t }, unreadNotifications] = await Promise.all([
+    getDict(),
+    user && configured ? getUnreadNotificationCount(user.id) : Promise.resolve(0),
+  ]);
   const authed = user ? <><Link className={navClass} href="/profile">{t.nav.profile}</Link><Link className={navClass} href="/school">{t.school.nav.school}</Link><Link className={navClass} href="/dashboard">{t.nav.plans}</Link><Link className={navClass} href="/kits">{t.nav.kits}</Link><Link className={navClass} href="/templates">{t.nav.templates}</Link><Link className={navClass} href="/textbooks">{t.nav.materials}</Link><form action={logoutAction}><button className={logoutClass} type="submit">{t.nav.logout}</button></form></> : <><Link className={navClass} href="/login">{t.nav.login}</Link><Link className={accountClass} href="/register">{t.nav.register}</Link></>;
 
   const setupNotice = !configured && (
@@ -148,6 +152,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 userName={user.fullName ?? ""}
                 userEmail={user.email}
                 isAdmin={isAdminUserId(user.id)}
+                unreadNotifications={unreadNotifications}
                 account={<>
                   <div className="flex items-center justify-between gap-2 px-1"><LocaleSwitcher locale={locale} /><ThemeToggle /></div>
                   <Link className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-muted" href="/profile">{t.nav.profile}</Link>

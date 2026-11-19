@@ -124,6 +124,8 @@ export const COL = {
   // Сохранённые документы школьных ИИ-конструкторов и генератора СОР/СОЧ.
   schoolAiDocs: "school_ai_documents",
   sorSochWorks: "sor_soch_works",
+  // Кэш официальных казахских переводов целей обучения ГОСО РК.
+  gosoTranslations: "goso_translations",
 } as const;
 
 async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
@@ -154,6 +156,7 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.planVersions).createIndex({ plan_id: 1, owner_id: 1, created_at: -1 }, { name: "plan_versions_owner_created" }),
     db.collection(COL.objectives).createIndex({ subject_id: 1, grade: 1, code: 1 }, { name: "objectives_subject_grade_code" }),
     db.collection(COL.objectives).createIndex({ text_ru: "text" }, { name: "objectives_text_search" }),
+    db.collection(COL.gosoTranslations).createIndex({ subject: 1, code: 1 }, { unique: true, name: "goso_translations_subject_code_unique" }),
     db.collection(COL.textbooks).createIndex({ owner_id: 1, updated_at: -1 }, { name: "textbooks_owner_updated" }),
     db.collection(COL.textbookChunks).createIndex({ textbook_id: 1, chunk_index: 1 }, { unique: true, name: "chunks_textbook_index_unique" }),
     db.collection(COL.quizRooms).createIndex({ code: 1 }, { unique: true, name: "quiz_rooms_code_unique" }),

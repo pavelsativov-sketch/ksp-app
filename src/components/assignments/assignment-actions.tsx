@@ -1,19 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Check, RotateCcw, XOctagon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
+import { ShareQrActions } from "@/components/share/share-toolbar";
+import { homeworkShareMessage } from "@/lib/share/messengers";
 
-/** Действия с выдачей: повтор (новый код), закрыть, скопировать ссылку. */
-export function AssignmentActions({ id, code, status }: { id: string; code: string; status: "open" | "closed" }) {
-  const { t } = useUiLocale();
+/** Действия с выдачей: повтор (новый код), закрыть, скопировать ссылку, QR и мессенджеры. */
+export function AssignmentActions({
+  id,
+  code,
+  status,
+  title,
+}: {
+  id: string;
+  code: string;
+  status: "open" | "closed";
+  title?: string;
+}) {
+  const { locale, t } = useUiLocale();
   const a = t.assignments;
   const router = useRouter();
   const [pending, setPending] = useState<"repeat" | "close" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => "https://ksp-app-pi.vercel.app",
+  );
+  const shareUrl = `${origin}/a/${code}`;
+  const shareText = homeworkShareMessage({
+    title: title || `${a.linkBtn} ${code}`,
+    url: shareUrl,
+    code,
+    locale,
+  });
 
   async function act(action: "repeat" | "close") {
     // Закрытие сразу отрезает учеников от сдачи — случайный клик не должен этого делать.
@@ -55,6 +79,14 @@ export function AssignmentActions({ id, code, status }: { id: string; code: stri
           <XOctagon className="size-3.5" /> {pending === "close" ? a.closing : a.closeBtn}
         </Button>
       )}
+      <ShareQrActions
+        url={shareUrl}
+        title={title || code}
+        code={code}
+        shareText={shareText}
+        locale={locale}
+        compact
+      />
       {error && <span role="alert" className="text-xs text-red-600">{error}</span>}
     </div>
   );

@@ -4,6 +4,7 @@ import { COL, getDb, isMongoConfigured } from "@/lib/mongo";
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
 import { log } from "@/lib/logger";
+import { notifyAdmins } from "@/lib/mailer";
 import type { FeedbackCategory } from "@/lib/feedback";
 
 export const runtime = "nodejs";
@@ -106,8 +107,29 @@ export async function POST(request: Request) {
       updated_at: now,
     });
 
+    const insertedId = result.insertedId.toHexString();
+    const notifyKind =
+      data.kind === "purchase_pro"
+        ? "admin_lead_pro"
+        : data.kind === "school_lead"
+          ? "admin_lead_school"
+          : "admin_feedback";
+    const titleMap = {
+      purchase_pro: "Новая заявка на Учитель Pro",
+      school_lead: "Новая заявка на подключение школы",
+      support: "Новое обращение в поддержку Mekty",
+    } as const;
+    await notifyAdmins({
+      kind: notifyKind,
+      subject: `${titleMap[data.kind]} — Mekty`,
+      title: titleMap[data.kind],
+      lines,
+      href: "/admin?tab=inbox",
+      dedupeKey: `lead:${insertedId}`,
+    }).catch(() => {});
+
     return NextResponse.json(
-      { ok: true, id: result.insertedId.toHexString() },
+      { ok: true, id: insertedId },
       { status: 201 },
     );
   } catch (error) {

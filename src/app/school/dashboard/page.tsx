@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getActiveSchool, formatSchoolSubtitle } from "@/lib/school/active";
 import { getSchoolOverview } from "@/lib/school-analytics";
 import { getTeacherJournalAnalytics } from "@/lib/journal";
+import { getDict } from "@/lib/i18n/server";
 import { PersonalSchoolDashboard } from "@/components/school/personal-school-views";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, AlertTriangle, GraduationCap, School, Users, ClipboardCheck, BookOpen } from "lucide-react";
@@ -23,6 +24,8 @@ export default async function SchoolDashboardPage() {
     return <PersonalSchoolDashboard data={personal} />;
   }
 
+  const { locale } = await getDict();
+  const isKk = locale === "kk";
   const schoolId = school._id!.toString();
   const overview = await getSchoolOverview(schoolId);
 
@@ -31,7 +34,7 @@ export default async function SchoolDashboardPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
       <header className="mb-6">
-        <p className="editorial-kicker">Школа</p>
+        <p className="editorial-kicker">{isKk ? "Мектеп" : "Школа"}</p>
         <h1 className="editorial-display mt-1 text-3xl">{school.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{formatSchoolSubtitle(school)}</p>
       </header>
@@ -41,9 +44,15 @@ export default async function SchoolDashboardPage() {
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
             <School className="size-8 text-muted-foreground" />
             <p className="max-w-sm text-sm text-muted-foreground">
-              Школа создана, но в ней пока нет рабочих данных. Добавьте учащихся, затем отмечайте посещаемость и оценки — показатели обновятся автоматически.
+              {isKk
+                ? "Мектеп құрылды, бірақ әзірге жұмыс деректері жоқ. Оқушыларды қосыңыз, содан кейін қатысу мен бағаларды белгілеңіз — көрсеткіштер автоматты түрде жаңарады."
+                : "Школа создана, но в ней пока нет рабочих данных. Добавьте учащихся, затем отмечайте посещаемость и оценки — показатели обновятся автоматически."}
             </p>
-            <div className="flex flex-wrap justify-center gap-2"><Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/students">Добавить учащихся</Link><Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/attendance">Отметить посещаемость</Link><Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/quality">Добавить оценки</Link></div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/students">{isKk ? "Оқушыларды қосу" : "Добавить учащихся"}</Link>
+              <Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/attendance">{isKk ? "Қатысуды белгілеу" : "Отметить посещаемость"}</Link>
+              <Link className="rounded-lg border border-border px-3 py-2 text-sm font-semibold" href="/school/quality">{isKk ? "Бағаларды қосу" : "Добавить оценки"}</Link>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -51,29 +60,29 @@ export default async function SchoolDashboardPage() {
           {/* Кольцо состояния + счётчики */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
             <Card className="flex flex-col items-center justify-center p-6">
-              <CardDescription className="mb-2">Состояние школы</CardDescription>
+              <CardDescription className="mb-2">{isKk ? "Мектеп жағдайы" : "Состояние школы"}</CardDescription>
               <HealthRing score={overview.score} />
-              <p className="mt-2 text-xs text-muted-foreground">посещаемость · качество · КТП</p>
+              <p className="mt-2 text-xs text-muted-foreground">{isKk ? "қатысу · сапа · КТЖ" : "посещаемость · качество · КТП"}</p>
             </Card>
-            <Stat icon={<Users className="size-5 text-primary" />} label="Учеников" value={overview.students} href="/school/students" />
-            <Stat icon={<GraduationCap className="size-5 text-primary" />} label="Педагогов" value={overview.teachers} href="/school/teachers" />
-            <Stat icon={<School className="size-5 text-primary" />} label="Классов" value={overview.classes} href="/school/classes" />
+            <Stat icon={<Users className="size-5 text-primary" />} label={isKk ? "Оқушылар" : "Учеников"} value={overview.students} href="/school/students" />
+            <Stat icon={<GraduationCap className="size-5 text-primary" />} label={isKk ? "Педагогтер" : "Педагогов"} value={overview.teachers} href="/school/teachers" />
+            <Stat icon={<School className="size-5 text-primary" />} label={isKk ? "Сыныптар" : "Классов"} value={overview.classes} href="/school/classes" />
           </div>
 
           {/* Ключевые показатели */}
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <MetricCard href="/school/attendance" title="Посещаемость · 60 дней" value={pct(overview.attendanceRate)} icon={<Users className="size-4" />} />
-            <MetricCard href="/school/quality" title="Качество знаний" value={pct(overview.qualityScore)} icon={<GraduationCap className="size-4" />} />
-            <MetricCard href="/school/vsk" title="Средний балл ВШК" value={overview.vskAverage === null ? "—" : `${Math.round(overview.vskAverage)}/100`} icon={<ClipboardCheck className="size-4" />} />
+            <MetricCard href="/school/attendance" title={isKk ? "Қатысу · 60 күн" : "Посещаемость · 60 дней"} value={pct(overview.attendanceRate)} icon={<Users className="size-4" />} />
+            <MetricCard href="/school/quality" title={isKk ? "Білім сапасы" : "Качество знаний"} value={pct(overview.qualityScore)} icon={<GraduationCap className="size-4" />} />
+            <MetricCard href="/school/vsk" title={isKk ? "МШБ орташа балы" : "Средний балл ВШК"} value={overview.vskAverage === null ? "—" : `${Math.round(overview.vskAverage)}/100`} icon={<ClipboardCheck className="size-4" />} />
           </div>
 
           {/* Проблемы и предупреждения */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-base">Проблемы и предупреждения</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-base">{isKk ? "Мәселелер және ескертулер" : "Проблемы и предупреждения"}</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {overview.issues.length === 0 && overview.warnings.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Всё в норме — критичных отклонений нет.</p>
+                  <p className="text-sm text-muted-foreground">{isKk ? "Барлығы қалыпты — сыни ауытқулар жоқ." : "Всё в норме — критичных отклонений нет."}</p>
                 )}
                 {overview.issues.map((i, idx) => (
                   <p key={idx} className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-red-700">
@@ -88,23 +97,23 @@ export default async function SchoolDashboardPage() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-base">Разделы</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-base">{isKk ? "Бөлімдер" : "Разделы"}</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-2 gap-2 text-sm">
-                <Tile href="/school/attendance" label="Посещаемость" />
-                <Tile href="/school/quality" label="Успеваемость" />
-                <Tile href="/school/curriculum" label="КТП" />
-                <Tile href="/school/vsk" label="ВШК" />
-                <Tile href="/school/students" label="Ученики" />
-                <Tile href="/school/classes" label="Классы" />
-                <Tile href="/school/teachers" label="Педагоги" />
-                <Tile href="/school/approvals" label="Согласование" />
-                <Tile href="/school/reports" label="Отчёты" />
+                <Tile href="/school/attendance" label={isKk ? "Қатысу" : "Посещаемость"} />
+                <Tile href="/school/quality" label={isKk ? "Үлгерім" : "Успеваемость"} />
+                <Tile href="/school/curriculum" label={isKk ? "КТЖ" : "КТП"} />
+                <Tile href="/school/vsk" label={isKk ? "МШБ" : "ВШК"} />
+                <Tile href="/school/students" label={isKk ? "Оқушылар" : "Ученики"} />
+                <Tile href="/school/classes" label={isKk ? "Сыныптар" : "Классы"} />
+                <Tile href="/school/teachers" label={isKk ? "Педагогтер" : "Педагоги"} />
+                <Tile href="/school/approvals" label={isKk ? "Келісу" : "Согласование"} />
+                <Tile href="/school/reports" label={isKk ? "Есептер" : "Отчёты"} />
               </CardContent>
             </Card>
           </div>
 
           <p className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-            <BookOpen className="size-3.5" /> Данные агрегируются из коллекций школы в реальном времени.
+            <BookOpen className="size-3.5" /> {isKk ? "Деректер мектеп коллекцияларынан нақты уақыт режимінде жинақталады." : "Данные агрегируются из коллекций школы в реальном времени."}
           </p>
         </>
       )}

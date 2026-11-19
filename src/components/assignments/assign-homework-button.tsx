@@ -12,6 +12,7 @@ import { QrCard } from "@/components/ksp/qr-card";
 import { assignmentPreviewCopy } from "@/components/assignments/assignment-preview-copy";
 import type { PublicTask } from "@/lib/ksp/live-quiz";
 import { copyText } from "@/lib/clipboard";
+import { homeworkShareMessage } from "@/lib/share/messengers";
 
 export interface AssignableTask {
   ref: string;
@@ -314,7 +315,21 @@ export function AssignHomeworkButton({
               {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
               <p className="text-xs text-muted-foreground">{a.sendHint}</p>
               <div className="text-left">
-                <QrCard url={link} title={title.trim() || planTitle} heading={copy.qrTitle} description={copy.qrLead} locale={locale} />
+                <QrCard
+                  url={link}
+                  title={title.trim() || planTitle}
+                  code={created.code}
+                  shareText={homeworkShareMessage({
+                    title: title.trim() || planTitle,
+                    url: link,
+                    code: created.code,
+                    daysValid: days,
+                    locale,
+                  })}
+                  heading={copy.qrTitle}
+                  description={copy.qrLead}
+                  locale={locale}
+                />
               </div>
               <Button asChild variant="outline" className="w-full">
                 <Link href={`/assignments/${created.id}`}>{copy.manageResults}</Link>

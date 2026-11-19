@@ -19,24 +19,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import type { TeacherJournalAnalytics } from "@/lib/journal";
 
 function PersonalModeBanner() {
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-xs">
       <div className="flex items-center gap-2">
         <School className="size-4 shrink-0 text-primary" />
         <span>
-          <strong>Личный журнал и классы учителя</strong> — данные синхронизированы с Электронным журналом и домашними заданиями.
+          <strong>{isKk ? "Мұғалімнің жеке журналы мен сыныптары" : "Личный журнал и классы учителя"}</strong>
+          {isKk
+            ? " — деректер Электрондық журналмен және үй тапсырмаларымен синхрондалған."
+            : " — данные синхронизированы с Электронным журналом и домашними заданиями."}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Link href="/gradebook" className="font-semibold text-primary underline">
-          Открыть Электронный журнал
+          {isKk ? "Электрондық журналды ашу" : "Открыть Электронный журнал"}
         </Link>
         <span className="text-muted-foreground">·</span>
         <Link href="/school/create" className="text-muted-foreground hover:text-foreground underline">
-          Подключить организацию (для завуча/директора)
+          {isKk ? "Ұйымды қосу (меңгеруші/директор үшін)" : "Подключить организацию (для завуча/директора)"}
         </Link>
       </div>
     </div>
@@ -44,6 +50,8 @@ function PersonalModeBanner() {
 }
 
 export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytics }) {
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
   const avgQuality =
     data.subjects.length > 0
       ? Math.round(
@@ -54,27 +62,27 @@ export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytic
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
       <header className="mb-4">
-        <p className="editorial-kicker">Кабинет педагога</p>
-        <h1 className="editorial-display mt-1 text-3xl">Обзор классов, журнала и КТП</h1>
+        <p className="editorial-kicker">{isKk ? "Педагог кабинеті" : "Кабинет педагога"}</p>
+        <h1 className="editorial-display mt-1 text-3xl">{isKk ? "Сыныптар, журнал және КТЖ шолуы" : "Обзор классов, журнала и КТП"}</h1>
       </header>
       <PersonalModeBanner />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card className="p-4">
           <CardDescription className="flex items-center gap-1.5">
-            <Users className="size-4 text-primary" /> Учеников в базе
+            <Users className="size-4 text-primary" /> {isKk ? "Базадағы оқушылар" : "Учеников в базе"}
           </CardDescription>
           <CardTitle className="mt-1 text-2xl">{data.students.length}</CardTitle>
         </Card>
         <Card className="p-4">
           <CardDescription className="flex items-center gap-1.5">
-            <School className="size-4 text-primary" /> Классов
+            <School className="size-4 text-primary" /> {isKk ? "Сыныптар" : "Классов"}
           </CardDescription>
           <CardTitle className="mt-1 text-2xl">{data.classes.length}</CardTitle>
         </Card>
         <Card className="p-4">
           <CardDescription className="flex items-center gap-1.5">
-            <GraduationCap className="size-4 text-primary" /> Качество знаний (≥7 б.)
+            <GraduationCap className="size-4 text-primary" /> {isKk ? "Білім сапасы (≥7 б.)" : "Качество знаний (≥7 б.)"}
           </CardDescription>
           <CardTitle className="mt-1 text-2xl">
             {avgQuality === null ? "—" : `${avgQuality}%`}
@@ -82,7 +90,7 @@ export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytic
         </Card>
         <Card className="p-4">
           <CardDescription className="flex items-center gap-1.5">
-            <BookOpen className="size-4 text-primary" /> Планы КСП / КТП
+            <BookOpen className="size-4 text-primary" /> {isKk ? "ҚМЖ / КТЖ жоспарлары" : "Планы КСП / КТП"}
           </CardDescription>
           <CardTitle className="mt-1 text-2xl">
             {data.plansCount} / {data.ktpCount}
@@ -93,22 +101,22 @@ export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytic
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Посещаемость по журналу</CardTitle>
-            <CardDescription>УП — уважительная, НП — неуважительная, Б — по болезни</CardDescription>
+            <CardTitle className="text-base">{isKk ? "Журнал бойынша қатысу" : "Посещаемость по журналу"}</CardTitle>
+            <CardDescription>{isKk ? "УП — себепті, НП — себепсіз, Б — ауырып қалу" : "УП — уважительная, НП — неуважительная, Б — по болезни"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {data.attendance.total === 0 ? (
               <p className="text-muted-foreground">
-                Отметок пока нет. Перейдите в{" "}
+                {isKk ? "Белгілер әлі жоқ. 1–10 балл немесе сабақтан қалу белгілерін қою үшін " : "Отметок пока нет. Перейдите в "}
                 <Link href="/gradebook" className="font-semibold text-primary underline">
-                  Электронный журнал
+                  {isKk ? "Электрондық журналға" : "Электронный журнал"}
                 </Link>
-                , чтобы выставить баллы (1–10) или пропуски (УП / НП / Б).
+                {isKk ? " өтіңіз." : ", чтобы выставить баллы (1–10) или пропуски (УП / НП / Б)."}
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div className="rounded-lg bg-muted p-2.5">
-                  <div className="text-xs text-muted-foreground">На уроке</div>
+                  <div className="text-xs text-muted-foreground">{isKk ? "Сабақта" : "На уроке"}</div>
                   <div className="text-lg font-bold text-emerald-600">{data.attendance.present}</div>
                 </div>
                 <div className="rounded-lg bg-muted p-2.5">
@@ -120,7 +128,7 @@ export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytic
                   <div className="text-lg font-bold text-destructive">{data.attendance.unexcused}</div>
                 </div>
                 <div className="rounded-lg bg-muted p-2.5">
-                  <div className="text-xs text-muted-foreground">По болезни (Б)</div>
+                  <div className="text-xs text-muted-foreground">{isKk ? "Ауырған (Б)" : "По болезни (Б)"}</div>
                   <div className="text-lg font-bold">{data.attendance.sick}</div>
                 </div>
               </div>
@@ -130,19 +138,31 @@ export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytic
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Быстрые переходы</CardTitle>
+            <CardTitle className="text-base">{isKk ? "Жылдам өту" : "Быстрые переходы"}</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-2 text-sm">
-            {[
-              ["/gradebook", "Электронный журнал (10 б.)"],
-              ["/school/students", "Список учеников"],
-              ["/school/classes", "Мои классы"],
-              ["/school/attendance", "Сводка посещаемости"],
-              ["/school/sor-soch", "Генератор СОР и СОЧ"],
-              ["/school/characteristics", "Характеристики"],
-              ["/school/iom", "Маршруты ИОМ"],
-              ["/school/reports", "Сводный отчёт"],
-            ].map(([href, label]) => (
+            {(isKk
+              ? [
+                  ["/gradebook", "Электрондық журнал (10 б.)"],
+                  ["/school/students", "Оқушылар тізімі"],
+                  ["/school/classes", "Менің сыныптарым"],
+                  ["/school/attendance", "Қатысу жиынтығы"],
+                  ["/school/sor-soch", "БЖБ және ТЖБ генераторы"],
+                  ["/school/characteristics", "Мінездемелер"],
+                  ["/school/iom", "ЖББ бағыттары"],
+                  ["/school/reports", "Жиынтық есеп"],
+                ]
+              : [
+                  ["/gradebook", "Электронный журнал (10 б.)"],
+                  ["/school/students", "Список учеников"],
+                  ["/school/classes", "Мои классы"],
+                  ["/school/attendance", "Сводка посещаемости"],
+                  ["/school/sor-soch", "Генератор СОР и СОЧ"],
+                  ["/school/characteristics", "Характеристики"],
+                  ["/school/iom", "Маршруты ИОМ"],
+                  ["/school/reports", "Сводный отчёт"],
+                ]
+            ).map(([href, label]) => (
               <Link
                 key={href}
                 href={href!}

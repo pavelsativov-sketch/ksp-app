@@ -38,19 +38,40 @@ export async function POST(request: Request) {
 
   try {
     const subject = plan.subject_id ? await getSubjectById(plan.subject_id) : null;
-    const wanted = parsed.data.slides.filter((slide) => slide.imagePrompt).slice(0, MAX_IMAGES);
     const images: SlideImages = new Map();
+    const prebuiltIds = new Set<string>();
+    for (const slide of parsed.data.slides) {
+      const uri = slide.imageDataUri?.trim();
+      if (!uri) continue;
+      const match = uri.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=]+)$/i);
+      if (match) {
+        images.set(slide.id, {
+          mimeType: match[1]!.toLowerCase() === "image/jpg" ? "image/jpeg" : match[1]!.toLowerCase(),
+          base64: match[2]!,
+        });
+        prebuiltIds.add(slide.id);
+      }
+    }
+
+    const remainingSlots = Math.max(0, MAX_IMAGES - prebuiltIds.size);
+    const needGenerate = parsed.data.slides
+      .filter((slide) => slide.imagePrompt && !prebuiltIds.has(slide.id))
+      .slice(0, remainingSlots);
     const quota = handoutQuota(auth.user.id);
-    const result = await illustrate<DeckSlide>(
-      wanted,
-      { topic: plan.content.topic || plan.title, subject: subject?.name_ru ?? "", grade: plan.grade },
-      (slide) => `${slide.imagePrompt}. ${IMAGE_STYLE}`,
-      (slide, image) => {
-        images.set(slide.id, image);
-        return slide;
-      },
-      () => quota.reserve("image"),
-    );
+    const result = needGenerate.length
+      ? await illustrate<DeckSlide>(
+          needGenerate,
+          { topic: plan.content.topic || plan.title, subject: subject?.name_ru ?? "", grade: plan.grade },
+          (slide) => `${slide.imagePrompt}. ${IMAGE_STYLE}`,
+          (slide, image) => {
+            images.set(slide.id, image);
+            return slide;
+          },
+          () => quota.reserve("image"),
+        )
+      : { created: 0 };
+    const totalWanted = prebuiltIds.size + needGenerate.length;
+    const totalCreated = prebuiltIds.size + result.created;
     const buffer = await buildDeckPptx(
       { title: plan.content.topic || plan.title, theme: parsed.data.theme, slides: parsed.data.slides },
       { images, watermark: await resolveWatermark(auth.user) },
@@ -60,7 +81,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`Презентация - ${plan.content.topic || plan.title}.pptx`)}`,
         "Cache-Control": "no-store",
-        "X-Deck-Images": `${result.created}/${wanted.length}`,
+        "X-Deck-Images": `${totalCreated}/${totalWanted}`,
       },
     });
   } catch (error) {

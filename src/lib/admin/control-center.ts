@@ -179,8 +179,36 @@ export function inspectEnvServices(): EnvServiceStatus[] {
       group: "infra",
       configured: hasEnv("RESEND_API_KEY"),
       hint: hasEnv("RESEND_API_KEY")
-        ? "Автоматическая отправка писем сброса пароля включена"
+        ? "Автоматическая отправка писем сброса пароля и алертов включена"
         : "Не задан — запросы сброса пароля приходят заявками во «Входящие» админки",
+    },
+    {
+      key: "MAIL_FROM",
+      name: "Отправитель писем (домен)",
+      group: "infra",
+      configured: hasEnv("MAIL_FROM"),
+      hint: hasEnv("MAIL_FROM")
+        ? `Текущий адрес: ${process.env.MAIL_FROM}`
+        : "Используется тестовый адрес onboarding@resend.dev — задайте подтверждённый домен в Resend",
+    },
+    {
+      key: "TELEGRAM_BOT_TOKEN",
+      name: "Telegram-оповещения админу",
+      group: "infra",
+      configured: hasEnv("TELEGRAM_BOT_TOKEN") && hasEnv("TELEGRAM_ADMIN_CHAT_ID"),
+      hint:
+        hasEnv("TELEGRAM_BOT_TOKEN") && hasEnv("TELEGRAM_ADMIN_CHAT_ID")
+          ? "Мгновенные уведомления о заявках Pro/Школа и сбросах пароля активны"
+          : "Добавьте TELEGRAM_BOT_TOKEN и TELEGRAM_ADMIN_CHAT_ID для мгновенных алертов в Telegram",
+    },
+    {
+      key: "APP_URL",
+      name: "Базовый URL продакшена",
+      group: "infra",
+      configured: hasEnv("APP_URL"),
+      hint: hasEnv("APP_URL")
+        ? `Ссылки в письмах ведут на ${process.env.APP_URL}`
+        : "Задайте https://... для генерации рабочих ссылок в письмах",
     },
   ];
 }

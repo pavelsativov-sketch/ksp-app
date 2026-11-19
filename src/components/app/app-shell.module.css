@@ -62,6 +62,7 @@
 
 .topActions { display: flex; align-items: center; gap: 10px; }
 .round {
+  position: relative;
   display: grid;
   place-items: center;
   width: 44px;
@@ -74,6 +75,22 @@
 }
 .round svg { width: 19px; height: 19px; }
 .round:hover { transform: translateY(-2px); color: var(--ink); border-color: var(--ink); }
+.bellBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e11d48;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.45);
+}
 
 .user { position: relative; }
 .userButton {

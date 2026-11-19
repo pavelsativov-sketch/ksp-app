@@ -32,6 +32,7 @@ export function AppShell({
   userName,
   userEmail,
   isAdmin = false,
+  unreadNotifications = 0,
   account,
   children,
 }: {
@@ -39,6 +40,8 @@ export function AppShell({
   userEmail: string;
   /** Решает сервер (ADMIN_USER_IDS); ссылка только прячет пункт, доступ проверяет /admin. */
   isAdmin?: boolean;
+  /** Непрочитанные уведомления для бейджа на колокольчике. */
+  unreadNotifications?: number;
   account: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -107,7 +110,19 @@ export function AppShell({
           <input name="q" type="search" aria-label={c.searchLabel} placeholder={c.search} className={s.searchInput} />
         </form>
         <div className={s.topActions}>
-          <Link href="/notifications" prefetch={false} className={s.round} aria-label={c.notifications}><Bell aria-hidden="true" /></Link>
+          <Link
+            href="/notifications"
+            prefetch={false}
+            className={s.round}
+            aria-label={unreadNotifications > 0 ? `${c.notifications} (${unreadNotifications})` : c.notifications}
+          >
+            <Bell aria-hidden="true" />
+            {unreadNotifications > 0 && (
+              <span className={s.bellBadge} aria-hidden="true">
+                {unreadNotifications > 99 ? "99+" : unreadNotifications}
+              </span>
+            )}
+          </Link>
           <Link href="/feedback" prefetch={false} className={s.round} aria-label={c.help}><CircleHelp aria-hidden="true" /></Link>
           <details className={s.user}>
             <summary className={s.userButton}>

@@ -14,6 +14,7 @@ import { useUiLocale } from "@/components/i18n/use-ui-locale";
 interface RailItem {
   id: string;
   label: string;
+  labelKk: string;
   icon: LucideIcon;
   color: string;
   href?: string;
@@ -23,12 +24,12 @@ interface RailItem {
 
 /** Шесть плиток как в референсе: чат, проекты, файлы, ОС, агенты, настройки. */
 const ITEMS: RailItem[] = [
-  { id: "chat", label: "Чат", icon: MessageSquare, color: "#38bdf8", href: "/school", exact: true },
-  { id: "projects", label: "Проекты", icon: FolderKanban, color: "#a78bfa", href: "/school/dashboard" },
-  { id: "files", label: "Файлы", icon: FolderOpen, color: "#f59e0b", tab: "files" },
-  { id: "os", label: "ОС", icon: Monitor, color: "#34d399", tab: "os" },
-  { id: "agents", label: "Агенты", icon: Bot, color: "#f472b6", href: "/school/agents" },
-  { id: "settings", label: "Настройки", icon: Settings, color: "#94a3b8", href: "/school/settings" },
+  { id: "chat", label: "Чат", labelKk: "Чат", icon: MessageSquare, color: "#38bdf8", href: "/school", exact: true },
+  { id: "projects", label: "Проекты", labelKk: "Жобалар", icon: FolderKanban, color: "#a78bfa", href: "/school/dashboard" },
+  { id: "files", label: "Файлы", labelKk: "Файлдар", icon: FolderOpen, color: "#f59e0b", tab: "files" },
+  { id: "os", label: "ОС", labelKk: "Жүйе", icon: Monitor, color: "#34d399", tab: "os" },
+  { id: "agents", label: "Агенты", labelKk: "Агенттер", icon: Bot, color: "#f472b6", href: "/school/agents" },
+  { id: "settings", label: "Настройки", labelKk: "Баптау", icon: Settings, color: "#94a3b8", href: "/school/settings" },
 ];
 
 /**
@@ -86,7 +87,8 @@ function ActiveBar() {
  */
 export function MoreSections() {
   const pathname = usePathname() ?? "/school";
-  const { t } = useUiLocale();
+  const { locale, t } = useUiLocale();
+  const isKk = locale === "kk";
   const nav = t.school.nav;
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -135,7 +137,9 @@ export function MoreSections() {
           className="glass absolute bottom-0 left-full z-50 ml-3 w-72 overflow-hidden rounded-2xl p-2 shadow-2xl"
           style={{ background: "linear-gradient(160deg, rgba(10,22,80,0.96), rgba(6,12,38,0.97))" }}
         >
-          <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#c0a8ff]">Все разделы школы</p>
+          <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#c0a8ff]">
+            {isKk ? "Мектептің барлық бөлімдері" : "Все разделы школы"}
+          </p>
           {MORE_SECTIONS.map(({ key, label, icon: Icon, href, color }) => {
             const current = pathname.startsWith(href);
             return (
@@ -174,6 +178,8 @@ export function MoreSections() {
 export function SchoolRail() {
   const pathname = usePathname() ?? "/school";
   const router = useRouter();
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
   const tab = useOsShellStore((s) => s.tab);
   const setTab = useOsShellStore((s) => s.setTab);
   const onWorkspace = pathname === "/school";
@@ -186,7 +192,7 @@ export function SchoolRail() {
   const primary = ITEMS.filter((item) => item.id !== "settings");
   const settings = ITEMS.find((item) => item.id === "settings")!;
 
-  function renderItem({ id, label, icon: Icon, color, href, exact, tab: itemTab }: RailItem) {
+  function renderItem({ id, label, labelKk, icon: Icon, color, href, exact, tab: itemTab }: RailItem) {
     // «Чат» и «ОС» живут на одной странице. Чтобы подсвечен был один пункт, чат
     // считается активным, только когда справа открыто что-то, кроме рабочего
     // стола и файлов (браузер, редактор, терминал, журнал).
@@ -211,7 +217,7 @@ export function SchoolRail() {
         >
           <Icon className="size-[18px]" style={{ color }} />
         </span>
-        {label}
+        {isKk ? labelKk : label}
       </>
     );
 

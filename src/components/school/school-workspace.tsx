@@ -18,38 +18,40 @@ import { useWorkspaceStore } from "@/lib/store/workspace";
 import { BrowserApp } from "@/components/workspace/apps/browser";
 import { FileManagerApp } from "@/components/workspace/apps/file-manager";
 import { TerminalApp } from "@/components/workspace/apps/terminal";
+import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
 export type { OsTab };
 
 interface TabDef {
   id: OsTab;
   label: string;
+  labelKk: string;
   icon: typeof LayoutGrid;
 }
 
 /** Вкладки, которые есть всегда. */
 const BASE_TABS: TabDef[] = [
-  { id: "os", label: "Рабочее место", icon: LayoutGrid },
-  { id: "browser", label: "Браузер", icon: Globe },
-  { id: "files", label: "Файлы", icon: FolderOpen },
+  { id: "os", label: "Рабочее место", labelKk: "Жұмыс орны", icon: LayoutGrid },
+  { id: "browser", label: "Браузер", labelKk: "Браузер", icon: Globe },
+  { id: "files", label: "Файлы", labelKk: "Файлдар", icon: FolderOpen },
 ];
 
 const BILIMCLASS_URL = "https://www.bilimclass.kz/2026/frontoffice/dashboard";
 
 /** Готовые конструкторы на стартовом экране чата. */
 const BUILDERS = [
-  { href: "/school/sor-soch", icon: BarChart3, title: "Анализ СОР и СОЧ", hint: "Ввод баллов списком → расчёт качества и отчёт завучу" },
-  { href: "/school/vsk", icon: ClipboardList, title: "Справки ВШК", hint: "Конструктор аналитических справок по урокам и проверкам" },
-  { href: "/school/characteristics", icon: UserRound, title: "Характеристики", hint: "На ученика, класс, для ПМПК и органов опеки" },
-  { href: "/school/homeroom", icon: Users, title: "Классное руководство", hint: "Родительские собрания: повестка, доклад, протокол" },
-  { href: "/school/iom", icon: Target, title: "Маршруты ИОМ", hint: "Индивидуальный план ликвидации пробелов знаний" },
+  { href: "/school/sor-soch", icon: BarChart3, title: "Анализ СОР и СОЧ", titleKk: "БЖБ және ТЖБ талдауы", hint: "Ввод баллов списком → расчёт качества и отчёт завучу", hintKk: "Балдарды тізіммен енгізу → сапаны есептеу және оқу ісінің меңгерушісіне есеп" },
+  { href: "/school/vsk", icon: ClipboardList, title: "Справки ВШК", titleKk: "МШБ анықтамалары", hint: "Конструктор аналитических справок по урокам и проверкам", hintKk: "Сабақтар мен тексерулер бойынша талдау анықтамалары конструкторы" },
+  { href: "/school/characteristics", icon: UserRound, title: "Характеристики", titleKk: "Мінездемелер", hint: "На ученика, класс, для ПМПК и органов опеки", hintKk: "Оқушыға, сыныпқа, ПМПК және қорғаншылық органдарына" },
+  { href: "/school/homeroom", icon: Users, title: "Классное руководство", titleKk: "Сынып жетекшілігі", hint: "Родительские собрания: повестка, доклад, протокол", hintKk: "Ата-аналар жиналысы: күн тәртібі, баяндама, хаттама" },
+  { href: "/school/iom", icon: Target, title: "Маршруты ИОМ", titleKk: "ЖББ бағыттары", hint: "Индивидуальный план ликвидации пробелов знаний", hintKk: "Білім олқылықтарын жоюдың жеке жоспары" },
 ] as const;
 
 /** Для тех, кому нужно больше: добавляются кнопкой «Ещё». */
 const EXTRA_TABS: TabDef[] = [
-  { id: "editor", label: "Редактор", icon: FileCode },
-  { id: "terminal", label: "Терминал", icon: TerminalSquare },
-  { id: "log", label: "Журнал задачи", icon: ScrollText },
+  { id: "editor", label: "Редактор", labelKk: "Редактор", icon: FileCode },
+  { id: "terminal", label: "Терминал", labelKk: "Терминал", icon: TerminalSquare },
+  { id: "log", label: "Журнал задачи", labelKk: "Тапсырма журналы", icon: ScrollText },
 ];
 
 const TaskElapsedBadge = memo(function TaskElapsedBadge({
@@ -133,6 +135,8 @@ export function SchoolWorkspace({
   initialUrl?: string;
 }) {
   const router = useRouter();
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
   const task = useActiveAgentTask();
   const tab = useOsShellStore((s) => s.tab);
   const setTab = useOsShellStore((s) => s.setTab);
@@ -308,17 +312,17 @@ export function SchoolWorkspace({
   return (
     <div className="flex h-full min-h-0 gap-3 p-3 pl-0">
       {/* ── Слева: задача и ход работы ── */}
-      <section aria-label="Чат с агентом" className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-card lg:flex lg:w-[clamp(340px,32vw,430px)]`}>
+      <section aria-label={isKk ? "Агентпен чат" : "Чат с агентом"} className={`${mobileWorkspaceOpen ? "hidden" : "flex"} w-full min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-card lg:flex lg:w-[clamp(340px,32vw,430px)]`}>
         <header className="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-          <h1 className="text-lg font-extrabold tracking-tight">ИИ-ассистент</h1>
+          <h1 className="text-lg font-extrabold tracking-tight">{isKk ? "ЖИ-көмекші" : "ИИ-ассистент"}</h1>
           <div className="flex items-center gap-1.5">
             {task && !running && (
               <button type="button" onClick={() => clearActiveAgentTask()} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-soft px-2.5 py-1.5 text-xs font-bold text-primary hover:bg-primary-soft-hover">
-                <SquarePen className="size-3.5" /> Новая задача
+                <SquarePen className="size-3.5" /> {isKk ? "Жаңа тапсырма" : "Новая задача"}
               </button>
             )}
             <button type="button" onClick={() => setMobileWorkspaceOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-bold lg:hidden">
-              <Globe className="size-3.5" /> Рабочее место
+              <Globe className="size-3.5" /> {isKk ? "Жұмыс орны" : "Рабочее место"}
             </button>
           </div>
         </header>
@@ -327,17 +331,19 @@ export function SchoolWorkspace({
           <div className="mx-3 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold">
               <span className={`inline-block size-2 rounded-full ${control === "user" ? "bg-primary" : "animate-pulse bg-emerald-500"}`} />
-              {control === "user" ? "ВЫ УПРАВЛЯЕТЕ" : "ИИ РАБОТАЕТ"}
+              {control === "user" ? (isKk ? "СІЗ БАСҚАРАСЫЗ" : "ВЫ УПРАВЛЯЕТЕ") : (isKk ? "ЖИ ЖҰМЫС ІСТЕУДЕ" : "ИИ РАБОТАЕТ")}
             </span>
             <button type="button" onClick={() => void setControl(control === "ai" ? "user" : "ai")} className="rounded-lg bg-surface px-2.5 py-1 text-xs font-bold text-primary shadow-sm hover:bg-primary-soft">
-              {control === "ai" ? "Забрать управление себе" : "Передать управление ИИ"}
+              {control === "ai" ? (isKk ? "Басқаруды өзіме алу" : "Забрать управление себе") : (isKk ? "Басқаруды ЖИ-ге беру" : "Передать управление ИИ")}
             </button>
           </div>
         )}
 
         {pendingCount > 0 && (
           <div role="status" className="mx-3 mb-2 rounded-lg border border-warning/40 bg-warning-soft px-3 py-1.5 text-xs font-semibold text-warning">
-            Агент ждёт вашего решения ({pendingCount}): разрешите или отклоните действие ниже.
+            {isKk
+              ? `Агент шешіміңізді күтуде (${pendingCount}): төмендегі әрекетті рұқсат етіңіз немесе бас тартыңыз.`
+              : `Агент ждёт вашего решения (${pendingCount}): разрешите или отклоните действие ниже.`}
           </div>
         )}
         <PermissionCard active={status === "running"} />
@@ -351,7 +357,7 @@ export function SchoolWorkspace({
               <div className="overflow-hidden rounded-xl bg-background/60">
                 <div className="flex items-center gap-2 px-3 pt-2.5">
                   <Bot className="size-4 text-primary" />
-                  <p className="min-w-0 flex-1 truncate text-sm font-bold">Агент Mekty</p>
+                  <p className="min-w-0 flex-1 truncate text-sm font-bold">{isKk ? "Mekty агенті" : "Агент Mekty"}</p>
                   <StatusDot status={status} />
                 </div>
                 <AgentSession
@@ -373,21 +379,23 @@ export function SchoolWorkspace({
           ) : (
             <div className="space-y-3 pt-1">
               <p className="px-1 text-sm leading-relaxed text-muted-foreground">
-                Опишите задачу своими словами или возьмите готовый конструктор. Агент покажет шаги и результат.
+                {isKk
+                  ? "Тапсырманы өз сөзіңізбен жазыңыз немесе дайын конструкторды таңдаңыз. Агент қадамдар мен нәтижені көрсетеді."
+                  : "Опишите задачу своими словами или возьмите готовый конструктор. Агент покажет шаги и результат."}
               </p>
               <div className="grid grid-cols-1 gap-1.5">
-                {BUILDERS.map(({ href, icon: Icon, title, hint }) => (
+                {BUILDERS.map(({ href, icon: Icon, title, titleKk, hint, hintKk }) => (
                   <Link key={href} href={href} className="group flex items-center gap-3 rounded-xl border border-border p-2.5 transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-primary-soft/50">
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary transition-transform group-hover:scale-110"><Icon className="size-[18px]" /></span>
                     <span className="min-w-0 flex-1">
-                      <strong className="block text-sm font-bold">{title}</strong>
-                      <span className="block text-xs leading-snug text-muted-foreground">{hint}</span>
+                      <strong className="block text-sm font-bold">{isKk ? titleKk : title}</strong>
+                      <span className="block text-xs leading-snug text-muted-foreground">{isKk ? hintKk : hint}</span>
                     </span>
                     <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   </Link>
                 ))}
               </div>
-              <Link href="/school/agents" className="block px-1 text-xs font-semibold text-primary hover:underline">История задач</Link>
+              <Link href="/school/agents" className="block px-1 text-xs font-semibold text-primary hover:underline">{isKk ? "Тапсырмалар тарихы" : "История задач"}</Link>
             </div>
           )}
         </div>
@@ -399,7 +407,7 @@ export function SchoolWorkspace({
 
       {/* ── Справа: рабочее место агента ── */}
       <section
-        aria-label="Рабочая область ОС"
+        aria-label={isKk ? "Жүйенің жұмыс аймағы" : "Рабочая область ОС"}
         data-os-fullscreen={fullscreen ? "true" : undefined}
         className={
           fullscreen
@@ -408,43 +416,46 @@ export function SchoolWorkspace({
         }
       >
         <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
-          <div role="tablist" aria-label="Приложения рабочей области" className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
-            {visibleTabs.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                aria-label={label}
-                title={label}
-                onClick={() => activateTab(id)}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${tab === id ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-              >
-                <Icon className="size-4" /> <span>{label}</span>
-              </button>
-            ))}
+          <div role="tablist" aria-label={isKk ? "Жұмыс аймағының қосымшалары" : "Приложения рабочей области"} className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
+            {visibleTabs.map(({ id, label, labelKk, icon: Icon }) => {
+              const text = isKk ? labelKk : label;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  aria-label={text}
+                  title={text}
+                  onClick={() => activateTab(id)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${tab === id ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                >
+                  <Icon className="size-4" /> <span>{text}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div ref={menuBoxRef} className="relative">
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              aria-label="Добавить вкладку"
+              aria-label={isKk ? "Қойынды қосу" : "Добавить вкладку"}
               aria-expanded={menuOpen}
               className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <Plus className="size-4" /> Ещё
+              <Plus className="size-4" /> {isKk ? "Тағы" : "Ещё"}
             </button>
             {menuOpen && (
               <div className="absolute left-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-popover">
-                {EXTRA_TABS.map(({ id, label, icon: Icon }) => (
+                {EXTRA_TABS.map(({ id, label, labelKk, icon: Icon }) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => { activateTab(id); setMenuOpen(false); }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                   >
-                    <Icon className="size-4 text-muted-foreground" /> {label}
+                    <Icon className="size-4 text-muted-foreground" /> {isKk ? labelKk : label}
                   </button>
                 ))}
                 <button
@@ -455,16 +466,16 @@ export function SchoolWorkspace({
                       try {
                         const res = await fetch("/api/agents/snapshots", { method: "POST" });
                         const data = await res.json() as { error?: string };
-                        if (!res.ok) throw new Error(data.error ?? "Не удалось создать снимок");
-                        setNotice("Снимок рабочей области создан");
+                        if (!res.ok) throw new Error(data.error ?? (isKk ? "Көшірме жасалмады" : "Не удалось создать снимок"));
+                        setNotice(isKk ? "Жұмыс аймағының көшірмесі сақталды" : "Снимок рабочей области создан");
                       } catch (error) {
-                        setNotice(error instanceof Error ? error.message : "Не удалось создать снимок");
+                        setNotice(error instanceof Error ? error.message : (isKk ? "Көшірме жасалмады" : "Не удалось создать снимок"));
                       }
                     })();
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                 >
-                  <Archive className="size-4 text-muted-foreground" /> Снимок рабочей области
+                  <Archive className="size-4 text-muted-foreground" /> {isKk ? "Жұмыс аймағының көшірмесі" : "Снимок рабочей области"}
                 </button>
                 <button
                   type="button"
@@ -474,31 +485,31 @@ export function SchoolWorkspace({
                       try {
                         const res = await fetch("/api/agents/snapshots");
                         const data = (await res.json()) as { snapshots?: { id: string }[]; error?: string };
-                        if (!res.ok) throw new Error(data.error ?? "Не удалось получить список снимков");
+                        if (!res.ok) throw new Error(data.error ?? (isKk ? "Көшірмелер тізімі алынбады" : "Не удалось получить список снимков"));
                         const last = data.snapshots?.[0];
-                        if (!last) { setNotice("Снимков пока нет"); return; }
+                        if (!last) { setNotice(isKk ? "Әзірге көшірмелер жоқ" : "Снимков пока нет"); return; }
                         const putRes = await fetch("/api/agents/snapshots", {
                           method: "PUT",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ id: last.id }),
                         });
                         const putData = (await putRes.json().catch(() => ({}))) as { error?: string };
-                        if (!putRes.ok) throw new Error(putData.error ?? "Не удалось восстановить снимок");
-                        setNotice("Рабочая область восстановлена из снимка");
+                        if (!putRes.ok) throw new Error(putData.error ?? (isKk ? "Көшірме қалпына келтірілмеді" : "Не удалось восстановить снимок"));
+                        setNotice(isKk ? "Жұмыс аймағы көшірмеден қалпына келтірілді" : "Рабочая область восстановлена из снимка");
                         if (typeof window !== "undefined") {
                           window.dispatchEvent(new Event("mekty:workspace-files-changed"));
                         }
                       } catch (error) {
-                        setNotice(error instanceof Error ? error.message : "Не удалось восстановить снимок");
+                        setNotice(error instanceof Error ? error.message : (isKk ? "Көшірме қалпына келтірілмеді" : "Не удалось восстановить снимок"));
                       }
                     })();
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                 >
-                  <Undo2 className="size-4 text-muted-foreground" /> Восстановить последний снимок
+                  <Undo2 className="size-4 text-muted-foreground" /> {isKk ? "Соңғы көшірмені қайтару" : "Восстановить последний снимок"}
                 </button>
                 <Link href="/school/workspace?mode=desktop" onClick={() => setMenuOpen(false)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted">
-                  <LayoutGrid className="size-4 text-muted-foreground" /> Рабочий стол на весь экран
+                  <LayoutGrid className="size-4 text-muted-foreground" /> {isKk ? "Жұмыс үстелі (толық экран)" : "Рабочий стол на весь экран"}
                 </Link>
               </div>
             )}
@@ -507,22 +518,22 @@ export function SchoolWorkspace({
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {notice && <span className="hidden max-w-[320px] truncate px-2 text-xs text-muted-foreground xl:inline" title={notice}>{notice}</span>}
             {task && <TaskElapsedBadge taskId={task.id} active={running} initialStartedAt={task.startedAt} />}
-            <button type="button" onClick={() => setMobileWorkspaceOpen(false)} className="rounded-lg px-2 py-1 text-xs font-semibold hover:bg-muted lg:hidden">Чат агента</button>
+            <button type="button" onClick={() => setMobileWorkspaceOpen(false)} className="rounded-lg px-2 py-1 text-xs font-semibold hover:bg-muted lg:hidden">{isKk ? "Агент чаты" : "Чат агента"}</button>
             {task?.prompt && (
-              <button type="button" onClick={() => void startLast()} disabled={starting || running} title="Повторить последнюю задачу агента" className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft disabled:opacity-40">
-                {starting ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />} <span className="hidden 2xl:inline">Повторить задачу</span>
+              <button type="button" onClick={() => void startLast()} disabled={starting || running} title={isKk ? "Соңғы тапсырманы қайталау" : "Повторить последнюю задачу агента"} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft disabled:opacity-40">
+                {starting ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />} <span className="hidden 2xl:inline">{isKk ? "Қайталау" : "Повторить задачу"}</span>
               </button>
             )}
             {running && (
-              <button type="button" onClick={() => void stopTask()} disabled={stopping} title="Остановить активную задачу" className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-danger transition-colors hover:bg-danger-soft disabled:opacity-40">
-                {stopping ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-4" />} <span className="hidden 2xl:inline">Остановить задачу</span>
+              <button type="button" onClick={() => void stopTask()} disabled={stopping} title={isKk ? "Белсенді тапсырманы тоқтату" : "Остановить активную задачу"} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-danger transition-colors hover:bg-danger-soft disabled:opacity-40">
+                {stopping ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-4" />} <span className="hidden 2xl:inline">{isKk ? "Тоқтату" : "Остановить задачу"}</span>
               </button>
             )}
-            <button type="button" onClick={() => setFullscreen((v) => !v)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={fullscreen ? "Свернуть ОС" : "Развернуть ОС"}>
+            <button type="button" onClick={() => setFullscreen((v) => !v)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={fullscreen ? (isKk ? "Кішірейту" : "Свернуть ОС") : (isKk ? "Толық экран" : "Развернуть ОС")}>
               {fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </button>
             {fullscreen && (
-              <button type="button" onClick={() => setFullscreen(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Закрыть область">
+              <button type="button" onClick={() => setFullscreen(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={isKk ? "Аймақты жабу" : "Закрыть область"}>
                 <X className="size-4" />
               </button>
             )}
@@ -544,21 +555,21 @@ export function SchoolWorkspace({
                   <rect x="96" y="50" width="10" height="22" rx="5" className="fill-primary/20 stroke-current" strokeWidth="3" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-extrabold tracking-tight">{task && running ? "Агент работает" : "Рабочее место агента"}</h2>
+              <h2 className="text-2xl font-extrabold tracking-tight">{task && running ? (isKk ? "Агент жұмыс істеуде" : "Агент работает") : (isKk ? "Агенттің жұмыс орны" : "Рабочее место агента")}</h2>
               <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
                 {task && running
-                  ? "Ход работы слева. Когда агент откроет сайт, браузер появится здесь, и вы увидите каждое действие."
-                  : "Дайте задачу слева. Агент откроет браузер прямо здесь, и вы увидите каждое действие. Управление можно забрать в любой момент."}
+                  ? (isKk ? "Жұмыс барысы сол жақта. Агент сайтты ашқанда браузер осында пайда болады және әр әрекетті көресіз." : "Ход работы слева. Когда агент откроет сайт, браузер появится здесь, и вы увидите каждое действие.")
+                  : (isKk ? "Сол жақтан тапсырма беріңіз. Агент браузерді дәл осында ашады, басқаруды кез келген сәтте өзіңізге ала аласыз." : "Дайте задачу слева. Агент откроет браузер прямо здесь, и вы увидите каждое действие. Управление можно забрать в любой момент.")}
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <button type="button" onClick={() => { setBrowserUrl(BILIMCLASS_URL); activateTab("browser"); }} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-button transition-transform hover:-translate-y-0.5 hover:bg-primary-hover">
-                  <Globe className="size-4" /> Открыть BilimClass
+                  <Globe className="size-4" /> {isKk ? "BilimClass ашу" : "Открыть BilimClass"}
                 </button>
                 <button type="button" onClick={() => activateTab("files")} className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-bold transition-transform hover:-translate-y-0.5">
-                  <FolderOpen className="size-4" /> Мои файлы
+                  <FolderOpen className="size-4" /> {isKk ? "Менің файлдарым" : "Мои файлы"}
                 </button>
                 <Link href="/school/workspace?mode=desktop" className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-bold transition-transform hover:-translate-y-0.5">
-                  <LayoutGrid className="size-4" /> Рабочий стол ОС
+                  <LayoutGrid className="size-4" /> {isKk ? "Жүйенің жұмыс үстелі" : "Рабочий стол ОС"}
                 </Link>
               </div>
             </div>

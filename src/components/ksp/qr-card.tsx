@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Check, Link2, Printer } from "lucide-react";
+import { Check, Download, Link2, MessageCircle, Printer, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import type { Locale } from "@/lib/i18n/dictionaries";
 import { copyText } from "@/lib/clipboard";
+import { buildTelegramUrl, buildWhatsAppUrl } from "@/lib/share/messengers";
 
 /**
  * QR-плашка на план.
@@ -83,25 +84,56 @@ export function QrCodeSvg({
   );
 }
 
-/** Плашка с QR-кодом, печатью и копированием ссылки. */
-export function QrCard({ url, title, heading, description, locale }: {
+/** Плашка с QR-кодом, печатью, скачиванием PNG, копированием и отправкой в мессенджеры. */
+export function QrCard({ url, title, heading, description, locale, code, shareText }: {
   url: string;
   title: string;
   heading?: string;
   description?: string;
   locale?: Locale;
+  code?: string;
+  shareText?: string;
 }) {
   const { locale: uiLocale, t } = useUiLocale();
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [printFailed, setPrintFailed] = useState(false);
+  const [downloadingPng, setDownloadingPng] = useState(false);
   const activeLocale = locale ?? uiLocale;
+  const isKk = activeLocale === "kk";
   const qrLabel = `${heading ?? t.nav.qrTitle}: ${title}`;
-  const qrFailedMessage = activeLocale === "kk"
+  const qrFailedMessage = isKk
     ? "QR-код жасалмады. Сілтемені қолмен көшіріңіз."
     : "Не удалось создать QR-код. Скопируйте ссылку вручную.";
-  const copyFailedMessage = activeLocale === "kk" ? "Сілтемені көшіру мүмкін болмады." : "Не удалось скопировать ссылку.";
-  const printFailedMessage = activeLocale === "kk" ? "Басып шығару терезесін ашу мүмкін болмады." : "Не удалось открыть окно печати.";
+  const copyFailedMessage = isKk ? "Сілтемені көшіру мүмкін болмады." : "Не удалось скопировать ссылку.";
+  const printFailedMessage = isKk ? "Басып шығару терезесін ашу мүмкін болмады." : "Не удалось открыть окно печати.";
+  const effectiveShareText = shareText ?? `${title}\n${url}`;
+  const telegramCaption = shareText ? shareText.replace(url, "").trim() || title : title;
+  const waHref = buildWhatsAppUrl(effectiveShareText);
+  const tgHref = buildTelegramUrl(url, telegramCaption);
+
+  async function downloadPng() {
+    if (!url || downloadingPng) return;
+    setDownloadingPng(true);
+    try {
+      const dataUrl = await QRCode.toDataURL(url, {
+        width: 640,
+        margin: 2,
+        errorCorrectionLevel: "M",
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `qr-${(code || "mekty").toLowerCase()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {
+      setPrintFailed(true);
+    } finally {
+      setDownloadingPng(false);
+    }
+  }
 
   async function download() {
     const w = window.open("", "_blank", "width=560,height=720");
@@ -164,6 +196,37 @@ export function QrCard({ url, title, heading, description, locale }: {
           }}
         >
           {copied ? <Check /> : <Link2 />} {copied ? t.nav.qrCopied : t.nav.qrCopy}
+        </Button>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="border-emerald-500/40 bg-emerald-500/5 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300"
+        >
+          <a href={waHref} target="_blank" rel="noopener noreferrer">
+            <MessageCircle className="size-3.5" /> WhatsApp
+          </a>
+        </Button>
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="border-sky-500/40 bg-sky-500/5 text-sky-700 hover:bg-sky-500/15 dark:text-sky-300"
+        >
+          <a href={tgHref} target="_blank" rel="noopener noreferrer">
+            <Send className="size-3.5" /> Telegram
+          </a>
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={downloadingPng}
+          onClick={() => void downloadPng()}
+        >
+          <Download className="size-3.5" /> PNG
         </Button>
       </div>
     </div>

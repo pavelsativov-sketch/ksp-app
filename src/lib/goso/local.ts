@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { SchoolProfile } from "@/lib/types/ksp";
+import { resolveRussianSubjectName, subjectNameKz } from "./kazakh";
 
 export interface LocalObjective {
   id: string; // synthetic: `${subjectSlug}-${grade}-${code}`
@@ -90,7 +91,8 @@ export function localObjectives(opts: {
   limit?: number;
 }): LocalObjective[] {
   const { bySubject } = load();
-  const list = bySubject.get(opts.subject) ?? [];
+  const canonical = resolveRussianSubjectName(opts.subject) ?? opts.subject;
+  const list = bySubject.get(canonical) ?? bySubject.get(opts.subject) ?? [];
   let result = opts.grade !== undefined ? list.filter((o) => o.grade === opts.grade) : list;
   if (opts.search) {
     const q = opts.search.trim().toLowerCase();
@@ -98,6 +100,7 @@ export function localObjectives(opts: {
       (o) =>
         o.code.toLowerCase().includes(q) ||
         o.text_ru.toLowerCase().includes(q) ||
+        (o.text_kz?.toLowerCase().includes(q) ?? false) ||
         (o.section?.toLowerCase().includes(q) ?? false),
     );
   }
@@ -120,7 +123,8 @@ export function localTupObjectives(opts: {
   search?: string;
   schoolProfile?: SchoolProfile;
 }): LocalObjective[] | null {
-  if (!/информатик/i.test(opts.subject)) return null;
+  const canonical = resolveRussianSubjectName(opts.subject) ?? opts.subject;
+  if (!/информатик/i.test(canonical)) return null;
   if (!tupCache) {
     const file = path.resolve(process.cwd(), "data", "tup_informatics_current.json");
     if (!fs.existsSync(file)) return null;
@@ -144,9 +148,14 @@ export function localTupObjectives(opts: {
   }));
 }
 
-export function localSubjects(): Array<{ name_ru: string; grade_min: number; grade_max: number }> {
+export function localSubjects(): Array<{ name_ru: string; name_kz: string; grade_min: number; grade_max: number }> {
   const { subjectMeta } = load();
   return Array.from(subjectMeta.entries())
-    .map(([name, m]) => ({ name_ru: name, grade_min: m.gmin, grade_max: m.gmax }))
+    .map(([name, m]) => ({
+      name_ru: name,
+      name_kz: subjectNameKz(name),
+      grade_min: m.gmin,
+      grade_max: m.gmax,
+    }))
     .sort((a, b) => a.name_ru.localeCompare(b.name_ru, "ru"));
 }

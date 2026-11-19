@@ -110,6 +110,19 @@ export async function listNotifications(userId: string): Promise<{ notifications
   };
 }
 
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  if (!userId) return 0;
+  try {
+    const db = await getDb();
+    return await db.collection<AppNotificationDoc>(COL.notifications).countDocuments({
+      user_id: userId,
+      read_at: null,
+    });
+  } catch {
+    return 0;
+  }
+}
+
 export async function markNotificationsRead(userId: string, ids?: string[]): Promise<void> {
   const db = await getDb();
   const collection = db.collection<AppNotificationDoc>(COL.notifications);

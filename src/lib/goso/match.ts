@@ -1,19 +1,30 @@
 import { localObjectives, localSubjects, type LocalObjective } from "./local";
+import { resolveRussianSubjectName } from "./kazakh";
 
 const MIN_WORD = 4;
 const STEM_LENGTH = 5;
 const SHORT_STEM_LENGTH = 4;
 
-/** Приблизительный корень слова: окончания в русском разные, общий корень — первые буквы. */
+/** Приблизительный корень слова (русский, казахский, латиница): окончания разные, общий корень — первые буквы. */
 function stems(text: string, length = STEM_LENGTH): string[] {
-  const words = text.toLowerCase().match(/[a-zа-яё]+/g) ?? [];
+  const words = text.toLowerCase().match(/[a-zа-яёәғқңөұүһі]+/g) ?? [];
   return [...new Set(words.filter((w) => w.length >= MIN_WORD).map((w) => w.slice(0, length)))];
 }
 
-/** Название предмета как в ГОСО: ищем без учёта регистра, лишнее не угадываем. */
+/** Название предмета как в ГОСО: понимает русские и казахские названия без учёта регистра. */
 export function resolveGosoSubject(subject: string): string | null {
+  const mapped = resolveRussianSubjectName(subject);
+  const subjects = localSubjects();
+  if (mapped) {
+    const found = subjects.find((s) => s.name_ru === mapped);
+    if (found) return found.name_ru;
+  }
   const wanted = subject.trim().toLowerCase();
-  return localSubjects().find((s) => s.name_ru.toLowerCase() === wanted)?.name_ru ?? null;
+  return (
+    subjects.find(
+      (s) => s.name_ru.toLowerCase() === wanted || s.name_kz.toLowerCase() === wanted,
+    )?.name_ru ?? null
+  );
 }
 
 export interface MatchedObjective {

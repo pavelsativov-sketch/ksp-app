@@ -14,7 +14,7 @@ const short = (text: string, max: number) => (text.length > max ? `${text.slice(
 
 /** Слайд с пустыми полями по умолчанию. Конструктор добавляет такие же. */
 export function blankSlide(kind: DeckSlide["kind"], title: string, fields: Partial<DeckSlide> = {}): DeckSlide {
-  return { id: nextId(), kind, title, lead: "", steps: [], points: [], takeaway: "", options: [], correctIndex: null, notes: "", imagePrompt: "", ...fields };
+  return { id: nextId(), kind, title, lead: "", steps: [], points: [], takeaway: "", options: [], correctIndex: null, notes: "", imagePrompt: "", imageDataUri: "", ...fields };
 }
 
 function quizSlides(stage: LessonStage): DeckSlide[] {

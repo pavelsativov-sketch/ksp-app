@@ -9,7 +9,7 @@ import { MongoServerError, ObjectId } from "mongodb";
 import { getDb, COL } from "@/lib/mongo";
 import { createSession, clearSession, findUserByEmail, hashPassword, invalidateUserSessionCache, verifyPassword } from "@/lib/auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
-import { sendEmail } from "@/lib/mailer";
+import { isEmailConfigured, notifyAdmins, renderMektyEmail, sendEmail } from "@/lib/mailer";
 
 const passwordSchema = z.string().min(10, "Пароль должен содержать минимум 10 символов").max(128);
 const loginSchema = z.object({ email: z.email({ error: "Некорректный email" }), password: passwordSchema });
@@ -402,7 +402,7 @@ export async function requestPasswordResetAction(
       const base = process.env.APP_URL;
       let emailDelivered = false;
 
-      if (base && process.env.RESEND_API_KEY) {
+      if (base && isEmailConfigured()) {
         const resetUrl = new URL("/reset-password", base);
         if (resetUrl.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && resetUrl.protocol === "http:")) {
           throw new Error("APP_URL must use HTTPS in production");
@@ -420,7 +420,17 @@ export async function requestPasswordResetAction(
         emailDelivered = await sendEmail(
           email,
           "Сброс пароля — Mekty",
-          `<p>Чтобы задать новый пароль, перейдите по ссылке (действует 1 час):</p><p><a href="${link}">${link}</a></p>`,
+          renderMektyEmail({
+            title: "Сброс пароля",
+            preheader: "Одноразовая ссылка для смены пароля в Mekty (действует 1 час)",
+            lines: [
+              "Вы запросили восстановление доступа к аккаунту Mekty.",
+              "Нажмите кнопку ниже, чтобы задать новый пароль. Ссылка действует 1 час.",
+              "Если вы не отправляли этот запрос, просто проигнорируйте письмо.",
+            ],
+            ctaLabel: "Задать новый пароль",
+            ctaUrl: link,
+          }),
         );
         if (!emailDelivered) {
           await db.collection(COL.passwordResets).deleteOne({ tokenHash: hashToken(token) });
@@ -438,7 +448,7 @@ export async function requestPasswordResetAction(
         });
         if (!recentTicket) {
           const now = new Date();
-          await db.collection(COL.feedback).insertOne({
+          const inserted = await db.collection(COL.feedback).insertOne({
             user_id: user._id.toString(),
             rating: 5,
             category: "password_reset",
@@ -448,6 +458,17 @@ export async function requestPasswordResetAction(
             created_at: now,
             updated_at: now,
           });
+          await notifyAdmins({
+            kind: "admin_password_reset",
+            subject: `Запрос сброса пароля: ${email} — Mekty`,
+            title: "Запрос сброса пароля",
+            lines: [
+              `Пользователь: ${email}`,
+              "Почтовый шлюз не доставил письмо автоматически — сгенерируйте одноразовую ссылку в админ-панели.",
+            ],
+            href: "/admin?tab=inbox",
+            dedupeKey: `pwd_reset:${inserted.insertedId.toHexString()}`,
+          }).catch(() => {});
         }
       }
     }

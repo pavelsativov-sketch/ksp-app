@@ -37,6 +37,7 @@ import {
   RevokeCodeButton,
 } from "@/components/admin/code-controls";
 import { FeedbackInbox, type AdminFeedbackRow } from "@/components/admin/feedback-inbox";
+import { MailDiagnosticsCard } from "@/components/admin/mail-diagnostics-card";
 import { HiddenPlansList, ModerationQueue } from "@/components/admin/moderation-controls";
 import {
   createPasswordResetLinkAction,
@@ -1184,6 +1185,12 @@ export function AdminShell({
                   </div>
                 ))}
               </div>
+
+              {/* Живая диагностика и тест почты / Telegram / колокольчика */}
+              <MailDiagnosticsCard
+                resendConfigured={extras.envStatuses.some((e) => e.key === "RESEND_API_KEY" && e.configured)}
+                telegramConfigured={extras.envStatuses.some((e) => e.key === "TELEGRAM_BOT_TOKEN" && e.configured)}
+              />
 
               {/* Живая таблица телеметрии моделей */}
               <div className="space-y-3 rounded-2xl border border-border bg-surface p-5">

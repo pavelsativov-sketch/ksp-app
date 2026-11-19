@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BookCheck, Loader2, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import type { SchoolProfile } from "@/lib/types/ksp";
 
 export interface GosoObjective {
@@ -34,6 +35,8 @@ export function ObjectivesPicker({
   schoolProfile,
   language = "ru",
 }: Props) {
+  const { locale } = useUiLocale();
+  const isKz = language === "kz" || locale === "kk";
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +59,7 @@ export function ObjectivesPicker({
         if (subjectName) params.set("subject", subjectName);
         params.set("grade", String(grade));
         if (schoolProfile) params.set("schoolProfile", schoolProfile);
+        if (isKz) params.set("lang", "kz");
         const res = await fetch(`/api/objectives?${params.toString()}`, {
           signal: ctrl.signal,
         });
@@ -86,7 +90,7 @@ export function ObjectivesPicker({
       cancelled = true;
       ctrl.abort();
     };
-  }, [open, subjectId, subjectName, grade, schoolProfile]);
+  }, [open, subjectId, subjectName, grade, schoolProfile, isKz]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -102,14 +106,15 @@ export function ObjectivesPicker({
 
   const grouped = useMemo(() => {
     const map = new Map<string, GosoObjective[]>();
+    const fallbackSection = isKz ? "Бөлімсіз" : "Без раздела";
     for (const o of filtered) {
-      const key = o.section ?? "Без раздела";
+      const key = o.section ?? fallbackSection;
       const list = map.get(key);
       if (list) list.push(o);
       else map.set(key, [o]);
     }
     return Array.from(map.entries());
-  }, [filtered]);
+  }, [filtered, isKz]);
 
   function toggle(id: string) {
     setChecked((prev) => {
@@ -125,7 +130,7 @@ export function ObjectivesPicker({
       .filter((o) => checked.has(o.id))
       .map((o) => ({
         code: o.code,
-        text: language === "kz" && o.text_kz ? o.text_kz : o.text_ru,
+        text: isKz && o.text_kz ? o.text_kz : o.text_ru,
       }));
     if (rows.length > 0) onAdd(rows);
     setChecked(new Set());
@@ -143,7 +148,7 @@ export function ObjectivesPicker({
         disabled={!subjectId && !subjectName}
       >
         <BookCheck className="w-4 h-4 mr-1" />
-        Выбрать из ТУП
+        {isKz ? "ТОБ-дан таңдау" : "Выбрать из ТУП"}
       </Button>
     );
   }
@@ -153,7 +158,7 @@ export function ObjectivesPicker({
       <div className="flex items-center gap-2 p-3 border-b border-border">
         <Search className="w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Поиск по коду, тексту или разделу"
+          placeholder={isKz ? "Код, мәтін немесе бөлім бойынша іздеу" : "Поиск по коду, тексту или разделу"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1"
@@ -173,25 +178,33 @@ export function ObjectivesPicker({
 
       {(source === "local" || source === "tup") && (
         <div className="px-3 py-2 text-xs text-warning bg-warning-soft border-b border-warning/40">
-          {source === "tup" ? "Актуальный ТУП для информатики." : "Локальный справочник ТУП."} {sourceNote ?? ""}
+          {source === "tup"
+            ? isKz
+              ? "Информатика бойынша өзекті ТОБ."
+              : "Актуальный ТУП для информатики."
+            : isKz
+              ? "МЖМБС (ГОСО) жергілікті анықтамалығы."
+              : "Локальный справочник ТУП."}{" "}
+          {sourceNote ?? ""}
         </div>
       )}
       <div className="max-h-96 overflow-y-auto">
         {loading && (
           <div className="p-6 flex items-center justify-center text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            Загрузка целей обучения…
+            {isKz ? "Оқу мақсаттары жүктелуде…" : "Загрузка целей обучения…"}
           </div>
         )}
         {error && (
           <div className="p-4 text-sm text-red-600">
-            {error}. Проверьте, применены ли миграции 0003 и seed GOSO.
+            {error}
           </div>
         )}
         {!loading && !error && filtered.length === 0 && (
           <div className="p-6 text-sm text-muted-foreground text-center">
-            Цели для этого предмета и класса не найдены. Запустите{" "}
-            <code className="px-1 py-0.5 bg-muted rounded">npm run seed:goso</code>.
+            {isKz
+              ? "Бұл пән мен сынып бойынша оқу мақсаттары табылмады."
+              : "Цели для этого предмета и класса не найдены."}
           </div>
         )}
         {grouped.map(([section, list]) => (
@@ -217,10 +230,10 @@ export function ObjectivesPicker({
                   />
                   <div className="flex-1 text-sm">
                     <span className="tabular-nums text-foreground mr-2">{o.code}</span>
-                    <span>{language === "kz" && o.text_kz ? o.text_kz : o.text_ru}</span>
+                    <span>{isKz && o.text_kz ? o.text_kz : o.text_ru}</span>
                     {already && (
                       <span className="text-xs text-muted-foreground ml-2">
-                        (уже добавлена)
+                        {isKz ? "(қосылған)" : "(уже добавлена)"}
                       </span>
                     )}
                   </div>
@@ -233,7 +246,7 @@ export function ObjectivesPicker({
 
       <div className="flex items-center justify-between p-3 border-t border-border bg-muted">
         <span className="text-sm text-muted-foreground">
-          Выбрано: {checked.size}
+          {isKz ? "Таңдалды" : "Выбрано"}: {checked.size}
         </span>
         <div className="flex gap-2">
           <Button
@@ -245,7 +258,7 @@ export function ObjectivesPicker({
               setChecked(new Set());
             }}
           >
-            Отмена
+            {isKz ? "Болдырмау" : "Отмена"}
           </Button>
           <Button
             type="button"
@@ -253,7 +266,7 @@ export function ObjectivesPicker({
             onClick={addSelected}
             disabled={checked.size === 0}
           >
-            Добавить ({checked.size})
+            {isKz ? "Қосу" : "Добавить"} ({checked.size})
           </Button>
         </div>
       </div>

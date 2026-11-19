@@ -5,9 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight, Share2, ChevronsUpDown, Home } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast";
+import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
-/** Заголовки разделов для крошек. Незнакомый путь показывается как «Школа». */
-const TITLES: Record<string, string> = {
+/** Заголовки разделов для крошек. Незнакомый путь показывается как «Школа» / «Мектеп». */
+const TITLES_RU: Record<string, string> = {
   "/school": "Рабочая область",
   "/school/dashboard": "Дашборд",
   "/school/agents": "Задачи агента",
@@ -29,13 +30,36 @@ const TITLES: Record<string, string> = {
   "/school/create": "Создание школы",
 };
 
-function titleFor(pathname: string): string {
-  const exact = TITLES[pathname];
+const TITLES_KK: Record<string, string> = {
+  "/school": "Жұмыс кеңістігі",
+  "/school/dashboard": "Дашборд",
+  "/school/agents": "Агент тапсырмалары",
+  "/school/settings": "Баптаулар",
+  "/school/students": "Оқушылар",
+  "/school/teachers": "Педагогтер",
+  "/school/classes": "Сыныптар",
+  "/school/attendance": "Қатысу",
+  "/school/quality": "Білім сапасы",
+  "/school/curriculum": "КТЖ",
+  "/school/sor-soch": "БЖБ және ТЖБ талдауы",
+  "/school/vsk": "Мектепішілік бақылау анықтамалары",
+  "/school/characteristics": "Мінездемелер",
+  "/school/homeroom": "Сынып жетекшілігі",
+  "/school/iom": "ЖББ бағыттары",
+  "/school/reports": "Есептер",
+  "/school/connectors": "Қосылымдар",
+  "/school/workspace": "Жұмыс үстелі",
+  "/school/create": "Мектеп құру",
+};
+
+function titleFor(pathname: string, isKk: boolean): string {
+  const map = isKk ? TITLES_KK : TITLES_RU;
+  const exact = map[pathname];
   if (exact) return exact;
-  const base = Object.keys(TITLES)
+  const base = Object.keys(map)
     .filter((key) => key !== "/school" && pathname.startsWith(`${key}/`))
     .sort((a, b) => b.length - a.length)[0];
-  return base ? TITLES[base]! : "Школа";
+  return base ? map[base]! : (isKk ? "Мектеп" : "Школа");
 }
 
 /**
@@ -49,11 +73,13 @@ function titleFor(pathname: string): string {
 export function SchoolTopbar({ userName, userEmail }: { userName: string; userEmail: string }) {
   const pathname = usePathname() ?? "/school";
   const router = useRouter();
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
   const { toast } = useToast();
   const [schools, setSchools] = useState<{ id: string; name: string }[]>([]);
   const [activeSchoolId, setActiveSchoolId] = useState("");
   const [switching, setSwitching] = useState(false);
-  const title = titleFor(pathname);
+  const title = titleFor(pathname, isKk);
   const displayName = userName || userEmail;
   const initial = (displayName || "?").trim().charAt(0).toUpperCase();
 
@@ -77,10 +103,10 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
     setSwitching(true);
     try {
       const response = await fetch("/api/school", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId }) });
-      if (!response.ok) throw new Error("Не удалось переключить школу");
+      if (!response.ok) throw new Error(isKk ? "Мектепті ауыстыру мүмкін болмады" : "Не удалось переключить школу");
       setActiveSchoolId(schoolId);
       router.refresh();
-    } catch { toast.error("Не удалось переключить школу"); }
+    } catch { toast.error(isKk ? "Мектепті ауыстыру мүмкін болмады" : "Не удалось переключить школу"); }
     finally { setSwitching(false); }
   }
 
@@ -93,10 +119,10 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
         return;
       }
       await navigator.clipboard.writeText(url);
-      toast.success("Ссылка скопирована");
+      toast.success(isKk ? "Сілтеме көшірілді" : "Ссылка скопирована");
     } catch {
       // Пользователь закрыл системное окно или буфер недоступен (http).
-      toast.info("Скопируйте адрес из строки браузера");
+      toast.info(isKk ? "Мекенжайды браузер жолағынан көшіріңіз" : "Скопируйте адрес из строки браузера");
     }
   }
 
@@ -110,8 +136,8 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
         </span>
       </Link>
 
-      <nav aria-label="Хлебные крошки" className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-        <span className="hidden shrink-0 sm:inline">Школа</span>
+      <nav aria-label={isKk ? "Навигация жолы" : "Хлебные крошки"} className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+        <span className="hidden shrink-0 sm:inline">{isKk ? "Мектеп" : "Школа"}</span>
         <ChevronRight className="hidden size-3.5 shrink-0 sm:inline" aria-hidden />
         <span className="truncate font-medium text-white">{title}</span>
       </nav>
@@ -121,15 +147,15 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
         {schools.length > 0 && (
           <label className="flex max-w-48 items-center gap-1 rounded-lg border border-white/15 px-2 text-xs text-muted-foreground">
             <ChevronsUpDown className="size-3 shrink-0" />
-            <span className="sr-only">Активная школа</span>
+            <span className="sr-only">{isKk ? "Белсенді мектеп" : "Активная школа"}</span>
             <select
-              aria-label="Активная школа"
+              aria-label={isKk ? "Белсенді мектеп" : "Активная школа"}
               disabled={switching}
               value={activeSchoolId}
               onChange={(event) => void selectSchool(event.target.value)}
               className="min-w-0 max-w-[120px] bg-transparent py-1.5 outline-none"
             >
-              <option className="bg-foreground" value="">Школа</option>
+              <option className="bg-foreground" value="">{isKk ? "Мектеп" : "Школа"}</option>
               {schools.map((school) => (
                 <option className="bg-foreground" key={school.id} value={school.id}>
                   {school.name}
@@ -142,11 +168,11 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
         {/* ← Главная: выход из рабочей области школы на главное меню сайта */}
         <Link
           href="/"
-          title="На главную страницу"
+          title={isKk ? "Басты бетке" : "На главную страницу"}
           className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
         >
           <Home className="size-3.5" />
-          <span className="hidden sm:inline">Главная</span>
+          <span className="hidden sm:inline">{isKk ? "Басты бет" : "Главная"}</span>
         </Link>
 
         <button
@@ -154,7 +180,7 @@ export function SchoolTopbar({ userName, userEmail }: { userName: string; userEm
           onClick={() => void share()}
           className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-white"
         >
-          <Share2 className="size-3.5" /> <span className="hidden sm:inline">Поделиться</span>
+          <Share2 className="size-3.5" /> <span className="hidden sm:inline">{isKk ? "Бөлісу" : "Поделиться"}</span>
         </button>
         <Link
           href="/school/settings"

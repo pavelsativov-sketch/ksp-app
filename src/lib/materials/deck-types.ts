@@ -26,6 +26,13 @@ export const deckSlideSchema = z.object({
   notes: z.string().trim().max(2000).default(""),
   /** Английское описание картинки без текста. Пусто, если картинка не нужна. */
   imagePrompt: z.string().trim().max(600).default(""),
+  /** Сгенерированная иллюстрация в конструкторе (data:image/...), переиспользуется в предпросмотре и PPTX. */
+  imageDataUri: z
+    .string()
+    .max(4_000_000)
+    .refine((v) => v === "" || /^data:image\/(?:png|jpeg|jpg|webp|svg\+xml);/i.test(v), "Invalid image data URI")
+    .optional()
+    .default(""),
 });
 export type DeckSlide = z.infer<typeof deckSlideSchema>;
 
@@ -50,6 +57,30 @@ export const SLIDE_KIND_LABELS: Record<SlideKind, string> = {
   homework: "Домашнее задание",
   thanks: "Завершение",
 };
+
+export const SLIDE_KIND_LABELS_KK: Record<SlideKind, string> = {
+  title: "Титулдық слайд",
+  mood: "Сабаққа психологиялық ахуал",
+  review: "Қайталау",
+  guess: "Тақырыпты анықта",
+  goals: "Сабақ мақсаттары",
+  infographic: "Инфографика: ұғым және тармақтар",
+  flow: "Схема-конвейер",
+  list: "Тезис және тармақтар",
+  cards: "Карточкалар",
+  question: "Сыныпқа сұрақ",
+  quiz: "Жауабы басу арқылы ашылатын тест",
+  groups: "Топтық жұмыс",
+  activity: "Оқушылардың жұмысы",
+  assessment: "Бағалау",
+  reflection: "Рефлексия",
+  homework: "Үй тапсырмасы",
+  thanks: "Қорытынды",
+};
+
+export function slideKindLabel(kind: SlideKind, locale: "ru" | "kk" = "ru"): string {
+  return locale === "kk" ? SLIDE_KIND_LABELS_KK[kind] : SLIDE_KIND_LABELS[kind];
+}
 
 /** Какие поля нужны макету: конструктор показывает только их. */
 export const SLIDE_FIELDS: Record<SlideKind, Array<"lead" | "steps" | "points" | "takeaway" | "options" | "imagePrompt">> = {

@@ -9,11 +9,18 @@ export const metadata: Metadata = {
   description: "Старт — бесплатно. Pro — 2 490 ₸ в месяц, 5 990 ₸ за четверть или 19 900 ₸ в год. Школа — 9 900 ₸ в месяц до 15 учителей. Оплата Kaspi / картой, активация кодом.",
 };
 
-const faqs = [
+const faqsRu = [
   { question: "Подходит ли КСП под шаблон РК?", answer: "КСП оформляется в структуре шаблона РК и экспортируется в .docx: цели, этапы урока, действия учителя и учеников, оценивание. Перед использованием проверьте содержание и требования своей школы — документ можно отредактировать." },
   { question: "Можно ли готовить материалы на казахском?", answer: "Да, при подготовке урока можно выбрать казахский или русский язык. Проверьте терминологию и формулировки заданий перед тем, как раздать материалы ученикам." },
   { question: "Как оплатить: Kaspi или картой?", answer: "Оплата — через Kaspi или картой, доступ активируется кодом после оплаты. На этой странице нет формы оплаты: вводить платёжные данные здесь не нужно. Условия покупки и возврата уточните перед оплатой." },
   { question: "Куда ввести код активации?", answer: "Откройте страницу «Активировать код», войдите в аккаунт и введите полученный код. Используйте тот аккаунт, на котором хотите подключить тариф." },
+];
+
+const faqsKk = [
+  { question: "ҚМЖ ҚР үлгісіне сай келе ме?", answer: "ҚМЖ ҚР стандарты құрылымында жасалып, .docx форматына жүктеледі: оқу мақсаттары, сабақ кезеңдері, педагог пен оқушы әрекеті, бағалау. Пайдаланар алдында мектебіңіздің талаптарына сай түзете аласыз." },
+  { question: "Материалдарды қазақ тілінде дайындауға бола ма?", answer: "Иә, сабақ дайындағанда қазақ немесе орыс тілін таңдауға болады. МЖМБС мақсаттары мен интерфейстің барлық бөлімдері қазақ тілінде қолжетімді." },
+  { question: "Төлем қалай жасалады: Kaspi немесе карта?", answer: "Төлем Kaspi немесе банк картасы арқылы жасалады, төлемнен кейін тариф белсендіру коды арқылы қосылады. Бұл бетте карта деректерін енгізу қажет емес." },
+  { question: "Белсендіру кодын қайда енгізу керек?", answer: "«Кодты белсендіру» бетін ашып, аккаунтыңызға кіріп, алынған кодты енгізіңіз." },
 ];
 
 function FeatureList({ items }: { items: string[] }) {
@@ -21,7 +28,9 @@ function FeatureList({ items }: { items: string[] }) {
 }
 
 export default async function PricingPage() {
-  const { t } = await getDict();
+  const { locale, t } = await getDict();
+  const isKk = locale === "kk";
+  const faqs = isKk ? faqsKk : faqsRu;
   const p = t.pricing;
   return (
     <div>
@@ -35,7 +44,7 @@ export default async function PricingPage() {
 
           <div className="mt-12 grid items-stretch gap-6 lg:grid-cols-3">
             <article aria-labelledby="start-plan" className="app-card flex flex-col p-6">
-              <p className="editorial-kicker">01 / Попробовать</p>
+              <p className="editorial-kicker">{isKk ? "01 / Байқап көру" : "01 / Попробовать"}</p>
               <h2 id="start-plan" className="editorial-display mt-5 text-3xl">{p.startPlan}</h2>
               <p className="mt-6 text-4xl font-semibold tracking-tight">0 ₸</p>
               <p className="mt-2 text-sm text-graphite">{p.startPriceNote}</p>
@@ -52,7 +61,7 @@ export default async function PricingPage() {
               <div className="mt-auto space-y-2.5">
                 <PricingLeadButton
                   kind="purchase_pro"
-                  label="Купить Pro (Kaspi / заявка)"
+                  label={isKk ? "Pro сатып алу (Kaspi / өтінім)" : "Купить Pro (Kaspi / заявка)"}
                   className="cta-ink w-full min-h-12 px-4 py-3 text-sm"
                 />
                 <Link href="/redeem" className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-muted"><KeyRound aria-hidden="true" className="size-4" />{p.activateCode}</Link>
@@ -62,7 +71,7 @@ export default async function PricingPage() {
             <article aria-labelledby="school-plan" className="app-card flex flex-col p-6">
               <p className="editorial-kicker">{p.schoolKicker}</p>
               <h2 id="school-plan" className="editorial-display mt-5 text-3xl">{p.schoolName}</h2>
-              <p className="mt-6"><span className="text-2xl font-semibold tracking-tight text-graphite">Скоро · по заявке</span></p>
+              <p className="mt-6"><span className="text-2xl font-semibold tracking-tight text-graphite">{isKk ? "Жақында · өтінім бойынша" : "Скоро · по заявке"}</span></p>
               <p className="mt-2 text-sm text-graphite">{p.schoolPerTeacher}</p>
               <div className="my-7 border-t border-line pt-6"><p className="text-sm leading-6 text-graphite">{p.schoolText}</p><p className="app-note mt-6 text-xl">{p.schoolSlogan}</p></div>
               <div className="mt-auto border-t border-line pt-5">
@@ -70,7 +79,7 @@ export default async function PricingPage() {
                 <p className="mt-2 text-sm leading-6 text-graphite">{p.schoolNote}</p>
                 <PricingLeadButton
                   kind="school_lead"
-                  label="Оставить заявку для школы"
+                  label={isKk ? "Мектеп үшін өтінім қалдыру" : "Оставить заявку для школы"}
                   className="cta-ink mt-4 w-full min-h-12 px-4 py-3 text-sm"
                 />
               </div>

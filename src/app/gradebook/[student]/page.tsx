@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getStudentResults } from "@/lib/gradebook";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ParentShareCard } from "@/components/gradebook/parent-share-card";
 import { getDict } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function StudentGradebookPage({ params }: { params: Promise
   const { student: studentName } = await params;
   // Next 16 уже декодирует params; повторный decodeURIComponent на имени
   // с «%» (напр. «Иванов 50%») кидал бы URIError и ронял страницу.
-  const { t } = await getDict();
+  const { locale, t } = await getDict();
   const g = t.gradebook;
   const student = await getStudentResults(user.id, studentName);
   if (!student) notFound();
@@ -60,6 +61,16 @@ export default async function StudentGradebookPage({ params }: { params: Promise
           <p className="mt-4 text-3xl font-extrabold text-red-700">{student.worst}%</p>
         </CardContent></Card>
       </div>
+
+      <ParentShareCard
+        studentName={student.studentName}
+        totalAssignments={student.totalAssignments}
+        average={student.average}
+        best={student.best}
+        worst={student.worst}
+        recentTitles={student.assignments.slice(0, 3).map((row) => row.assignmentTitle)}
+        locale={locale}
+      />
 
       <Card>
         <CardHeader><CardTitle>{g.scoreHistory}</CardTitle></CardHeader>

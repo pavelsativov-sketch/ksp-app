@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireApiAuth } from "@/lib/api-auth";
 import { redeemActivationCode, redeemBodySchema } from "@/lib/billing/redeem";
+import { enqueueNotifications } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,14 @@ export async function POST(request: Request) {
     status: result.status,
     headers: result.retryAfter ? { "Retry-After": String(result.retryAfter) } : undefined,
   });
+  await enqueueNotifications([
+    {
+      user_id: auth.user.id,
+      kind: "plan_activated",
+      href: "/profile",
+      dedupe_key: `plan_activated:${auth.user.id}:${Date.now()}`,
+    },
+  ]).catch(() => {});
   revalidatePath("/", "layout");
   return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
 }

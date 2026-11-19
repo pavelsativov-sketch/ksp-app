@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
+import { QrCodeSvg } from "@/components/ksp/qr-card";
+import { ShareQrActions } from "@/components/share/share-toolbar";
+import { quizShareMessage } from "@/lib/share/messengers";
 import { MathText } from "@/lib/math/render-math";
 import {
   type InteractiveTask,
@@ -266,6 +269,7 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
           <Lobby
             joinUrl={joinUrl}
             code={code}
+            planTitle={planTitle}
             students={studentsList}
             tasksCount={tasks.length}
             onStart={startQuiz}
@@ -306,20 +310,24 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
 function Lobby({
   joinUrl,
   code,
+  planTitle,
   students,
   tasksCount,
   onStart,
 }: {
   joinUrl: string;
   code: string;
+  planTitle: string;
   students: LiveLeaderboardEntry[];
   tasksCount: number;
   onStart: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const effectiveUrl = joinUrl || `https://ksp-app-pi.vercel.app/quiz/join?code=${code}`;
+  const shareText = quizShareMessage({ title: planTitle, url: effectiveUrl, code });
   async function copy() {
     try {
-      await navigator.clipboard.writeText(joinUrl);
+      await navigator.clipboard.writeText(effectiveUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -333,21 +341,36 @@ function Lobby({
         <ol className="text-sm space-y-2 text-foreground list-decimal list-inside">
           <li>
             Откройте на телефоне{" "}
-            <a href={joinUrl} className="editorial-link break-all">
-              {joinUrl.replace(/^https?:\/\//, "")}
+            <a href={effectiveUrl} className="editorial-link break-all">
+              {effectiveUrl.replace(/^https?:\/\//, "")}
             </a>
           </li>
           <li>
-            Или зайдите на <span className="tabular-nums">/quiz/join</span> и введите код:
+            Или отсканируйте QR-код / введите код на <span className="tabular-nums">/quiz/join</span>:
           </li>
         </ol>
-        <div className="border-y border-border bg-muted p-6 text-center">
-          <p className="tabular-nums text-5xl font-bold tracking-widest text-primary">{code}</p>
+        <div className="flex flex-col items-center gap-4 border-y border-border bg-muted py-5 sm:flex-row sm:justify-around">
+          <div className="w-[172px] shrink-0">
+            <QrCodeSvg key={effectiveUrl} text={effectiveUrl} label={`QR: ${planTitle}`} />
+          </div>
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Код комнаты</p>
+            <p className="mt-1 tabular-nums text-5xl font-bold tracking-widest text-primary">{code}</p>
+          </div>
         </div>
-        <Button variant="outline" onClick={copy} className="w-full">
-          <Copy className="w-4 h-4" />
-          {copied ? "Скопировано!" : "Скопировать ссылку"}
-        </Button>
+        <div className="space-y-2.5">
+          <Button variant="outline" onClick={copy} className="w-full">
+            <Copy className="w-4 h-4" />
+            {copied ? "Скопировано!" : "Скопировать ссылку"}
+          </Button>
+          <ShareQrActions
+            url={effectiveUrl}
+            title={planTitle}
+            code={code}
+            shareText={shareText}
+            compact
+          />
+        </div>
       </div>
 
       <div className="bg-surface rounded-xl border border-border p-6 space-y-3">
