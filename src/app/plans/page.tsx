@@ -17,7 +17,8 @@ import { getActiveSchool } from "@/lib/school/active";
 import { requireSchoolAccess } from "@/lib/school";
 import { hasSchoolPermission } from "@/lib/school/role-matrix";
 import { schoolApprovalCopy } from "@/lib/school-approval-copy";
-import { listTrashedPlans, restorePlanFormAction } from "@/app/actions/plans";
+import { listTrashedPlans } from "@/lib/plan-trash";
+import { restorePlanFormAction } from "@/app/actions/plans";
 import { PlanSearchBox } from "@/components/ksp/plan-search-box";
 
 export const dynamic = "force-dynamic";

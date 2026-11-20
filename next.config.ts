@@ -17,10 +17,13 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+  { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+  { key: "X-DNS-Prefetch-Control", value: "off" },
   // HSTS: браузер запоминает, что на этот домен ходят только по HTTPS.
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
-  // connect-src
   {
     key: "Content-Security-Policy",
     value: [
@@ -30,25 +33,23 @@ const securityHeaders = [
       "frame-ancestors 'self'",
       "form-action 'self'",
       "img-src 'self' data: blob: https:",
-      // Monaco больше не приходит с CDN: редактор раздаётся из public/monaco/vs
-      // (собирает scripts/copy-monaco.mjs), поэтому для стилей и шрифтов
-      // хватает 'self'. Прежний список разрешал jsdelivr/unpkg — это больше не
-      // нужно, и внешний источник кода в редакторе убран.
+      // Monaco раздаётся локально из public/monaco/vs (scripts/copy-monaco.mjs):
+      // сторонние CDN (jsdelivr/unpkg) полностью исключены из script-src и connect-src,
+      // чтобы закрыть вектор CSP-обхода через публичные npm-пакеты.
       "style-src 'self' 'unsafe-inline'",
-      // Редактор кода грузит Monaco со своего CDN (@monaco-editor/react
-      // default loader); без этого вкладка «Редактор» висит в «Загрузка…».
-      `script-src ${scriptSrc} https://cdn.jsdelivr.net https://unpkg.com`,
-      // Monaco loader и worker'ы ходят на CDN: разрешаем fetch к нему.
-      "connect-src 'self' https://api.openai.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.cloudflare.com wss: https://cdn.jsdelivr.net https://unpkg.com",
+      `script-src ${scriptSrc}`,
+      // Все вызовы ИИ-провайдеров выполняются строго на сервере — клиенту нужен только 'self' и wss.
+      "connect-src 'self' wss:",
       // workerSrc у Monaco это blob:-чанок — разрешаем создание воркеров из blob.
       "worker-src 'self' blob:",
-      // Шрифты Monaco (codicon) теперь приходят с нашего домена (public/monaco/vs).
       "font-src 'self' data:",
+      ...(isDev ? [] : ["upgrade-insecure-requests"]),
     ].join("; "),
   },
 ];
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   // Dev-сервер на локальной машине доступен и как localhost, и как
   // 127.0.0.1 — без этого HMR/WebSocket dev-клиента падают
   // (ERR_INVALID_HTTP_RESPONSE), что ломало гидрацию в разработке.

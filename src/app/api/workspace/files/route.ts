@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { getDb, COL } from "@/lib/mongo";
 import { isMongoConfigured } from "@/lib/mongo";
 
@@ -72,6 +73,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`workspace:files:mut:${auth.user.id}`, 120, 60_000);
+  if (!rl.ok) return NextResponse.json({ error: "Слишком много операций с файлами" }, { status: 429 });
   if (!isMongoConfigured()) return badRequest("MongoDB не настроена");
 
   let body: { path?: unknown; name?: unknown; content?: unknown };
@@ -109,6 +112,8 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`workspace:files:mut:${auth.user.id}`, 120, 60_000);
+  if (!rl.ok) return NextResponse.json({ error: "Слишком много операций с файлами" }, { status: 429 });
   if (!isMongoConfigured()) return badRequest("MongoDB не настроена");
 
   const { searchParams } = new URL(req.url);

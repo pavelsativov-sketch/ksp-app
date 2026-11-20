@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,8 @@ export async function GET() {
 export async function POST() {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`agent:snapshots:mut:${auth.user.id}`, 20, 10 * 60_000);
+  if (!rl.ok) return NextResponse.json({ error: "Слишком много операций со снимками" }, { status: 429 });
   try {
     const snapshot = await (await getWorkspaceRuntime(auth.user.id)).createSnapshot();
     return NextResponse.json({ ok: true, ...snapshot }, { headers: { "Cache-Control": "no-store" } });
@@ -29,6 +32,8 @@ export async function POST() {
 export async function PUT(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`agent:snapshots:mut:${auth.user.id}`, 20, 10 * 60_000);
+  if (!rl.ok) return NextResponse.json({ error: "Слишком много операций со снимками" }, { status: 429 });
   let body: { id?: unknown };
   try { body = await req.json() as typeof body; } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   if (typeof body.id !== "string" || body.id.length > 100) return NextResponse.json({ error: "Некорректный снимок" }, { status: 400 });

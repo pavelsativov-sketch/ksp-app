@@ -21,7 +21,10 @@ export function getSessionSecretBytes(): Uint8Array {
 export async function verifySessionTokenSubject(token: string | undefined): Promise<string | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, getSessionSecretBytes(), { maxTokenAge: "12h" });
+    const { payload } = await jwtVerify(token, getSessionSecretBytes(), {
+      algorithms: ["HS256"],
+      maxTokenAge: "12h",
+    });
     if (!payload.sub || !/^[0-9a-f]{24}$/i.test(payload.sub)) return null;
     return payload.sub;
   } catch {

@@ -95,6 +95,7 @@ export async function createSession(
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
+    priority: "high",
     path: "/",
     maxAge: SESSION_HOURS * 60 * 60,
   });
@@ -119,7 +120,10 @@ export async function clearSession(): Promise<void> {
 export async function readSessionSubject(token: string | undefined): Promise<string | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret(), { maxTokenAge: "12h" });
+    const { payload } = await jwtVerify(token, secret(), {
+      algorithms: ["HS256"],
+      maxTokenAge: "12h",
+    });
     if (!payload.sub || !/^[0-9a-f]{24}$/i.test(payload.sub)) return null;
     return payload.sub;
   } catch {
@@ -145,7 +149,10 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   let result: SessionUser | null = null;
   if (token) {
     try {
-      const { payload } = await jwtVerify(token, secret(), { maxTokenAge: "12h" });
+      const { payload } = await jwtVerify(token, secret(), {
+        algorithms: ["HS256"],
+        maxTokenAge: "12h",
+      });
       if (!payload.sub || !/^[0-9a-f]{24}$/i.test(payload.sub)) result = null;
       else {
         // Reject legacy or malformed identities before opening a Mongo connection.

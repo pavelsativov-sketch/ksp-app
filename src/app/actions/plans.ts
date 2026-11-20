@@ -157,36 +157,6 @@ export async function deletePlanAction(id: string) {
   redirect("/plans");
 }
 
-export interface TrashedPlanRow {
-  id: string;
-  title: string;
-  grade: number | null;
-  topic: string | null;
-  deletedAt: string;
-}
-
-/** Список удалённых планов пользователя (для корзины на дашборде). */
-export async function listTrashedPlans(userId: string, limit = 20): Promise<TrashedPlanRow[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection(COL.planTrash)
-    .find({ owner_id: userId })
-    .sort({ deleted_at: -1 })
-    .limit(limit)
-    .toArray();
-  return docs.map((d) => ({
-    id: String(d._id),
-    title: String((d.original as PlanDoc | undefined)?.title ?? "(без названия)"),
-    grade: Number.isFinite((d.original as PlanDoc | undefined)?.grade)
-      ? (d.original as PlanDoc).grade
-      : null,
-    topic: typeof (d.original as PlanDoc | undefined)?.content?.topic === "string"
-      ? (d.original as PlanDoc).content.topic
-      : null,
-    deletedAt: d.deleted_at instanceof Date ? d.deleted_at.toISOString() : new Date().toISOString(),
-  }));
-}
-
 /** Обёртка для формы: достаёт id из FormData (ожидаемый тип server action — Promise<void>). */
 export async function restorePlanFormAction(formData: FormData): Promise<void> {
   await restorePlanAction(String(formData.get("trashId") ?? "").trim());

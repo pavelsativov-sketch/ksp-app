@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 import { getWorkspaceTarget } from "@/lib/agents/runtime-mode";
 import { randomUUID } from "node:crypto";
@@ -22,6 +23,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`agent:terminal:${auth.user.id}`, 60, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Слишком много команд терминала. Подождите минуту." }, { status: 429 });
+  }
   let body: { command?: unknown; timeoutMs?: unknown; runId?: unknown };
   try { body = await req.json() as typeof body; }
   catch { return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 }); }

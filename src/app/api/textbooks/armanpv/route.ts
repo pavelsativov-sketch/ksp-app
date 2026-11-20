@@ -25,6 +25,17 @@ const postSchema = z.object({
  * со статусом индексации каждого учебника в базе RAG.
  */
 export async function GET(request: Request) {
+  const auth = await requireApiAuth();
+  if (auth.response) return auth.response;
+
+  const rl = await checkRateLimitAsync(`armanpv:get:${auth.user.id}`, 60, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Слишком много запросов к каталогу учебников. Попробуйте через минуту." },
+      { status: 429 },
+    );
+  }
+
   const url = new URL(request.url);
   const gradeParam = url.searchParams.get("grade");
   const grade = gradeParam ? Number(gradeParam) : null;
@@ -35,10 +46,13 @@ export async function GET(request: Request) {
   const live = url.searchParams.get("live") === "1" || url.searchParams.get("live") === "true";
 
   if (live && grade && Number.isInteger(grade) && grade >= 1 && grade <= 11) {
-    try {
-      await fetchArmanPvGradeLive(grade);
-    } catch (e) {
-      console.warn("Live Arman-PV sync failed, falling back to cached snapshot:", e);
+    const liveRl = await checkRateLimitAsync(`armanpv:live:${auth.user.id}`, 5, 10 * 60_000);
+    if (liveRl.ok) {
+      try {
+        await fetchArmanPvGradeLive(grade);
+      } catch (e) {
+        console.warn("Live Arman-PV sync failed, falling back to cached snapshot:", e);
+      }
     }
   }
 
@@ -130,10 +144,13 @@ export async function GET(request: Request) {
     return a.grade - b.grade;
   });
 
-  return NextResponse.json({
-    items,
-    total: items.length,
-  });
+  return NextResponse.json(
+    {
+      items,
+      total: items.length,
+    },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
 
 /**

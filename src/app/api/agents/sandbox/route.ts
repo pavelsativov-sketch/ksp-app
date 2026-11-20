@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireApiAuth } from "@/lib/api-auth";
+import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { getDb, COL } from "@/lib/mongo";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 // Константа живёт в paths.ts: реэкспорт через runtime.ts не виден сборке
@@ -63,6 +64,8 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`agent:sandbox:mut:${auth.user.id}`, 120, 60_000);
+  if (!rl.ok) return NextResponse.json({ error: "Слишком много операций с файлами" }, { status: 429 });
 
   let body: { file?: string; content?: string };
   try { body = await req.json() as typeof body; } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
@@ -83,6 +86,8 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`agent:sandbox:mut:${auth.user.id}`, 120, 60_000);
+  if (!rl.ok) return NextResponse.json({ error: "Слишком много операций с файлами" }, { status: 429 });
   const file = new URL(req.url).searchParams.get("file");
   if (!file) return NextResponse.json({ error: "Нет имени файла" }, { status: 400 });
 
@@ -98,6 +103,8 @@ export async function DELETE(req: Request) {
 export async function PATCH(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
+  const rl = await checkRateLimitAsync(`agent:sandbox:mut:${auth.user.id}`, 120, 60_000);
+  if (!rl.ok) return NextResponse.json({ error: "Слишком много операций с файлами" }, { status: 429 });
   let body: { from?: unknown; to?: unknown };
   try { body = await req.json() as typeof body; }
   catch { return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 }); }

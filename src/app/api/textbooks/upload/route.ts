@@ -80,6 +80,10 @@ export async function POST(request: Request) {
 
   const arr = new Uint8Array(await file.arrayBuffer());
   const buffer = Buffer.from(arr);
+  // Проверка реальной PDF-сигнатуры (%PDF-): расширение .pdf легко подделать.
+  if (buffer.length < 5 || buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
+    return NextResponse.json({ error: "Файл не является корректным PDF-документом" }, { status: 400 });
+  }
 
   const now = new Date();
   const created = await db.collection<TextbookDoc>(COL.textbooks).insertOne({

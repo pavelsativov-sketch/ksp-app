@@ -1,0 +1,35 @@
+# Не загружаем тесты, отладочные скрипты, локальные каталоги и документацию в бандл Vercel.
+.git
+.github
+.claude
+.work
+.zcode
+.impeccable
+.freebuff
+.tools
+tests
+test-results
+playwright-report
+coverage
+docs
+supabase
+*.log
+*.bak
+*.tmp.mjs
+dbg-*.png
+patch_task_builder.py
+AUDIT.md
+TODO.md
+Publish.md
+PRODUCT.md
+plan.md
+CLAUDE.md
+Dockerfile
+.dockerignore
+playwright.config.ts
+vitest.config.ts
+vitest.live.config.ts
+# Все скрипты отладки/тестов исключаем, оставляя только нужные postinstall/prebuild.
+scripts/*
+!scripts/postinstall-418.mjs
+!scripts/copy-monaco.mjs
