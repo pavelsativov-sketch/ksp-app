@@ -62,6 +62,6 @@ async function objectivesFromDoc(file, profile) {
 const all = (await Promise.all(sources.map((source) => objectivesFromDoc(source.file, source.profile)))).flat();
 const unique = Array.from(new Map(all.map((row) => [`${row.profile}:${row.code}`, row])).values())
   .sort((a, b) => a.profile.localeCompare(b.profile) || a.code.localeCompare(b.code, "ru", { numeric: true }));
-const output = path.join(root, "supabase", "data", "tup_informatics_current.json");
+const output = path.join(root, "data", "tup_informatics_current.json");
 fs.writeFileSync(output, `${JSON.stringify(unique, null, 2)}\n`, "utf8");
 console.log(`Wrote ${unique.length} current TUP objectives to ${output}`);

@@ -12,7 +12,6 @@
     "test:ai:free": "node scripts/benchmark-ai.mjs --include-openrouter-free",
     "seed:goso": "node scripts/seed-goso.mjs",
     "import:tup": "node scripts/import-tup-informatics.mjs",
-    "db:migrate": "node scripts/_migrate.mjs",
     "test": "vitest run",
     "test:agent": "vitest run --config vitest.live.config.ts",
     "check:runner": "node scripts/check-runner.mjs",
