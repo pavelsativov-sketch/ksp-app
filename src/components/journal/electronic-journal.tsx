@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   CalendarPlus,
   Download,
   FileSpreadsheet,
+  FileUp,
   Loader2,
   Plus,
   RefreshCw,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { extractRowsFromOfficeFile, parseStudentsFromRows } from "@/lib/office-table-import";
 import type {
   AttendanceStatus,
   JournalEntryView,
@@ -142,6 +144,7 @@ export function ElectronicJournal({
   const [showAddModal, setShowAddModal] = useState(false);
   const [newClassInput, setNewClassInput] = useState("5А");
   const [newNamesInput, setNewNamesInput] = useState("");
+  const rosterFileRef = useRef<HTMLInputElement>(null);
 
   // Панель импорта результатов ДЗ
   const [showImportModal, setShowImportModal] = useState(false);
@@ -234,6 +237,68 @@ export function ElectronicJournal({
       setNotice(e instanceof Error ? e.message : "Не удалось сохранить отметку");
     } finally {
       setSavingCell(null);
+    }
+  }
+
+  async function handleRosterFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setLoading(true);
+    setNotice(null);
+    try {
+      const rows = await extractRowsFromOfficeFile(file, file.name);
+      const parsed = parseStudentsFromRows(rows, newClassInput.trim() || selectedClass || "5А");
+      if (parsed.length === 0) {
+        throw new Error(
+          locale === "kk"
+            ? "Файлдан оқушылардың аты-жөні табылмады"
+            : "В файле не найдено ни одного ФИО ученика",
+        );
+      }
+      const grouped = new Map<string, string[]>();
+      for (const item of parsed) {
+        const list = grouped.get(item.className) ?? [];
+        list.push(item.fullName);
+        grouped.set(item.className, list);
+      }
+
+      let totalAdded = 0;
+      let firstClass = "";
+      for (const [cls, names] of grouped.entries()) {
+        if (!firstClass) firstClass = cls;
+        for (let offset = 0; offset < names.length; offset += 80) {
+          const chunk = names.slice(offset, offset + 80);
+          const res = await fetch("/api/journal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "add-students",
+              className: cls,
+              names: chunk,
+            }),
+          });
+          const data = (await res.json().catch(() => ({}))) as { added?: number; error?: string };
+          if (!res.ok) throw new Error(data.error || "Ошибка импорта списка учеников");
+          totalAdded += data.added ?? 0;
+        }
+      }
+
+      setShowAddModal(false);
+      if (firstClass && grouped.size === 1) {
+        setSelectedClass(firstClass);
+        await reload({ className: firstClass, sync: false });
+      } else {
+        await reload({ sync: false });
+      }
+      setNotice(
+        locale === "kk"
+          ? `«${file.name}» файлынан қосылған жаңа оқушылар: ${totalAdded} (танылды: ${parsed.length})`
+          : `Из файла «${file.name}» добавлено новых учеников: ${totalAdded} (распознано: ${parsed.length})`,
+      );
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Ошибка чтения файла");
+      setLoading(false);
     }
   }
 
@@ -544,13 +609,36 @@ export function ElectronicJournal({
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddModal(false)}>
-                {L.cancel}
-              </Button>
-              <Button type="button" size="sm" onClick={() => void handleAddStudents()} disabled={loading}>
-                {L.saveStudents}
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <input
+                  ref={rosterFileRef}
+                  type="file"
+                  accept=".xlsx,.docx,.csv,.tsv,.txt"
+                  className="hidden"
+                  onChange={(e) => void handleRosterFileUpload(e)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                  onClick={() => rosterFileRef.current?.click()}
+                >
+                  <FileUp className="size-4" />
+                  {locale === "kk"
+                    ? "Файлдан жүктеу (.xlsx, .docx, .csv)"
+                    : "Загрузить из файла (.xlsx, .docx, .csv)"}
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddModal(false)}>
+                  {L.cancel}
+                </Button>
+                <Button type="button" size="sm" onClick={() => void handleAddStudents()} disabled={loading}>
+                  {L.saveStudents}
+                </Button>
+              </div>
             </div>
           </div>
         )}

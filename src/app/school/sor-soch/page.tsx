@@ -1,13 +1,26 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, Check, Printer, Sparkles, BarChart3, FileCheck2 } from "lucide-react";
+import { Loader2, Copy, Check, Printer, Sparkles, BarChart3, FileCheck2, DownloadCloud } from "lucide-react";
 import { SorSochGenerator } from "@/components/school/sor-soch-generator";
 import { RosterPicker } from "@/components/school/roster-picker";
 import { SchoolDocxButton } from "@/components/school/school-docx-button";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
+
+interface OnlineSorSession {
+  workId: string;
+  title: string;
+  subject: string;
+  grade: number;
+  quarter: number;
+  workType: string;
+  maxPoints: number;
+  sectionOrTopic: string;
+  attemptsCount: number;
+  scores: number[];
+}
 
 export default function SorSochPage() {
   const { locale } = useUiLocale();
@@ -28,6 +41,45 @@ export default function SorSochPage() {
   const [result, setResult] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [onlineSessions, setOnlineSessions] = useState<OnlineSorSession[]>([]);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode !== "analyze") return;
+    let cancelled = false;
+    void fetch("/api/ai/sor-soch/assign", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ sessions?: OnlineSorSession[] }>) : null))
+      .then((data) => {
+        if (!cancelled && data?.sessions) setOnlineSessions(data.sessions);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  function applyOnlineSession(sess: OnlineSorSession) {
+    setSubject(sess.subject);
+    setGrade(String(sess.grade));
+    setQuarter(String(sess.quarter));
+    setWorkType(sess.workType);
+    setMaxScore(String(sess.maxPoints));
+    if (sess.sectionOrTopic) setTopic(sess.sectionOrTopic);
+    if (sess.scores.length > 0) {
+      setScores(sess.scores.join(", "));
+      setSyncNotice(
+        isKk
+          ? `Онлайн тапсырудан ${sess.scores.length} оқушының балы жүктелді`
+          : `Подтянуты баллы ${sess.scores.length} учеников из онлайн-сдачи (Вар. 1 + Вар. 2)`,
+      );
+    } else {
+      setSyncNotice(
+        isKk
+          ? "Бұл жұмыс бойынша оқушылар әлі жауап жібермеді"
+          : "По этой онлайн-выдаче ученики ещё не отправили ответы",
+      );
+    }
+  }
 
   const parsedScores = scores
     .split(/[\s,;]+/)
@@ -134,6 +186,35 @@ export default function SorSochPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
+              {onlineSessions.length > 0 && (
+                <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    <DownloadCloud className="size-3.5" />
+                    {isKk
+                      ? "Онлайн БЖБ/ТЖБ нәтижелерін бір батырмамен жүктеу:"
+                      : "Подтянуть баллы из онлайн-сдачи СОР/СОЧ:"}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {onlineSessions.slice(0, 6).map((sess) => (
+                      <button
+                        key={sess.workId}
+                        type="button"
+                        onClick={() => applyOnlineSession(sess)}
+                        className="rounded-lg border border-border bg-background px-2.5 py-1 text-left text-xs transition-colors hover:border-primary hover:bg-primary/5"
+                      >
+                        <span className="font-semibold">
+                          {sess.workType} · {sess.subject} ({sess.grade})
+                        </span>{" "}
+                        <span className="text-muted-foreground">
+                          ({isKk ? "жауап" : "ответов"}: {sess.attemptsCount})
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {syncNotice && <p className="text-[11px] text-muted-foreground">{syncNotice}</p>}
+                </div>
+              )}
+
               <RosterPicker
                 mode="class"
                 locale={locale}

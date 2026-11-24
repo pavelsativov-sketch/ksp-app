@@ -22,7 +22,10 @@ import {
   sanitizePrompt,
   type SafetyDecision,
 } from "./safety";
-import { bilimClassInstructions, isBilimClassContext } from "@/lib/agents/domain-skills/bilimclass";
+import {
+  combinedDomainInstructions,
+  isEducationalPortalContext,
+} from "@/lib/agents/domain-skills";
 import { detectPageAuthBarrier, type PageAuthBarrier } from "@/lib/agents/browser-dom";
 
 /**
@@ -523,9 +526,8 @@ export async function runComputerUse(opts: RunOptions): Promise<string> {
       trimHistory(messages);
       pruneImages(messages);
       const url = await currentUrl(page as never);
-      const domainInstructions = isBilimClassContext(clean.text, url)
-        ? `\n\n${bilimClassInstructions()}`
-        : "";
+      const extraDomain = combinedDomainInstructions(clean.text, url);
+      const domainInstructions = extraDomain ? `\n\n${extraDomain}` : "";
       messages[0] = { role: "system", content: `${SYSTEM_PROMPT}${domainInstructions}` };
       const response = await client.chat.completions.create({
         model,
@@ -723,7 +725,7 @@ async function performAction(
       if (!text) return "ошибка: пустой текст";
       // Подпись поля под текущим фокусом: у activeElement она своя.
       const label = await activeFieldLabel(page);
-      const decision = classifyTyping(text, label, isBilimClassContext("", page.url()));
+      const decision = classifyTyping(text, label, isEducationalPortalContext("", page.url()));
       const probe: ElementProbe = { label, tag: "input", type: "text", visible: true };
 
       if (ctx.forceConfirm || decision.requiresConfirmation) {

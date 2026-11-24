@@ -5,7 +5,12 @@ import { executeWithFallback, rateLimitRetryMs } from '@/lib/ai/providers';
 import { getControlOwner, releaseControlToUser, setControlOwner, waitForControl } from './session';
 import { buildCheckpoint, compactForModel, parseCheckpoint, repairTranscript, type AgentMessage } from './checkpoint';
 import { getWorkspaceRuntime } from '@/lib/workspace/runtime';
-import { isBilimClassContext, bilimClassInstructions } from '@/lib/agents/domain-skills/bilimclass';
+import {
+  combinedDomainInstructions,
+  detectDomainSkills,
+  getDomainSkillInstructions,
+  type DomainSkillId,
+} from '@/lib/agents/domain-skills';
 import { appBaseUrl, decideContinuation, MAX_CONTINUATIONS, triggerContinuation } from './continuation';
 import { buildPartialReport } from './partial-report';
 import { matchRecipe, runRecipe } from './recipes';
@@ -29,10 +34,14 @@ const SYSTEM_PROMPT = `Ты — агент в рабочей области Mekt
 - browserWait — подождать загрузку страницы (1–10 секунд);
 - browserDescribeScreen — показать текущий экран браузера vision-модели и получить текстовое описание того, что видно (заголовки, кнопки, графики, ошибки);
 - createKsp — создать настоящий КСП (краткосрочный план урока) в аккаунте учителя: передай grade (класс), subject (предмет), topic (тема), при необходимости language ('ru' или 'kz') и objectives. Возвращает planId и ссылки на страницу, Word и PowerPoint;
-- listPlans — список последних планов учителя (planId, тема), нужен, чтобы выбрать план для КТП;
+- listPlans — список последних планов учителя (planId, тема), нужен, чтобы выбрать план для КТП, презентации или выдачи ДЗ;
 - createKtp — составить календарно-тематический план (КТП) по существующему плану: planId, topics (список тем, к теме можно дописать « · 2 ч.» или « | 2026-09-01») и startDate (ГГГГ-ММ-ДД). Доступен на тарифе Pro;
+- createSorSoch — сгенерировать полный комплект СОР или СОЧ (2 варианта, дескрипторы, ключи и рубрика для родителей) и сохранить в /school/sor-soch;
+- createPresentation — собрать интерактивную презентацию к плану урока (planId) с сохранением в конструкторе /plans/<planId>/presentation и экспортом .pptx;
+- assignHomework — выдать интерактивное онлайн-ДЗ по плану урока (генерирует задания при необходимости и возвращает 6-значный код и ссылку /a/<код> для класса);
+- createSchoolDoc — сформировать официальный школьный документ ('vsk-spravka', 'characteristic', 'homeroom', 'iom') и сохранить его в школьном разделе;
 - finishTask — завершить задачу с итоговым summary.
-Если просят составить КСП или КТП — используй createKsp и createKtp, а не пиши план обычным текстом: так материал сохранится в аккаунте и его можно скачать. В итоге перечисли, что создано, и дай ссылки.
+Если просят составить КСП, КТП, СОР/СОЧ, презентацию, выдать онлайн-ДЗ или составить справку ВШК/характеристику/ИОМ/классный час — обязательно вызывай соответствующие инструменты продукта, а не пиши документ обычным текстом в чат: так материал сохранится в аккаунте учителя со ссылками. В итоге перечисли, что создано, и дай ссылки.
 Правила: делай шаги по одному, после каждого инструмента анализируй результат.
 Никогда не выдумывай результаты инструментов — они приходят в следующих сообщениях.
 Для browserNavigate передавай любой обычный адрес http:// или https:// и пробуй открыть
@@ -66,6 +75,10 @@ const TOOL_SCHEMAS = [
   { type: 'function' as const, function: { name: 'createKsp', description: 'Создать КСП (краткосрочный план урока) и сохранить в аккаунте учителя; вернёт planId и ссылки на страницу, Word и PowerPoint', parameters: { type: 'object', properties: { grade: { type: 'number', description: 'Класс, 1–11' }, subject: { type: 'string', description: 'Предмет, например «Математика»' }, topic: { type: 'string', description: 'Тема урока' }, language: { type: 'string', enum: ['ru', 'kz'] }, objectives: { type: 'array', items: { type: 'string' }, description: 'Цели обучения (необязательно)' } }, required: ['grade', 'subject', 'topic'] } } },
   { type: 'function' as const, function: { name: 'listPlans', description: 'Список последних планов учителя: planId, название, тема', parameters: { type: 'object', properties: { limit: { type: 'number' } }, required: [] } } },
   { type: 'function' as const, function: { name: 'createKtp', description: 'Составить КТП по существующему плану (planId из listPlans или createKsp). Тариф Pro', parameters: { type: 'object', properties: { planId: { type: 'string' }, topics: { type: 'array', items: { type: 'string' } }, startDate: { type: 'string', description: 'ГГГГ-ММ-ДД' } }, required: ['planId'] } } },
+  { type: 'function' as const, function: { name: 'createSorSoch', description: 'Сгенерировать полный комплект СОР или СОЧ (2 варианта, дескрипторы, ключи, рубрика) и сохранить в аккаунте учителя', parameters: { type: 'object', properties: { subject: { type: 'string' }, grade: { type: 'number', description: '1–11' }, quarter: { type: 'number', description: '1–4' }, workType: { type: 'string', description: 'СОР №1, СОР №2 или СОЧ' }, language: { type: 'string', enum: ['ru', 'kz'] }, maxPoints: { type: 'number' }, sectionOrTopic: { type: 'string' } }, required: ['subject', 'grade'] } } },
+  { type: 'function' as const, function: { name: 'createPresentation', description: 'Собрать интерактивную презентацию к плану урока (planId) и сохранить в конструкторе слайдов', parameters: { type: 'object', properties: { planId: { type: 'string', description: 'ID плана из createKsp/listPlans (или пусто для последнего)' }, theme: { type: 'string', enum: ['network', 'lavender', 'ocean', 'sunset'] } }, required: [] } } },
+  { type: 'function' as const, function: { name: 'assignHomework', description: 'Выдать онлайн-ДЗ по плану урока: вернёт 6-значный код и ссылку /a/<код> для учеников', parameters: { type: 'object', properties: { planId: { type: 'string' }, title: { type: 'string' }, daysValid: { type: 'number' } }, required: [] } } },
+  { type: 'function' as const, function: { name: 'createSchoolDoc', description: 'Создать официальный школьный документ (справка ВШК, характеристика, классный час, ИОМ)', parameters: { type: 'object', properties: { docType: { type: 'string', enum: ['vsk-spravka', 'characteristic', 'homeroom', 'iom'] }, title: { type: 'string' }, details: { type: 'string' }, language: { type: 'string', enum: ['ru', 'kz'] } }, required: ['docType', 'title', 'details'] } } },
   { type: 'function' as const, function: { name: 'finishTask', description: 'Завершить задачу с итогом', parameters: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] } } },
 ];
 
@@ -205,8 +218,9 @@ export async function runAgentTask(
       memoryBlock = `\nПоследние поручения (только темы, без результатов):\n${recentParts.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
     }
 
-    const systemPrompt = (isBilimClassContext(prompt, '')
-      ? `${baseSystemPrompt}\n\n${bilimClassInstructions(prompt)}`
+    const initialDomainBlock = combinedDomainInstructions(prompt, '');
+    const systemPrompt = (initialDomainBlock
+      ? `${baseSystemPrompt}\n\n${initialDomainBlock}`
       : baseSystemPrompt) + memoryBlock;
     const deadline = Date.now() + TIME_BUDGET_MS;
 
@@ -235,11 +249,10 @@ export async function runAgentTask(
     // загрузки, недоступная страница) возвращаются модели — она сама
     // решает, повторить или завершить задачу.
     let hardBrowserFailure: string | undefined;
-    // Навык BilimClass подключается и тогда, когда агент оказался на сайте по ходу
-    // работы (например, «открой журнал» без слова BilimClass в поручении): иначе
-    // он видел бы незнакомый интерфейс без подсказок.
-    let bilimSkillInjected = isBilimClassContext(prompt, '');
-    let bilimSeenOnPage = false;
+    // Предметные навыки (BilimClass, Kundelik.kz, НОБД) подключаются и тогда,
+    // когда агент перешёл на портал по ходу задачи без названия в исходном запросе.
+    const injectedSkills = new Set<DomainSkillId>(detectDomainSkills(prompt, ''));
+    const newlySeenSkills = new Set<DomainSkillId>();
 
     // Мульти-провайдерный фоллбэк: Groq → Cerebras → Gemini → OpenRouter.
     // Провайдер используется для всего цикла; при его сбое (лимит 429 и т.п.)
@@ -454,7 +467,11 @@ export async function runAgentTask(
                 authBarrier?: { requiresUserAction?: boolean; kind?: string | null; reason?: string; domain?: string };
                 needsCredentials?: { domain?: string; name?: string };
               };
-              if (!bilimSkillInjected && browserResult.url && isBilimClassContext('', browserResult.url)) bilimSeenOnPage = true;
+              if (browserResult.url) {
+                for (const skillId of detectDomainSkills('', browserResult.url)) {
+                  if (!injectedSkills.has(skillId)) newlySeenSkills.add(skillId);
+                }
+              }
               if (browserResult.success === false) {
                 const errMsg = browserResult.error ?? 'Браузер не смог выполнить действие';
                 // Жёсткая остановка — только когда браузер не поднять в принципе
@@ -470,7 +487,7 @@ export async function runAgentTask(
                 }
               } else if (
                 browserResult.authBarrier?.requiresUserAction &&
-                (!!browserResult.needsCredentials || /(войди|авторизуй|отметь|заполни|выстави|расписан|журнал|оценк|домашн|дз\b|отчет|отчёт|логин|парол|дэшборд|дешборд|провед|ктп|урок)/i.test(prompt))
+                (!!browserResult.needsCredentials || /(войди|авторизуй|отметь|заполни|выстави|расписан|журнал|оценк|домашн|дз\b|отчет|отчёт|логин|парол|дэшборд|дешборд|провед|ктп|урок|нобд|ұбдқ|кунделик|күнделік)/i.test(prompt))
               ) {
                 const { setControlOwner } = await import('@/lib/agents/session');
                 await setControlOwner(userId, 'user');
@@ -490,11 +507,24 @@ export async function runAgentTask(
         if (hardBrowserFailure) break;
       }
 
-      if (bilimSeenOnPage && !bilimSkillInjected) {
-        bilimSkillInjected = true;
-        messages.push({ role: 'user', content: `Ты оказался на BilimClass. Используй эту инструкцию для дальнейшей работы.
-${bilimClassInstructions(prompt)}` });
-        await log({ type: 'THINK', message: 'Подключаю навык BilimClass: разделы, журнал, расписание, КТП.' }).catch(() => {});
+      if (newlySeenSkills.size > 0) {
+        const skillNames: Record<DomainSkillId, string> = {
+          bilimclass: 'BilimClass',
+          kundelik: 'Kundelik.kz',
+          nobd: 'НОБД (ҰБДҚ)',
+        };
+        for (const skillId of newlySeenSkills) {
+          injectedSkills.add(skillId);
+          messages.push({
+            role: 'user',
+            content: `Ты оказался на портале ${skillNames[skillId]}. Используй эту инструкцию для дальнейшей работы.\n${getDomainSkillInstructions(skillId, prompt)}`,
+          });
+          await log({
+            type: 'THINK',
+            message: `Подключаю предметный навык ${skillNames[skillId]} и правила безопасности.`,
+          }).catch(() => {});
+        }
+        newlySeenSkills.clear();
       }
       }
 
@@ -637,6 +667,10 @@ function humanToolCall(name: string, args: Record<string, unknown>): string {
     case 'browserWait': return `Жду загрузку страницы (${String(args.seconds ?? 2)} с)`;
     case 'createKsp': return `Создаю КСП: ${String(args.subject ?? '')}, ${String(args.grade ?? '?')} класс — ${String(args.topic ?? '')}`.slice(0, 300);
     case 'createKtp': return 'Составляю календарно-тематический план (КТП)';
+    case 'createSorSoch': return `Создаю комплект ${String(args.workType ?? 'СОР/СОЧ')}: ${String(args.subject ?? '')}, ${String(args.grade ?? '?')} класс`.slice(0, 300);
+    case 'createPresentation': return 'Собираю интерактивную презентацию к уроку';
+    case 'assignHomework': return 'Выдаю онлайн-ДЗ по коду классу';
+    case 'createSchoolDoc': return `Составляю школьный документ: ${String(args.title ?? args.docType ?? '')}`.slice(0, 300);
     case 'listPlans': return 'Смотрю ваши планы';
     case 'finishTask': return 'Завершаю задачу';
     default: return `Вызов ${name}`;
@@ -650,7 +684,7 @@ function humanToolResult(name: string, resultStr: string): string {
     if (name === 'browserClick' || name === 'browserClickText') return parsed.clicked ? `Нажато: ${parsed.clicked} → ${parsed.title || parsed.url || ''}` : parsed.error ?? '';
     if (name === 'browserType') return parsed.typed ? `Введено: «${parsed.typed}»` : parsed.error ?? '';
     if (name === 'runCommand') return parsed.error ?? `Код завершения ${String(parsed.exitCode ?? '?')}: ${String(parsed.stdout ?? parsed.stderr ?? '').slice(0, 250)}`;
-    if (name === 'createKsp' || name === 'createKtp') return parsed.success === false ? (parsed.error ?? 'Не удалось создать материал') : (parsed.message ?? 'Готово');
+    if (name === 'createKsp' || name === 'createKtp' || name === 'createSorSoch' || name === 'createPresentation' || name === 'assignHomework' || name === 'createSchoolDoc') return parsed.success === false ? (parsed.error ?? 'Не удалось создать материал') : (parsed.message ?? 'Готово');
     if (name === 'listPlans') return parsed.success === false ? (parsed.error ?? '') : 'Планы получены';
     if (name === 'listFiles') return parsed.files?.length ? parsed.files.join(', ') : '(песочница пуста)';
     return parsed.message ?? parsed.error ?? parsed.output?.slice(0, 200) ?? 'готово';

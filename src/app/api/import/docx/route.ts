@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { parseDocx } from "@/lib/import/docx";
+import { parseDocxWithMeta } from "@/lib/import/docx";
+import { inferSubjectByObjectives } from "@/lib/goso/local";
+import { listSubjects } from "@/lib/plans-repo";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
 
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const content = await parseDocx(file);
+    const { content, detected } = await parseDocxWithMeta(file);
 
     // Проверка «похоже ли это на КСП».
     //
@@ -66,9 +68,11 @@ export async function POST(request: Request) {
     // учитель получал пустой план без единого сообщения и думал, что импорт
     // сломался. Теперь такой случай — понятный 422 с объяснением.
     const header = content.header ?? ({} as Record<string, unknown>);
-    const hasHeaderData = Object.values(header).some(
-      (value) => typeof value === "string" && value.trim() !== "",
-    );
+    const hasHeaderData =
+      Boolean(content.topic?.trim()) ||
+      Object.values(header).some(
+        (value) => typeof value === "string" && value.trim() !== "",
+      );
     const stages: unknown = content.stages ?? {};
     const stageValues = (Array.isArray(stages) ? stages : Object.values(stages ?? {})) as Array<
       Record<string, unknown>
@@ -94,7 +98,30 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ content });
+    const inferredSubjectName =
+      detected.subjectName ??
+      inferSubjectByObjectives(
+        content.learningObjectives,
+        detected.grade,
+        `${content.topic} ${content.header.longTermPlanSection ?? ""}`,
+      );
+
+    const subjects = await listSubjects().catch(() => []);
+    const matchedSubject = inferredSubjectName
+      ? subjects.find(
+          (s) => s.name_ru.toLocaleLowerCase("ru-RU") === inferredSubjectName.toLocaleLowerCase("ru-RU"),
+        ) ?? null
+      : null;
+
+    return NextResponse.json({
+      content,
+      detected: {
+        ...detected,
+        subjectName: inferredSubjectName,
+        subjectId: matchedSubject?.id ?? null,
+      },
+      subjects,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Неизвестная ошибка";
     if (message.includes("Invalid DOCX") || message.includes("word/document.xml")) {

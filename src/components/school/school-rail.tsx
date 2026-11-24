@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   MessageSquare, FolderKanban, FolderOpen, Monitor, Bot, Settings, MoreHorizontal,
-  BarChart3, UserCheck, Compass, Users, FileText, Link2,
+  BarChart3, UserCheck, Compass, Users, FileText, Link2, GraduationCap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useOsShellStore } from "@/lib/store/os-shell";
@@ -54,6 +54,7 @@ const ITEMS: RailItem[] = [
  */
 export const MORE_SECTIONS: { key: string; label: string; icon: LucideIcon; href: string; color: string }[] = [
   { key: "sorSoch", label: "Анализ СОР и СОЧ", icon: BarChart3, href: "/school/sor-soch", color: "#34d399" },
+  { key: "entModo", label: "Тренажёр ЕНТ и МОДО", icon: GraduationCap, href: "/school/ent-modo", color: "#f97316" },
   { key: "vsk", label: "Справки ВШК", icon: FileText, href: "/school/vsk", color: "#60a5fa" },
   { key: "characteristics", label: "Характеристики", icon: UserCheck, href: "/school/characteristics", color: "#f472b6" },
   { key: "homeroom", label: "Классное руководство", icon: Users, href: "/school/homeroom", color: "#fbbf24" },

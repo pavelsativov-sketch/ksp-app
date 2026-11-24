@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Download, FileCheck2, Loader2, Printer, Search, Sparkles } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
+import { Check, Download, ExternalLink, FileCheck2, Loader2, Printer, QrCode, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MathText } from "@/lib/math/render-math";
+import { ShareQrActions } from "@/components/share/share-toolbar";
+import { homeworkShareMessage } from "@/lib/share/messengers";
 import type { SorSochWork } from "@/lib/ai/sor-soch-generator";
+
+interface SorOnlineMeta {
+  v1Id: string;
+  v1Code: string;
+  v2Id: string;
+  v2Code: string;
+  issuedAt: string;
+}
 
 interface ObjectiveItem {
   code: string;
@@ -92,15 +103,29 @@ export function SorSochGenerator({ locale = "ru" }: { locale?: "ru" | "kk" }) {
   const [loadingGoso, setLoadingGoso] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [issuingOnline, setIssuingOnline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [work, setWork] = useState<SorSochWork | null>(null);
+  const [currentWorkId, setCurrentWorkId] = useState<string | null>(null);
+  const [onlineMeta, setOnlineMeta] = useState<SorOnlineMeta | null>(null);
   const [activeTab, setActiveTab] = useState<"v1" | "v2" | "keys" | "rubric">("v1");
-  const [recent, setRecent] = useState<Array<{ id: string; work: SorSochWork }>>([]);
+  const [recent, setRecent] = useState<Array<{ id: string; work: SorSochWork; online?: SorOnlineMeta | null }>>([]);
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => "https://ksp-app-pi.vercel.app",
+  );
 
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/ai/sor-soch", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ works?: Array<{ id: string; work: SorSochWork }> }>) : null))
+      .then((r) =>
+        r.ok
+          ? (r.json() as Promise<{
+              works?: Array<{ id: string; work: SorSochWork; online?: SorOnlineMeta | null }>;
+            }>)
+          : null,
+      )
       .then((data) => {
         if (!cancelled && data?.works) setRecent(data.works);
       })
@@ -172,14 +197,51 @@ export function SorSochGenerator({ locale = "ru" }: { locale?: "ru" | "kk" }) {
         throw new Error(data.error || "Ошибка генерации СОР/СОЧ");
       }
       setWork(data.work);
+      setCurrentWorkId(data.id ?? null);
+      setOnlineMeta(null);
       setActiveTab("v1");
       if (data.id) {
-        setRecent((prev) => [{ id: data.id!, work: data.work! }, ...prev.slice(0, 9)]);
+        setRecent((prev) => [{ id: data.id!, work: data.work!, online: null }, ...prev.slice(0, 9)]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Не удалось разработать СОР/СОЧ");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleIssueOnline() {
+    if (!work || issuingOnline) return;
+    setIssuingOnline(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/ai/sor-soch/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(currentWorkId ? { workId: currentWorkId } : {}),
+          work,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        workId?: string;
+        online?: SorOnlineMeta;
+        error?: string;
+      };
+      if (!res.ok || !data.online) {
+        throw new Error(data.error || "Не удалось создать онлайн-коды");
+      }
+      if (data.workId) setCurrentWorkId(data.workId);
+      setOnlineMeta(data.online);
+      setRecent((prev) =>
+        prev.map((item) =>
+          item.id === (data.workId ?? currentWorkId) ? { ...item, online: data.online } : item,
+        ),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось выдать СОР/СОЧ онлайн");
+    } finally {
+      setIssuingOnline(false);
     }
   }
 
@@ -403,6 +465,8 @@ export function SorSochGenerator({ locale = "ru" }: { locale?: "ru" | "kk" }) {
                     type="button"
                     onClick={() => {
                       setWork(r.work);
+                      setCurrentWorkId(r.id);
+                      setOnlineMeta(r.online ?? null);
                       setActiveTab("v1");
                     }}
                     className="rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] hover:bg-muted"
@@ -433,6 +497,17 @@ export function SorSochGenerator({ locale = "ru" }: { locale?: "ru" | "kk" }) {
             <div className="flex flex-wrap gap-1.5">
               <Button
                 type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleIssueOnline()}
+                disabled={issuingOnline}
+                className="gap-1.5 text-xs"
+              >
+                {issuingOnline ? <Loader2 className="size-3.5 animate-spin" /> : <QrCode className="size-3.5" />}
+                {locale === "kk" ? "Онлайн кодпен беру (1 және 2 нұсқа)" : "Провести онлайн по коду"}
+              </Button>
+              <Button
+                type="button"
                 size="sm"
                 onClick={() => void handleDownloadDocx()}
                 disabled={downloading}
@@ -455,6 +530,60 @@ export function SorSochGenerator({ locale = "ru" }: { locale?: "ru" | "kk" }) {
         </CardHeader>
 
         <CardContent className="flex-1 space-y-4">
+          {work && onlineMeta && (
+            <div className="grid gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3.5 sm:grid-cols-2">
+              {(
+                [
+                  {
+                    label: locale === "kk" ? "1-нұсқа" : "Вариант 1",
+                    code: onlineMeta.v1Code,
+                    id: onlineMeta.v1Id,
+                  },
+                  {
+                    label: locale === "kk" ? "2-нұсқа" : "Вариант 2",
+                    code: onlineMeta.v2Code,
+                    id: onlineMeta.v2Id,
+                  },
+                ] as const
+              ).map((v) => {
+                const url = `${origin}/a/${v.code}`;
+                const shareText = homeworkShareMessage({
+                  title: `${work.title} (${v.label})`,
+                  url,
+                  code: v.code,
+                  locale,
+                });
+                return (
+                  <div
+                    key={v.code}
+                    className="space-y-2 rounded-lg border border-border bg-background p-3 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-primary">{v.label}</span>
+                      <Link
+                        href={`/assignments/${v.id}`}
+                        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground underline"
+                      >
+                        {locale === "kk" ? "Нәтижелер" : "Результаты"}
+                        <ExternalLink className="size-3" />
+                      </Link>
+                    </div>
+                    <div className="font-mono text-base font-bold tracking-wider">
+                      /a/{v.code}
+                    </div>
+                    <ShareQrActions
+                      url={url}
+                      title={`${work.title} — ${v.label}`}
+                      code={v.code}
+                      shareText={shareText}
+                      locale={locale}
+                      compact
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {!work && !generating && (
             <div className="grid h-80 place-items-center text-center text-muted-foreground">
               <div className="max-w-md space-y-2">

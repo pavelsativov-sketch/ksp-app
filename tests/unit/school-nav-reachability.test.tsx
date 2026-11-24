@@ -40,6 +40,7 @@ function existingSections(): string[] {
 /** Разделы ИИ-генераторов и подключений, до которых должен быть путь из навигации. */
 const NAVIGABLE = [
   "sor-soch",
+  "ent-modo",
   "vsk",
   "characteristics",
   "homeroom",

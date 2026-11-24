@@ -19,10 +19,25 @@ import type {
 } from "@/lib/types/ksp";
 import { emptyKsp } from "@/lib/types/ksp";
 import { parseXml, findFirst, tableRows, paragraphText, paragraphStyle } from "@/lib/import/xml";
+import { GOSO_SUBJECT_KZ, resolveRussianSubjectName } from "@/lib/goso/kazakh";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export interface ImportedKspMetadata {
+  grade: number;
+  quarter: number | null;
+  language: "ru" | "kz";
+  subjectName: string | null;
+  section: string | null;
+}
+
+interface HeaderExtras {
+  subjectRaw?: string;
+  quarterRaw?: string;
+  rawText?: string;
+}
 
 interface ParsedElement {
   type: "paragraph" | "table";
@@ -31,7 +46,13 @@ interface ParsedElement {
   rows?: string[][];
 }
 
-type HeaderField = keyof LessonHeader | "topic" | "schoolProfile" | "students";
+type HeaderField =
+  | keyof LessonHeader
+  | "topic"
+  | "schoolProfile"
+  | "students"
+  | "subject"
+  | "quarter";
 
 // ---------------------------------------------------------------------------
 // Label mappings (RU + KZ)
@@ -40,22 +61,38 @@ type HeaderField = keyof LessonHeader | "topic" | "schoolProfile" | "students";
 const HEADER_LABELS: Record<string, HeaderField> = {
   // Russian
   "раздел долгосрочного плана": "longTermPlanSection",
+  "раздел": "longTermPlanSection",
+  "предмет": "subject",
+  "учебный предмет": "subject",
+  "четверть": "quarter",
+  "учебная четверть": "quarter",
   "школа": "school",
   "профиль школы": "schoolProfile",
   "дата": "date",
   "фио учителя": "teacherName",
+  "педагог": "teacherName",
+  "учитель": "teacherName",
   "класс": "grade",
   "присутствовало / отсутствовало": "students",
+  "количество присутствующих": "students",
   "тема урока": "topic",
   // Kazakh
   "ұзақ мерзімді жоспар бөлімі": "longTermPlanSection",
+  "бөлім": "longTermPlanSection",
+  "пән": "subject",
+  "пәні": "subject",
+  "тоқсан": "quarter",
   "мектеп": "school",
   "мектеп профилі": "schoolProfile",
   "күні": "date",
   "мұғалімнің аты-жөні": "teacherName",
+  "педагогтің аты-жөні": "teacherName",
   "сынып": "grade",
+  "сыныбы": "grade",
   "қатысқан / қатыспаған": "students",
+  "қатысқандар саны": "students",
   "сабақ тақырыбы": "topic",
+  "сабақтың тақырыбы": "topic",
 };
 
 const SECTION_HEADINGS: Record<string, string> = {
@@ -185,11 +222,20 @@ function findHeaderTable(elements: ParsedElement[]): string[][] | null {
     if (el.type !== "table" || !el.rows) continue;
     if (el.rows.length < 2) continue;
     const firstRow = el.rows[0];
-    // Шапка бывает и в 2, и в 3 колонки (например, «Предмет | Класс | Дата»).
-    if (firstRow.length < 2 || firstRow.length > 4) continue;
-    const label = firstRow[0] ?? "";
-    if (Object.keys(HEADER_LABELS).some((known) => matchesLabel(label, known))) {
-      return el.rows;
+    if (firstRow.length < 2 || firstRow.length > 6) continue;
+    // Не путать шапку с таблицей «Ход урока».
+    const flowKnown = Object.keys(FLOW_HEADERS);
+    const flowMatched = firstRow.filter((cell) =>
+      flowKnown.some((k) => matchesLabel(cell, k)),
+    ).length;
+    if (flowMatched >= 3) continue;
+
+    const checkLimit = Math.min(el.rows.length, 4);
+    for (let r = 0; r < checkLimit; r++) {
+      const label = el.rows[r]?.[0] ?? "";
+      if (Object.keys(HEADER_LABELS).some((known) => matchesLabel(label, known))) {
+        return el.rows;
+      }
     }
   }
   return null;
@@ -467,56 +513,70 @@ function extractBulletItems(text: string): string[] {
 // Main mapping function
 // ---------------------------------------------------------------------------
 
-function mapToKspContent(elements: ParsedElement[]): KspContent {
+function mapToKspContentWithExtras(elements: ParsedElement[]): {
+  content: KspContent;
+  extras: HeaderExtras;
+} {
   const ksp = emptyKsp();
+  const extras: HeaderExtras = {};
+  const rawChunks: string[] = [];
+
+  const applyHeaderPair = (rawLabel: string, rawValue: string) => {
+    const label = normalizeLabel(rawLabel);
+    const value = rawValue.trim();
+    if (!label || !value) return;
+    const exact = HEADER_LABELS[label];
+    const matchedKey = Object.keys(HEADER_LABELS).find((known) => matchesLabel(label, known));
+    const field = exact ?? (matchedKey ? HEADER_LABELS[matchedKey] : undefined);
+    if (!field) return;
+
+    switch (field) {
+      case "longTermPlanSection":
+        ksp.header.longTermPlanSection = value;
+        break;
+      case "school":
+        ksp.header.school = value;
+        break;
+      case "schoolProfile":
+        ksp.schoolProfile = parseSchoolProfile(value);
+        break;
+      case "date":
+        ksp.header.date = value;
+        break;
+      case "teacherName":
+        ksp.header.teacherName = value;
+        break;
+      case "grade":
+        ksp.header.grade = value;
+        break;
+      case "students": {
+        const { present, absent } = parseStudents(value);
+        ksp.header.studentsPresent = present;
+        ksp.header.studentsAbsent = absent;
+        break;
+      }
+      case "topic":
+        ksp.topic = value;
+        break;
+      case "subject":
+        extras.subjectRaw = value;
+        break;
+      case "quarter":
+        extras.quarterRaw = value;
+        break;
+    }
+  };
 
   // Find header table
   const headerRows = findHeaderTable(elements);
   if (headerRows) {
-    // Раньше цикл начинался с i = 1, то есть первая строка таблицы-шапки
-    // пропускалась. Именно в ней лежит «Раздел долгосрочного плана»
-    // (round-trip нашего же экспорта подтверждал потерю этого поля).
-    // Пропускаем строку только тогда, когда она сама является заголовком
-    // таблицы, а не полем.
     for (let i = 0; i < headerRows.length; i++) {
       const row = headerRows[i];
       if (row.length < 2) continue;
-      const label = normalizeLabel(row[0]);
-      const value = row[1]?.trim() ?? "";
-      const exact = HEADER_LABELS[label];
-      const field =
-        exact ??
-        Object.keys(HEADER_LABELS).find((known) => matchesLabel(label, known));
-      if (!field) continue;
-
-      switch (field) {
-        case "longTermPlanSection":
-          ksp.header.longTermPlanSection = value;
-          break;
-        case "school":
-          ksp.header.school = value;
-          break;
-        case "schoolProfile":
-          ksp.schoolProfile = parseSchoolProfile(value);
-          break;
-        case "date":
-          ksp.header.date = value;
-          break;
-        case "teacherName":
-          ksp.header.teacherName = value;
-          break;
-        case "grade":
-          ksp.header.grade = value;
-          break;
-        case "students": {
-          const { present, absent } = parseStudents(value);
-          ksp.header.studentsPresent = present;
-          ksp.header.studentsAbsent = absent;
-          break;
-        }
-        case "topic":
-          ksp.topic = value;
-          break;
+      applyHeaderPair(row[0] ?? "", row[1] ?? "");
+      // Поддержка 4-колоночной шапки («Предмет | Алгебра | Класс | 8 А»).
+      if (row.length >= 4) {
+        applyHeaderPair(row[2] ?? "", row[3] ?? "");
       }
     }
   }
@@ -526,13 +586,13 @@ function mapToKspContent(elements: ParsedElement[]): KspContent {
   if (flowRows) {
     for (let i = 1; i < flowRows.length; i++) {
       const row = flowRows[i];
-      if (row.length < 5) continue;
+      if (row.length < 4) continue;
 
       const { stage, time } = parseStageLabel(row[0]);
       if (!stage) continue;
 
-      const teacherCell = parseTeacherCell(row[1]);
-      const assessmentCell = parseAssessmentCell(row[3]);
+      const teacherCell = parseTeacherCell(row[1] ?? "");
+      const assessmentCell = parseAssessmentCell(row[3] ?? "");
 
       const stageData: LessonStage = {
         time,
@@ -598,9 +658,22 @@ function mapToKspContent(elements: ParsedElement[]): KspContent {
   };
 
   for (const el of elements) {
+    if (el.type === "table" && el.rows) {
+      for (const r of el.rows) rawChunks.push(r.join(" "));
+      continue;
+    }
     if (el.type !== "paragraph" || !el.text) continue;
     const text = el.text.trim();
     if (!text) continue;
+    rawChunks.push(text);
+
+    // Если в верхних абзацах есть «Предмет: ...» или «Четверть: ...» вне таблицы.
+    if (!currentSection && text.includes(":")) {
+      const idx = text.indexOf(":");
+      if (idx > 0 && idx < 35) {
+        applyHeaderPair(text.slice(0, idx), text.slice(idx + 1));
+      }
+    }
 
     const normalized = normalizeLabel(text);
     const sectionKey = SECTION_HEADINGS[normalized];
@@ -617,7 +690,154 @@ function mapToKspContent(elements: ParsedElement[]): KspContent {
   }
   flushSection();
 
-  return ksp;
+  extras.rawText = rawChunks.join("\n");
+  return { content: ksp, extras };
+}
+
+const SUBJECT_PAIRS_BY_LENGTH = Object.entries(GOSO_SUBJECT_KZ).sort(
+  (a, b) => Math.max(b[0].length, b[1].length) - Math.max(a[0].length, a[1].length),
+);
+
+function matchSubjectFromString(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = raw
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[«»"']/g, " ")
+    .replace(/(?<![\p{L}\p{N}])(предмет|учебный предмет|пәні|пән)(?![\p{L}\p{N}])/giu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return null;
+
+  const direct = resolveRussianSubjectName(cleaned);
+  if (direct) return direct;
+
+  const lower = cleaned.toLocaleLowerCase("ru-RU");
+  for (const [ru, kz] of SUBJECT_PAIRS_BY_LENGTH) {
+    if (
+      lower.includes(ru.toLocaleLowerCase("ru-RU")) ||
+      lower.includes(kz.toLocaleLowerCase("ru-RU"))
+    ) {
+      return ru;
+    }
+  }
+  return null;
+}
+
+function parseQuarterValue(
+  quarterRaw: string | undefined,
+  sectionText: string | undefined,
+  dateStr: string | undefined,
+  rawText: string | undefined,
+): number | null {
+  const parseRomanOrDigit = (s: string): number | null => {
+    const trimmed = s.trim();
+    const d = trimmed.match(/\b([1-4])\b/);
+    if (d) return Number(d[1]);
+    const r = trimmed.match(/\b(IV|III|II|I)\b/i);
+    if (r) {
+      const map: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4 };
+      return map[r[1].toUpperCase()] ?? null;
+    }
+    return null;
+  };
+
+  if (quarterRaw) {
+    const q = parseRomanOrDigit(quarterRaw);
+    if (q) return q;
+  }
+
+  const combined = `${sectionText ?? ""}\n${rawText ?? ""}`;
+  const explicit =
+    combined.match(/(?:^|[^\p{L}\d])([1-4])\s*(?:-?(?:я|ая|ші|шы))?\s*(?:четверт[ьи]|тоқсан)/iu) ??
+    combined.match(/(?:четверт[ьи]|тоқсан)\s*[:№-]?\s*([1-4])\b/iu);
+  if (explicit) return Number(explicit[1]);
+
+  const romanExplicit =
+    combined.match(/\b(IV|III|II|I)\s*(?:четверт[ьи]|тоқсан)/iu) ??
+    combined.match(/(?:четверт[ьи]|тоқсан)\s*[:№-]?\s*(IV|III|II|I)\b/iu);
+  if (romanExplicit) {
+    const map: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4 };
+    const found = map[romanExplicit[1].toUpperCase()];
+    if (found) return found;
+  }
+
+  if (dateStr) {
+    const dmy = dateStr.match(/\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b/);
+    const ymd = dateStr.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+    const month = dmy ? Number(dmy[2]) : ymd ? Number(ymd[2]) : NaN;
+    if (Number.isInteger(month) && month >= 1 && month <= 12) {
+      if (month === 9 || month === 10) return 1;
+      if (month === 11 || month === 12) return 2;
+      if (month >= 1 && month <= 3) return 3;
+      if (month === 4 || month === 5) return 4;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Автоопределение метаданных КСП (класс, четверть, язык, предмет, раздел ДП)
+ * по разобранной структуре документа и дополнительным полям шапки.
+ */
+export function detectImportedKspMeta(
+  content: KspContent,
+  extras?: HeaderExtras,
+): ImportedKspMetadata {
+  // 1. Класс (1–11)
+  let grade = 5;
+  const gradeHeaderMatch = content.header.grade?.match(/\b(1[01]|[1-9])\b/);
+  if (gradeHeaderMatch) {
+    grade = Number(gradeHeaderMatch[1]);
+  } else {
+    const codeGrade = content.learningObjectives
+      .map((o) => o.code.match(/^(\d{1,2})\.\d+/))
+      .find((m) => m && Number(m[1]) >= 1 && Number(m[1]) <= 11);
+    if (codeGrade) {
+      grade = Number(codeGrade[1]);
+    } else {
+      const secGrade = content.header.longTermPlanSection?.match(/\b(1[01]|[1-9])\.\d/);
+      if (secGrade) grade = Number(secGrade[1]);
+    }
+  }
+
+  // 2. Язык ("ru" | "kz")
+  const sampleText = [
+    content.topic,
+    content.header.longTermPlanSection,
+    content.header.school,
+    extras?.subjectRaw ?? "",
+    ...content.lessonObjectives,
+    content.stages.beginning.teacherActions,
+    content.stages.middle.teacherActions,
+  ].join(" ");
+  const kzLetters = sampleText.match(/[әғқңөұүһіӘҒҚҢӨҰҮҺІ]/g) ?? [];
+  const hasKzKeywords = /\b(сабақ мақсаттары|оқу мақсаттары|бағалау критерийлері|сабақ барысы)\b/i.test(
+    `${sampleText}\n${extras?.rawText ?? ""}`,
+  );
+  const language: "ru" | "kz" = kzLetters.length >= 2 || hasKzKeywords ? "kz" : "ru";
+
+  // 3. Предмет
+  const subjectName = matchSubjectFromString(extras?.subjectRaw);
+
+  // 4. Четверть
+  const quarter = parseQuarterValue(
+    extras?.quarterRaw,
+    content.header.longTermPlanSection,
+    content.header.date,
+    extras?.rawText,
+  );
+
+  // 5. Раздел ДП
+  const section = content.header.longTermPlanSection?.trim() || null;
+
+  return {
+    grade,
+    quarter,
+    language,
+    subjectName,
+    section,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -625,10 +845,11 @@ function mapToKspContent(elements: ParsedElement[]): KspContent {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a .docx file and extract KSP content.
- * Works in both browser and Node.js environments.
+ * Parse a .docx file and extract KSP content + auto-detected metadata.
  */
-export async function parseDocx(file: File | Buffer): Promise<KspContent> {
+export async function parseDocxWithMeta(
+  file: File | Buffer,
+): Promise<{ content: KspContent; detected: ImportedKspMetadata }> {
   const buffer = Buffer.isBuffer(file) ? file : Buffer.from(await file.arrayBuffer());
   const zip = await JSZip.loadAsync(buffer);
   const documentXml = await zip.file("word/document.xml")?.async("string");
@@ -637,7 +858,18 @@ export async function parseDocx(file: File | Buffer): Promise<KspContent> {
   }
 
   const elements = parseDocumentXml(documentXml);
-  return mapToKspContent(elements);
+  const { content, extras } = mapToKspContentWithExtras(elements);
+  const detected = detectImportedKspMeta(content, extras);
+  return { content, detected };
+}
+
+/**
+ * Parse a .docx file and extract KSP content.
+ * Works in both browser and Node.js environments.
+ */
+export async function parseDocx(file: File | Buffer): Promise<KspContent> {
+  const { content } = await parseDocxWithMeta(file);
+  return content;
 }
 
 /**

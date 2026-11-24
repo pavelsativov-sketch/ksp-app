@@ -1,21 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardPaste, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ClipboardPaste, FileUp, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFormDraft } from "@/lib/use-form-draft";
-import { parseKtpRows } from "@/lib/ktp-import";
+import { parseKtpRows, type ParsedKtpRow } from "@/lib/ktp-import";
+import { extractRowsFromOfficeFile, parseKtpFromRows } from "@/lib/office-table-import";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
 
 export default function NewLongTermPage() {
   const router = useRouter();
   const { locale } = useUiLocale();
   const isKk = locale === "kk";
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [subject, setSubject] = useState("");
   const [grade, setGrade] = useState("");
@@ -25,6 +27,8 @@ export default function NewLongTermPage() {
   ]);
   const [saving, setSaving] = useState(false);
   const [loadingGoso, setLoadingGoso] = useState(false);
+  const [importingFile, setImportingFile] = useState(false);
+  const [importNotice, setImportNotice] = useState("");
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [error, setError] = useState("");
@@ -94,10 +98,8 @@ export default function NewLongTermPage() {
     setSections(next);
   };
 
-  function applyBulkImport() {
-    const rows = parseKtpRows(bulkText);
-    if (rows.length === 0) return;
-
+  function applyParsedRows(rows: ParsedKtpRow[]) {
+    if (rows.length === 0) return false;
     const grouped = new Map<string, Array<{ title: string; hours: number; objectives: string }>>();
     for (const row of rows) {
       const sec = row.section || (isKk ? "1-бөлім" : "Раздел 1");
@@ -112,8 +114,66 @@ export default function NewLongTermPage() {
         topics,
       })),
     );
+    return true;
+  }
+
+  function applyBulkImport() {
+    const rows = parseKtpRows(bulkText);
+    if (!applyParsedRows(rows)) return;
     setBulkText("");
     setShowBulkPaste(false);
+    setImportNotice(
+      isKk
+        ? `Мәтіннен танылған тақырыптар саны: ${rows.length}`
+        : `Распознано тем из вставленного текста: ${rows.length}`,
+    );
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError(isKk ? "Файл 10 МБ-тан аспауы тиіс" : "Размер файла не должен превышать 10 МБ");
+      return;
+    }
+
+    setImportingFile(true);
+    setError("");
+    setImportNotice("");
+    try {
+      const rawRows = await extractRowsFromOfficeFile(file, file.name);
+      const parsed = parseKtpFromRows(rawRows);
+      if (!applyParsedRows(parsed.items)) {
+        setError(
+          isKk
+            ? "Файлдан сабақ тақырыптары табылмады. Кесте құрылымын тексеріңіз."
+            : "Не удалось найти темы уроков в файле. Проверьте таблицу КТП.",
+        );
+        return;
+      }
+      if (!subject.trim() && parsed.detectedSubject) {
+        setSubject(parsed.detectedSubject);
+      }
+      if (!grade && parsed.detectedGrade) {
+        setGrade(String(parsed.detectedGrade));
+      }
+      setImportNotice(
+        isKk
+          ? `«${file.name}» файлынан ${parsed.items.length} тақырып импортталды`
+          : `Из файла «${file.name}» загружено тем: ${parsed.items.length}`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : isKk
+            ? "Файлды оқу мүмкін болмады"
+            : "Не удалось прочитать файл КТП",
+      );
+    } finally {
+      setImportingFile(false);
+    }
   }
 
   async function fillFromGoso() {
@@ -259,6 +319,23 @@ export default function NewLongTermPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.docx,.csv,.tsv,.txt"
+                className="hidden"
+                onChange={(e) => void handleFileUpload(e)}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importingFile}
+              >
+                {importingFile ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />}
+                {isKk ? "КТЖ файлын жүктеу (.xlsx, .docx, .csv)" : "Загрузить файл КТП (.xlsx, .docx, .csv)"}
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -266,7 +343,7 @@ export default function NewLongTermPage() {
                 onClick={() => setShowBulkPaste((v) => !v)}
               >
                 <ClipboardPaste className="size-4" />
-                {isKk ? "Excel / Word кестесінен қою" : "Вставить КТП из Excel / Word / CSV"}
+                {isKk ? "Мәтін ретінде қою" : "Вставить списком"}
               </Button>
               <Button
                 type="button"
@@ -279,6 +356,12 @@ export default function NewLongTermPage() {
                 {isKk ? "МЖМБС / ҮОЖ бойынша автотолтыру" : "Заполнить разделы и цели из ГОСО / ТУП"}
               </Button>
             </div>
+
+            {importNotice && (
+              <p className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-medium text-foreground">
+                {importNotice}
+              </p>
+            )}
 
             {showBulkPaste && (
               <div className="space-y-2.5 rounded-xl border border-primary/30 bg-muted/40 p-4">

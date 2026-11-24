@@ -159,3 +159,84 @@ export function localSubjects(): Array<{ name_ru: string; name_kz: string; grade
     }))
     .sort((a, b) => a.name_ru.localeCompare(b.name_ru, "ru"));
 }
+
+/**
+ * Определяет каноническое русское название предмета ГОСО по кодам и текстам
+ * целей обучения из импортируемого КСП.
+ */
+export function inferSubjectByObjectives(
+  objectives: Array<{ code: string; text?: string }>,
+  grade?: number,
+  hintText?: string,
+): string | null {
+  const codes = objectives
+    .map((o) => o.code.trim())
+    .filter(Boolean);
+  if (codes.length === 0) return null;
+
+  const { bySubject } = load();
+  const normWords = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 4);
+
+  const objWords = new Set(
+    objectives.flatMap((o) => normWords(o.text ?? "")),
+  );
+  const hintWords = new Set(normWords(hintText ?? ""));
+
+  let bestSubject: string | null = null;
+  let bestScore = 0;
+
+  for (const [subjectName, list] of bySubject.entries()) {
+    let score = 0;
+    let matchedCodes = 0;
+
+    for (const code of codes) {
+      const candidates = list.filter(
+        (item) => item.code === code && (grade === undefined || item.grade === grade),
+      );
+      if (candidates.length === 0) continue;
+      matchedCodes += 1;
+      score += 10;
+
+      for (const cand of candidates) {
+        const candWords = normWords(`${cand.text_ru} ${cand.section ?? ""}`);
+        for (const w of candWords) {
+          if (objWords.has(w)) score += 3;
+          if (hintWords.has(w)) score += 1;
+        }
+      }
+    }
+
+    if (matchedCodes > 0 && score > bestScore) {
+      bestScore = score;
+      bestSubject = subjectName;
+    }
+  }
+
+  // Проверим также ТУП по информатике, если там уникальные коды.
+  const tup = localTupObjectives({ subject: "Информатика", grade });
+  if (tup && tup.length > 0) {
+    let tupScore = 0;
+    let tupMatched = 0;
+    for (const code of codes) {
+      const hit = tup.find((t) => t.code === code);
+      if (!hit) continue;
+      tupMatched += 1;
+      tupScore += 10;
+      for (const w of normWords(hit.text_ru)) {
+        if (objWords.has(w)) tupScore += 3;
+        if (hintWords.has(w)) tupScore += 1;
+      }
+    }
+    if (tupMatched > 0 && tupScore > bestScore) {
+      bestSubject = "Информатика";
+    }
+  }
+
+  return bestSubject;
+}
+

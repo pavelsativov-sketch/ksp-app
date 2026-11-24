@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   BookOpen,
   CalendarCheck,
   Download,
+  FileUp,
   GraduationCap,
   Loader2,
   RefreshCw,
@@ -20,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useUiLocale } from "@/components/i18n/use-ui-locale";
+import { extractRowsFromOfficeFile, parseStudentsFromRows } from "@/lib/office-table-import";
 import type { TeacherJournalAnalytics } from "@/lib/journal";
 
 function PersonalModeBanner() {
@@ -148,6 +150,7 @@ export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytic
                   ["/school/classes", "Менің сыныптарым"],
                   ["/school/attendance", "Қатысу жиынтығы"],
                   ["/school/sor-soch", "БЖБ және ТЖБ генераторы"],
+                  ["/school/ent-modo", "ҰБТ және ББЖМ тренажері"],
                   ["/school/characteristics", "Мінездемелер"],
                   ["/school/iom", "ЖББ бағыттары"],
                   ["/school/reports", "Жиынтық есеп"],
@@ -158,6 +161,7 @@ export function PersonalSchoolDashboard({ data }: { data: TeacherJournalAnalytic
                   ["/school/classes", "Мои классы"],
                   ["/school/attendance", "Сводка посещаемости"],
                   ["/school/sor-soch", "Генератор СОР и СОЧ"],
+                  ["/school/ent-modo", "Тренажёр ЕНТ и МОДО"],
                   ["/school/characteristics", "Характеристики"],
                   ["/school/iom", "Маршруты ИОМ"],
                   ["/school/reports", "Сводный отчёт"],
@@ -186,6 +190,9 @@ export function PersonalStudentsView({
   initialClassFilter?: string;
 }) {
   const router = useRouter();
+  const { locale } = useUiLocale();
+  const isKk = locale === "kk";
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [classFilter, setClassFilter] = useState(initialClassFilter);
   const [className, setClassName] = useState(initialClassFilter || initialData.classes[0]?.className || "7А");
   const [namesText, setNamesText] = useState("");
@@ -196,28 +203,77 @@ export function PersonalStudentsView({
     (s) => !classFilter || s.className === classFilter,
   );
 
+  async function submitBatchedStudents(grouped: Map<string, string[]>) {
+    let totalAdded = 0;
+    for (const [cls, list] of grouped.entries()) {
+      for (let offset = 0; offset < list.length; offset += 80) {
+        const chunk = list.slice(offset, offset + 80);
+        const res = await fetch("/api/journal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add-students", className: cls, names: chunk }),
+        });
+        const json = (await res.json().catch(() => null)) as { added?: number; error?: string } | null;
+        if (!res.ok) throw new Error(json?.error || "Не удалось добавить учеников");
+        totalAdded += json?.added ?? chunk.length;
+      }
+    }
+    return totalAdded;
+  }
+
   async function addStudents(e: React.FormEvent) {
     e.preventDefault();
     const names = namesText
       .split(/\r?\n/)
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter((line) => line.length >= 2);
     if (names.length === 0 || busy) return;
     setBusy(true);
     setNotice(null);
     try {
-      const res = await fetch("/api/journal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "add_students", className, names }),
-      });
-      const json = (await res.json().catch(() => null)) as { added?: number; error?: string } | null;
-      if (!res.ok) throw new Error(json?.error || "Не удалось добавить учеников");
+      const grouped = new Map<string, string[]>([[className.trim() || "7А", names]]);
+      const added = await submitBatchedStudents(grouped);
       setNamesText("");
-      setNotice(`Добавлено учеников: ${json?.added ?? names.length}`);
+      setNotice(isKk ? `Қосылған оқушылар: ${added}` : `Добавлено учеников: ${added}`);
       router.refresh();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRosterFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const rows = await extractRowsFromOfficeFile(file, file.name);
+      const parsed = parseStudentsFromRows(rows, className.trim() || "7А");
+      if (parsed.length === 0) {
+        throw new Error(
+          isKk
+            ? "Файлдан оқушылардың АТЖ табылмады"
+            : "В файле не найдено ФИО учеников",
+        );
+      }
+      const grouped = new Map<string, string[]>();
+      for (const item of parsed) {
+        const list = grouped.get(item.className) ?? [];
+        list.push(item.fullName);
+        grouped.set(item.className, list);
+      }
+      const added = await submitBatchedStudents(grouped);
+      setNotice(
+        isKk
+          ? `«${file.name}» файлынан импортталды: ${added} (танылды: ${parsed.length})`
+          : `Из файла «${file.name}» добавлено новых учеников: ${added} (распознано: ${parsed.length})`,
+      );
+      router.refresh();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Ошибка импорта файла");
     } finally {
       setBusy(false);
     }
@@ -230,11 +286,15 @@ export function PersonalStudentsView({
       const res = await fetch("/api/journal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "sync_homework" }),
+        body: JSON.stringify({ action: "sync-roster" }),
       });
       const json = (await res.json().catch(() => null)) as { added?: number; error?: string } | null;
       if (!res.ok) throw new Error(json?.error || "Не удалось синхронизировать");
-      setNotice(`Синхронизация с ДЗ завершена (новых учеников: ${json?.added ?? 0})`);
+      setNotice(
+        isKk
+          ? `ҮТ-мен синхрондау аяқталды (жаңа оқушылар: ${json?.added ?? 0})`
+          : `Синхронизация с ДЗ завершена (новых учеников: ${json?.added ?? 0})`,
+      );
       router.refresh();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Ошибка синхронизации");
@@ -248,9 +308,9 @@ export function PersonalStudentsView({
     setBusy(true);
     try {
       await fetch("/api/journal", {
-        method: "POST",
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete_student", studentId }),
+        body: JSON.stringify({ studentId }),
       });
       router.refresh();
     } finally {
@@ -299,10 +359,27 @@ export function PersonalStudentsView({
                 required
               />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.docx,.csv,.tsv,.txt"
+                className="hidden"
+                onChange={(e) => void handleRosterFile(e)}
+              />
               <Button type="submit" size="sm" disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
-                Добавить в класс
+                {isKk ? "Сыныпқа қосу" : "Добавить в класс"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <FileUp className="size-4" />
+                {isKk ? "Файлдан импорт (.xlsx, .docx, .csv)" : "Импорт из файла (.xlsx, .docx, .csv)"}
               </Button>
               {notice && <span className="text-xs text-muted-foreground">{notice}</span>}
             </div>

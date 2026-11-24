@@ -121,9 +121,10 @@ export const COL = {
   // Единая база учеников и электронный журнал учителя (1–10 баллов, УП/НП/Б).
   journalStudents: "journal_students",
   journalEntries: "journal_entries",
-  // Сохранённые документы школьных ИИ-конструкторов и генератора СОР/СОЧ.
+  // Сохранённые документы школьных ИИ-конструкторов, СОР/СОЧ и тренажёра ЕНТ/МОДО.
   schoolAiDocs: "school_ai_documents",
   sorSochWorks: "sor_soch_works",
+  entModoWorks: "ent_modo_works",
   // Кэш официальных казахских переводов целей обучения ГОСО РК.
   gosoTranslations: "goso_translations",
 } as const;
@@ -305,6 +306,7 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     db.collection(COL.journalEntries).createIndex({ owner_id: 1, class_name: 1, subject: 1, date: 1 }, { name: "journal_entries_owner_class_subject_date" }),
     db.collection(COL.schoolAiDocs).createIndex({ owner_id: 1, created_at: -1 }, { name: "school_ai_docs_owner_created" }),
     db.collection(COL.sorSochWorks).createIndex({ owner_id: 1, created_at: -1 }, { name: "sor_soch_works_owner_created" }),
+    db.collection(COL.entModoWorks).createIndex({ owner_id: 1, created_at: -1 }, { name: "ent_modo_works_owner_created" }),
   ]);
 }
 

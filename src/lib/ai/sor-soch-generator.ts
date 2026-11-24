@@ -548,3 +548,88 @@ export async function buildSorSochDocx(work: SorSochWork): Promise<Buffer> {
 
   return Packer.toBuffer(doc);
 }
+
+function resolveMcqIndex(options: string[], rawAnswer: string): number {
+  const clean = rawAnswer.trim();
+  if (!clean) return 0;
+
+  const letterMatch = clean.match(
+    /^(?:(?:ответ|жауабы)\s*[:—-]?\s*)?([АБВГДЕABCDEF])(?![\p{L}\p{N}])/iu,
+  );
+  if (letterMatch) {
+    const ch = letterMatch[1]!.toUpperCase();
+    const ruIdx = "АБВГДЕ".indexOf(ch);
+    if (ruIdx >= 0 && ruIdx < options.length) return ruIdx;
+    const enIdx = "ABCDEF".indexOf(ch);
+    if (enIdx >= 0 && enIdx < options.length) return enIdx;
+  }
+
+  const lowerAns = clean.toLowerCase();
+  const exactIdx = options.findIndex((o) => o.trim().toLowerCase() === lowerAns);
+  if (exactIdx >= 0) return exactIdx;
+  const subIdx = options.findIndex((o) => {
+    const lo = o.trim().toLowerCase();
+    return lo.length >= 2 && (lowerAns.includes(lo) || lo.includes(lowerAns));
+  });
+  if (subIdx >= 0) return subIdx;
+
+  return 0;
+}
+
+function buildAcceptedShortAnswers(rawAnswer: string): string[] {
+  const clean = rawAnswer
+    .replace(/^(ответ|жауабы|ключ)\s*[:—-]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!clean || clean === "—") return ["Ответ записан"];
+
+  const set = new Set<string>();
+  set.add(clean.slice(0, 300));
+
+  const afterEq = clean.includes("=") ? clean.split("=").pop()?.trim() : undefined;
+  if (afterEq && afterEq.length >= 1 && afterEq.length <= 120) {
+    set.add(afterEq);
+  }
+  const numMatch = (afterEq ?? clean).match(/^-?\d+(?:[.,]\d+)?/);
+  if (numMatch) {
+    set.add(numMatch[0]);
+    set.add(numMatch[0].replace(",", "."));
+    set.add(numMatch[0].replace(".", ","));
+  }
+
+  return Array.from(set).filter(Boolean).slice(0, 8);
+}
+
+export function sorVariantToInteractiveTasks(
+  work: SorSochWork,
+  variant: 1 | 2,
+): import("@/lib/ksp/tasks").InteractiveTask[] {
+  const sourceTasks = variant === 1 ? work.variant1 : work.variant2;
+  return sourceTasks.map((t) => {
+    const desc = work.descriptors.find((d) => d.taskNumber === t.number);
+    const rawKey = variant === 1 ? (desc?.answerVariant1 ?? "") : (desc?.answerVariant2 ?? "");
+    const cleanOptions = (t.options ?? []).map((o) => o.trim()).filter(Boolean);
+    const hint = desc?.criterion ? desc.criterion.slice(0, 400) : undefined;
+
+    if (cleanOptions.length >= 2) {
+      return {
+        id: `sor-v${variant}-${t.number}`,
+        type: "MCQ" as const,
+        question: t.prompt,
+        options: cleanOptions.slice(0, 6),
+        correctIndex: resolveMcqIndex(cleanOptions.slice(0, 6), rawKey),
+        points: Math.min(Math.max(t.points, 1), 100),
+        ...(hint ? { hint } : {}),
+      };
+    }
+
+    return {
+      id: `sor-v${variant}-${t.number}`,
+      type: "SHORT_ANSWER" as const,
+      question: t.prompt,
+      acceptedAnswers: buildAcceptedShortAnswers(rawKey),
+      points: Math.min(Math.max(t.points, 1), 100),
+      ...(hint ? { hint } : {}),
+    };
+  });
+}

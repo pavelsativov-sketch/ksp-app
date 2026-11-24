@@ -29,7 +29,14 @@ export interface AssignmentDoc {
   tasks: InteractiveTask[];
   feedbackMode?: "none" | "correct_only";
   /** Откуда собрано: план или повтор прошлой выдачи (для «повтора»). */
-  source: { planId?: string; assignmentId?: string; taskRefs?: string[] };
+  source: {
+    planId?: string;
+    assignmentId?: string;
+    taskRefs?: string[];
+    sorSochWorkId?: string;
+    variant?: 1 | 2;
+    entModoWorkId?: string;
+  };
   status: "open" | "closed";
   attempts_count: number;
   created_at: Date;
@@ -239,9 +246,70 @@ export async function getPublicAssignment(code: string): Promise<PublicAssignmen
   };
 }
 
+const directCreateSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  subject: z.string().trim().max(200).nullable().optional(),
+  grade: z.coerce.number().int().min(1).max(11).nullable().optional(),
+  tasks: z.array(interactiveTaskSchema).min(1).max(40),
+  feedbackMode: z.enum(["none", "correct_only"]).default("correct_only"),
+  daysValid: z.coerce.number().int().min(1).max(60).default(14),
+  source: z
+    .object({
+      planId: z.string().optional(),
+      assignmentId: z.string().optional(),
+      taskRefs: z.array(z.string()).optional(),
+      sorSochWorkId: z.string().optional(),
+      variant: z.union([z.literal(1), z.literal(2)]).optional(),
+      entModoWorkId: z.string().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Создаёт онлайн-выдачу по готовому массиву InteractiveTask (для ИИ-агента,
+ * онлайн-проведения СОР/СОЧ по вариантам и тренажёра ЕНТ/МОДО).
+ */
+export async function createDirectAssignment(
+  ownerId: string,
+  input: z.input<typeof directCreateSchema>,
+): Promise<{ id: string; code: string }> {
+  const parsed = directCreateSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(
+      `Некорректные задания для онлайн-выдачи: ${parsed.error.issues.map((i) => i.message).slice(0, 3).join(", ")}`,
+    );
+  }
+  const db = await getDb();
+  const now = new Date();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const code = randomCode();
+      const doc: AssignmentDoc = {
+        code,
+        owner_id: ownerId,
+        title: parsed.data.title,
+        subject: parsed.data.subject || null,
+        grade: parsed.data.grade ?? null,
+        tasks: parsed.data.tasks as InteractiveTask[],
+        feedbackMode: parsed.data.feedbackMode,
+        source: parsed.data.source ?? {},
+        status: "open",
+        attempts_count: 0,
+        created_at: now,
+        expires_at: new Date(now.getTime() + parsed.data.daysValid * 86_400_000),
+      };
+      const result = await db.collection<AssignmentDoc>(COL.assignments).insertOne(doc);
+      return { id: result.insertedId.toHexString(), code };
+    } catch (e) {
+      if ((e as { code?: number }).code !== 11000) throw e;
+    }
+  }
+  throw new Error("Не удалось выделить код выдачи, попробуйте ещё раз");
+}
+
 const submitSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  answers: z.array(taskAnswerSchema).min(1).max(20),
+  answers: z.array(taskAnswerSchema).min(1).max(40),
 });
 
 function isOmittedAnswer(answer: TaskAnswer | undefined): boolean {

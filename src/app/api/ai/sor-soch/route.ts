@@ -12,6 +12,13 @@ export const maxDuration = 60;
 interface SavedSorDoc {
   owner_id: string;
   work: SorSochWork;
+  online?: {
+    v1Id: string;
+    v1Code: string;
+    v2Id: string;
+    v2Code: string;
+    issuedAt: string;
+  };
   created_at: Date;
 }
 
@@ -47,6 +54,7 @@ export const GET = withApiAuth(
           id: String((d as { _id?: unknown })._id ?? ""),
           createdAt: d.created_at.toISOString(),
           work: d.work,
+          online: d.online ?? null,
         })),
       },
       { headers: { "Cache-Control": "no-store" } },
