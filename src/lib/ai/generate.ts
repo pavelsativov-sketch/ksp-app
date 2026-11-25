@@ -14,7 +14,7 @@ import { kspContentSchema } from "@/lib/validation/ksp";
 import { extractJson } from "./extract-json";
 import { log } from "@/lib/logger";
 
-export function isOpenAIConfigured(): boolean {
+export function isAiConfigured(): boolean {
   return isAnyProviderConfigured();
 }
 
@@ -48,7 +48,7 @@ export async function generateKsp(input: GenerateKspOptions): Promise<AiKspPaylo
 
 export async function generateKspWithModel(input: GenerateKspOptions): Promise<GenerateKspResult> {
   const stage = input.onStage;
-  if (!isOpenAIConfigured()) {
+  if (!isAiConfigured()) {
     throw new Error("Не настроен ни один AI-провайдер. Добавьте рабочий ключ провайдера в окружение приложения.");
   }
   stage?.({ percent: 20, label: "Составляем ход урока" });

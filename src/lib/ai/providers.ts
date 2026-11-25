@@ -14,7 +14,7 @@ import OpenAI from "openai";
 import { logAiEvent } from "./telemetry";
 import { log } from "@/lib/logger";
 
-export type AiTask = "generation" | "enhance" | "tasks" | "image" | "vision";
+export type AiTask = "generation" | "enhance" | "tasks" | "vision";
 
 export interface ProviderConfig {
   apiKey: string;
@@ -70,17 +70,32 @@ export function parseApiKeys(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/**
+ * AI_DISABLE_FREE_PROVIDERS=1 (или true) убирает из всех каскадов бесплатные
+ * сторонние шлюзы — Apinex, MXR, Kenari (и Pollinations в картинках): они
+ * перепродают чужие модели, без гарантий по данным и доступности. Официальные
+ * API (Mercury, Groq, Cerebras, Gemini, xAI, OpenAI, OpenRouter) остаются.
+ * По умолчанию выключено.
+ */
+export function freeProvidersDisabled(): boolean {
+  return /^(1|true)$/i.test(process.env.AI_DISABLE_FREE_PROVIDERS ?? "");
+}
+
+function freeGatewayKeys(raw: string | undefined): string[] {
+  return freeProvidersDisabled() ? [] : parseApiKeys(raw);
+}
+
 const keys = {
   openai: () => parseApiKeys(process.env.OPENAI_API_KEY),
   xai: () => parseApiKeys(process.env.XAI_API_KEY || process.env.GROK_API_KEY),
   gemini: () => parseApiKeys(process.env.GEMINI_API_KEY),
   groq: () => parseApiKeys(process.env.GROQ_API_KEY),
   cerebras: () => parseApiKeys(process.env.CEREBRAS_API_KEY),
-  mxr: () => parseApiKeys(process.env.MXR_API_KEY),
+  mxr: () => freeGatewayKeys(process.env.MXR_API_KEY),
   mercury: () => parseApiKeys(process.env.MERCURY_API_KEY),
-  kenari: () => parseApiKeys(process.env.KENARI_API_KEY),
+  kenari: () => freeGatewayKeys(process.env.KENARI_API_KEY),
   openrouter: () => parseApiKeys(process.env.OPENROUTER_API_KEY),
-  apinex: () => parseApiKeys(process.env.APINEX_API_KEY || process.env.APINEX_KEY),
+  apinex: () => freeGatewayKeys(process.env.APINEX_API_KEY || process.env.APINEX_KEY),
 };
 
 /** Ставит список ключей в конфиг: первый — основной, остальные — резерв. */
@@ -168,16 +183,10 @@ export const TASK_CONFIGS: Record<AiTask, () => ProviderConfig[]> = {
     withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "qwen/qwen3.8-27b", supportsJsonSchema: false, label: "Groq Qwen 3.8 27B (Fallback 3b)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.gemini(), baseURL: GEMINI_BASE, model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Fallback 4)", temperature: 0.2, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.xai(), baseURL: XAI_BASE, model: "grok-4.7", supportsJsonSchema: false, label: "xAI Grok 4.7 (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-20b", supportsJsonSchema: true, label: "Groq GPT OSS 20B (Fallback 5)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 6)", temperature: 0.7, maxTokens: 8192 }),
-    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 7)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.groq(), baseURL: GROQ_BASE, model: "openai/gpt-oss-20b", supportsJsonSchema: true, label: "Groq GPT OSS 20B (Fallback 6)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "gpt-4o-mini", supportsJsonSchema: true, label: "OpenAI GPT-4o-mini (Fallback 7)", temperature: 0.7, maxTokens: 8192 }),
+    withKeys({ apiKeys: keys.cerebras(), baseURL: CEREBRAS_BASE, model: "gpt-oss-120b", supportsJsonSchema: true, label: "Cerebras GPT OSS 120B (Fallback 8)", temperature: 0.7, maxTokens: 8192 }),
     withKeys({ apiKeys: keys.openrouter(), baseURL: OPENROUTER_BASE, model: "nex-agi/nex-n2.5-mini", supportsJsonSchema: false, label: "OpenRouter Nex Mini (Free Emergency Fallback)", temperature: 0.7, maxTokens: 8192 }),
-  ],
-  image: () => [
-    // Gemini 3.8 Flash — основная модель генерации изображений (яркие цвета).
-    withKeys({ apiKeys: keys.gemini(), baseURL: "https://generativelanguage.googleapis.com/v1beta/", model: "gemini-3.8-flash", supportsJsonSchema: false, label: "Gemini 3.8 Flash (Primary Image)", temperature: 1.0, maxTokens: 8192 }),
-    // OpenAI DALL-E 3 — fallback для генерации изображений
-    withKeys({ apiKeys: keys.openai(), baseURL: OPENAI_BASE, model: "dall-e-3", supportsJsonSchema: false, label: "OpenAI DALL-E 3 (Fallback Image)", temperature: 0.7, maxTokens: 4096 }),
   ],
   // Зрение для агента «Использование компьютера» — модель должна одновременно
   // принимать снимок экрана и вызывать инструменты.
@@ -251,7 +260,6 @@ const PROVIDER_TIMEOUT_MS: Record<AiTask, number> = {
   generation: 22_000,
   enhance: 18_000,
   tasks: 12_000,
-  image: 25_000,
   vision: 15_000,
 };
 

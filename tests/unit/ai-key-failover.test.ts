@@ -67,6 +67,11 @@ beforeEach(() => {
   process.env.KENARI_API_KEY = "";
   process.env.OPENROUTER_API_KEY = "";
   process.env.ANTHROPIC_API_KEY = "";
+  process.env.APINEX_API_KEY = "";
+  process.env.APINEX_KEY = "";
+  process.env.XAI_API_KEY = "";
+  process.env.GROK_API_KEY = "";
+  process.env.AI_DISABLE_FREE_PROVIDERS = "";
 });
 
 describe("разбор ключей из переменной окружения", () => {
@@ -190,5 +195,38 @@ describe("наличие ключей", () => {
     expect(isAnyProviderConfigured()).toBe(false);
     process.env.GEMINI_API_KEY = "one-key";
     expect(isAnyProviderConfigured()).toBe(true);
+  });
+
+  it("ключ Apinex тоже считается настроенным провайдером", async () => {
+    const { isAnyProviderConfigured } = await loadProviders();
+    process.env.APINEX_API_KEY = "apinex-key";
+    expect(isAnyProviderConfigured()).toBe(true);
+  });
+
+  it("AI_DISABLE_FREE_PROVIDERS убирает Apinex, MXR и Kenari из каскада, официальные остаются", async () => {
+    const { isAnyProviderConfigured, TASK_CONFIGS } = await loadProviders();
+    process.env.APINEX_API_KEY = "apinex-key";
+    process.env.MXR_API_KEY = "mxr-key";
+    process.env.KENARI_API_KEY = "kenari-key";
+    process.env.GROQ_API_KEY = "groq-key";
+    const labels = () => TASK_CONFIGS.tasks().filter((c) => c.apiKey).map((c) => c.label);
+    expect(labels().some((l) => /Apinex|MXR|Kenari/.test(l))).toBe(true);
+
+    process.env.AI_DISABLE_FREE_PROVIDERS = "1";
+    expect(labels().length).toBeGreaterThan(0);
+    expect(labels().every((l) => l.startsWith("Groq"))).toBe(true);
+
+    process.env.GROQ_API_KEY = "";
+    expect(isAnyProviderConfigured()).toBe(false);
+  });
+
+  it("в каждом каскаде метки провайдеров не повторяются", async () => {
+    const { TASK_CONFIGS } = await loadProviders();
+    for (const build of Object.values(TASK_CONFIGS)) {
+      const labels = build().map((c) => c.label);
+      expect(new Set(labels).size).toBe(labels.length);
+      const numbers = labels.flatMap((l) => l.match(/Fallback \d+\w*/) ?? []);
+      expect(new Set(numbers).size).toBe(numbers.length);
+    }
   });
 });

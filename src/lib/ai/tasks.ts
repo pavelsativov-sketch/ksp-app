@@ -11,7 +11,7 @@ import {
   type TaskType,
   emptyTask,
 } from "@/lib/ksp/tasks";
-import { isOpenAIConfigured } from "./generate";
+import { isAiConfigured } from "./generate";
 import { extractJson } from "./extract-json";
 
 export interface GenerateTasksInput {
@@ -232,7 +232,7 @@ export async function generateTasks(
   input: GenerateTasksInput,
 ): Promise<InteractiveTask[]> {
   const count = input.count ?? 3;
-  if (!isOpenAIConfigured()) {
+  if (!isAiConfigured()) {
     throw new Error("Не настроен AI-провайдер для генерации заданий. Создайте задания вручную или настройте рабочий ключ.");
   }
 

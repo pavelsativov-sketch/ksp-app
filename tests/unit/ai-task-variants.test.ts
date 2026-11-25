@@ -5,7 +5,7 @@ vi.mock("@/lib/ai/providers", () => ({
   getResponseFormat: vi.fn(() => ({ type: "json_object" })),
   executeWithFallback: vi.fn(),
 }));
-vi.mock("@/lib/ai/generate", () => ({ isOpenAIConfigured: vi.fn(() => true) }));
+vi.mock("@/lib/ai/generate", () => ({ isAiConfigured: vi.fn(() => true) }));
 
 import { executeWithFallback } from "@/lib/ai/providers";
 import { generateTasks } from "@/lib/ai/tasks";
