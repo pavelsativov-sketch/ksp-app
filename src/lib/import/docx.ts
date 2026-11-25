@@ -844,6 +844,53 @@ export function detectImportedKspMeta(
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Защита от zip-бомбы: суммарный распакованный объём и число файлов в архиве. */
+export const MAX_DOCX_UNCOMPRESSED_BYTES = 30 * 1024 * 1024;
+export const MAX_DOCX_ENTRIES = 2000;
+
+/** Архив вне лимитов; status — HTTP-код для ответа импорта. */
+export class DocxLimitError extends Error {
+  constructor(readonly status: 400 | 413, message: string) {
+    super(message);
+  }
+}
+
+const TOO_BIG_MESSAGE = "Документ после распаковки больше 30 МБ. Уменьшите файл (например, удалите крупные изображения).";
+
+function assertZipWithinLimits(zip: JSZip): void {
+  const entries = Object.values(zip.files);
+  if (entries.length > MAX_DOCX_ENTRIES) {
+    throw new DocxLimitError(400, "В документе слишком много вложенных файлов. Это не похоже на обычный .docx.");
+  }
+  // _data — внутреннее поле JSZip с размерами из центрального каталога архива.
+  const total = entries.reduce(
+    (sum, entry) => sum + ((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0),
+    0,
+  );
+  if (total > MAX_DOCX_UNCOMPRESSED_BYTES) throw new DocxLimitError(413, TOO_BIG_MESSAGE);
+}
+
+/** Размер в каталоге архива можно подделать, поэтому сам XML читаем с отсечкой по факту. */
+function readEntryCapped(entry: JSZip.JSZipObject, maxBytes: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    const stream = entry.nodeStream("nodebuffer");
+    stream.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        stream.pause();
+        stream.removeAllListeners("data");
+        reject(new DocxLimitError(413, TOO_BIG_MESSAGE));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    stream.on("error", reject);
+    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  });
+}
+
 /**
  * Parse a .docx file and extract KSP content + auto-detected metadata.
  */
@@ -852,7 +899,9 @@ export async function parseDocxWithMeta(
 ): Promise<{ content: KspContent; detected: ImportedKspMetadata }> {
   const buffer = Buffer.isBuffer(file) ? file : Buffer.from(await file.arrayBuffer());
   const zip = await JSZip.loadAsync(buffer);
-  const documentXml = await zip.file("word/document.xml")?.async("string");
+  assertZipWithinLimits(zip);
+  const documentEntry = zip.file("word/document.xml");
+  const documentXml = documentEntry ? await readEntryCapped(documentEntry, MAX_DOCX_UNCOMPRESSED_BYTES) : null;
   if (!documentXml) {
     throw new Error("Invalid DOCX: missing word/document.xml");
   }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseDocxWithMeta } from "@/lib/import/docx";
+import { DocxLimitError, parseDocxWithMeta } from "@/lib/import/docx";
 import { inferSubjectByObjectives } from "@/lib/goso/local";
 import { listSubjects } from "@/lib/plans-repo";
 import { requireApiAuth } from "@/lib/api-auth";
@@ -123,6 +123,9 @@ export async function POST(request: Request) {
       subjects,
     });
   } catch (error) {
+    if (error instanceof DocxLimitError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Неизвестная ошибка";
     if (message.includes("Invalid DOCX") || message.includes("word/document.xml")) {
       return NextResponse.json(
