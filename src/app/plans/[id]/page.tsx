@@ -60,10 +60,14 @@ function hasTasks(plan: LessonPlanRow): boolean {
 
 export default async function PlanViewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ material?: string }>;
 }) {
   const { id } = await params;
+  // ?material=1 приходит с плитки на главной: раскрываем блок, чтобы #material-… было видно.
+  const { material } = await searchParams;
   const user = await getCurrentUser();
   // Mongo из Казахстанских сетей отвечает медленно и иногда падает целиком.
   // Раньше это давало 500 на весь экран; теперь — понятное сообщение с
@@ -301,7 +305,7 @@ export default async function PlanViewPage({
         ) : null}
         <details
           className={l.more}
-          open={!isOwner || (plan.content?.kit?.slots?.length ?? 0) === 0}
+          open={Boolean(material) || !isOwner || (plan.content?.kit?.slots?.length ?? 0) === 0}
         >
           <summary className="inline-flex cursor-pointer items-center gap-2 font-medium">
             <PlusCircle className="size-4 text-primary" />
@@ -311,26 +315,26 @@ export default async function PlanViewPage({
           </summary>
           <div className={`${l.moreBody} pt-3`}>
             <div className={l.tiles}>
-              <div className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>Live-квиз, пропуски, пары, порядок: выберите формат.</p>
+              <div id="material-interactive" className={l.tile} data-tone="violet"><Gamepad2 aria-hidden="true" className={l.tileIcon} /><b>Интерактив</b><p>Live-квиз, пропуски, пары, порядок: выберите формат.</p>
                 {isOwner ? <InteractiveButton planId={plan.id} /> : <p className={l.note}>Доступен автору плана.</p>}
                 {isOwner && hasTasks(plan) && <Button asChild variant="outline"><Link href={`/quiz/host/${plan.id}`}><Radio /> Live-квиз</Link></Button>}
               </div>
-              <div className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Красочный лист A4 (+ версия ООП): печать, PDF или Word.</p>
+              <div id="material-worksheet" className={l.tile} data-tone="blue"><FileSpreadsheet aria-hidden="true" className={l.tileIcon} /><b>Рабочий лист</b><p>Красочный лист A4 (+ версия ООП): печать, PDF или Word.</p>
                 <WorksheetButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
               </div>
               <div className={l.tile} data-tone="violet"><Users aria-hidden="true" className={l.tileIcon} /><b>Групповая работа</b><p>Карточки для групп или пар: ситуация, пять заданий, схема и ценность урока.</p>
                 <GroupWorkButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} learningObjectives={handoutKspContext?.learningObjectives} values={plan.content?.values} />
               </div>
-              <div className={l.tile} data-tone="peach"><MessageSquareText aria-hidden="true" className={l.tileIcon} /><b>Слова педагога</b><p>Живая речь учителя по этапам, в Word.</p>
+              <div id="material-speech" className={l.tile} data-tone="peach"><MessageSquareText aria-hidden="true" className={l.tileIcon} /><b>Слова педагога</b><p>Живая речь учителя по этапам, в Word.</p>
                 {user ? <TeacherSpeechButton planId={plan.id} /> : <Button asChild variant="outline"><a href={`/api/export/teacher-script/${plan.id}`}><ScrollText /> Слова педагога</a></Button>}
               </div>
-              <div className={l.tile} data-tone="green"><Grid3x3 aria-hidden="true" className={l.tileIcon} /><b>Кроссворд</b><p>Из терминов этой темы.</p>
+              <div id="material-crossword" className={l.tile} data-tone="green"><Grid3x3 aria-hidden="true" className={l.tileIcon} /><b>Кроссворд</b><p>Из терминов этой темы.</p>
                 <CrosswordButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} />
               </div>
               <div className={l.tile} data-tone="pink"><Layers aria-hidden="true" className={l.tileIcon} /><b>Карточки в тетрадь</b><p>Печатаются, вырезаются и вклеиваются в тетрадь.</p>
                 <MemosButton planId={plan.id} topic={plan.content?.topic || plan.title} subject={subjectName} grade={plan.grade} language={plan.language} kspContext={handoutKspContext} footer={plan.content.header.school || plan.content.header.teacherName || undefined} />
               </div>
-              <div className={l.tile} data-tone="gray"><Presentation aria-hidden="true" className={l.tileIcon} /><b>Презентация</b><p>ИИ разбирает КСП, вы правите слайды, на выходе PowerPoint с анимацией.</p>
+              <div id="material-deck" className={l.tile} data-tone="gray"><Presentation aria-hidden="true" className={l.tileIcon} /><b>Презентация</b><p>ИИ разбирает КСП, вы правите слайды, на выходе PowerPoint с анимацией.</p>
                 <div className={l.tileRow}>
                   {isOwner
                     ? <Button asChild variant="outline"><Link href={`/plans/${plan.id}/presentation`}><Presentation /> Конструктор</Link></Button>

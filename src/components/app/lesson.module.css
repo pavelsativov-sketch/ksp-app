@@ -50,6 +50,8 @@
 .tile:nth-child(5) { animation-delay: 240ms; }
 .tile:nth-child(6) { animation-delay: 300ms; }
 .tile:hover { transform: translateY(-3px); box-shadow: 0 12px 26px rgb(83 56 180 / 14%); }
+/* Плитка, выбранная на главной (/plans/id#material-…): видно, куда привёл клик. */
+.tile:target { scroll-margin-top: 96px; outline: 3px solid var(--tone); outline-offset: 3px; }
 /* Анимация и подъём делают каждую плитку отдельным слоем: открытое меню материала
    (z-50) оказывалось под соседними плитками. Плитка с открытым меню встаёт выше. */
 .tile:focus-within, .tile:has(:global(.z-50)) { z-index: 5; }

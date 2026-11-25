@@ -13,6 +13,7 @@ import { ThreeStage } from "@/components/three/three-stage";
 import { appCopy, type AppCopy } from "./copy";
 import { LessonKitPicker, readLastKit, rememberKit } from "./lesson-kit-picker";
 import type { KitAnswers } from "@/lib/materials/kit";
+import type { MaterialKind } from "@/lib/types/ksp";
 import s from "./home.module.css";
 
 export interface HomePlan {
@@ -60,7 +61,7 @@ function readLastLesson(): { grade: number; subject: string } {
   }
 }
 
-function LessonDialog({ open, onClose, subjects, c, locale }: { open: boolean; onClose: () => void; subjects: HomeProps["subjects"]; c: AppCopy; locale: "ru" | "kz" }) {
+function LessonDialog({ open, onClose, subjects, c, locale, material }: { open: boolean; onClose: () => void; subjects: HomeProps["subjects"]; c: AppCopy; locale: "ru" | "kz"; material?: MaterialKind }) {
   const router = useRouter();
   const ref = useRef<HTMLDialogElement | null>(null);
   const topicRef = useRef<HTMLInputElement | null>(null);
@@ -68,7 +69,11 @@ function LessonDialog({ open, onClose, subjects, c, locale }: { open: boolean; o
   const [subject, setSubject] = useState(() => readLastLesson().subject);
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState<"ru" | "kz">("ru");
-  const [kit, setKit] = useState<KitAnswers>(() => readLastKit());
+  // Материал, выбранный плиткой на главной, сразу отмечен в комплекте.
+  const [kit, setKit] = useState<KitAnswers>(() => {
+    const last = readLastKit();
+    return material && !last.materials.includes(material) ? { ...last, materials: [...last.materials, material] } : last;
+  });
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
@@ -185,7 +190,7 @@ function LessonDialog({ open, onClose, subjects, c, locale }: { open: boolean; o
 }
 
 /** Материал строится из плана: сперва выбираем урок. */
-function PickDialog({ open, onClose, onNew, plans, c }: { open: boolean; onClose: () => void; onNew: () => void; plans: HomePlan[]; c: AppCopy }) {
+function PickDialog({ open, onClose, onNew, plans, c, anchor }: { open: boolean; onClose: () => void; onNew: () => void; plans: HomePlan[]; c: AppCopy; anchor: string }) {
   const ref = useRef<HTMLDialogElement | null>(null);
   useEffect(() => {
     const dialog = ref.current;
@@ -203,7 +208,7 @@ function PickDialog({ open, onClose, onNew, plans, c }: { open: boolean; onClose
           <ul className={s.pickList}>
             {plans.map((plan) => (
               <li key={plan.id}>
-                <Link href={`/plans/${plan.id}#materials`} className={s.pickItem}>
+                <Link href={anchor === "materials" ? `/plans/${plan.id}#materials` : `/plans/${plan.id}?material=1#${anchor}`} className={s.pickItem}>
                   <span><b>{plan.topic || plan.title}</b><small>{plan.grade} {c.grade}</small></span>
                   <ChevronRight aria-hidden="true" />
                 </Link>
@@ -292,21 +297,32 @@ export function Home({ startLesson = false, subjects, recent, favorites, bilimCo
   const [pickOpen, setPickOpen] = useState(false);
   const [tab, setTab] = useState<"recent" | "favorites">("recent");
 
-  const startMaterial = () => (recent.length > 0 ? setPickOpen(true) : setLessonOpen(true));
+  // Плитка материала ведёт к своей плитке на странице урока (#material-…) или отмечает материал в новом уроке.
+  const [picked, setPicked] = useState<{ anchor: string; kind?: MaterialKind }>({ anchor: "materials" });
+  const startMaterial = (material: { anchor: string; kind?: MaterialKind }) => {
+    setPicked(material);
+    if (recent.length > 0) setPickOpen(true);
+    else setLessonOpen(true);
+  };
+  const openLesson = () => {
+    setPicked({ anchor: "materials" });
+    setLessonOpen(true);
+  };
   const list = tab === "recent" ? recent : favorites;
 
   const actionCards: Array<{ tone: Tone; icon: LucideIcon; text: string[]; onClick?: () => void; href?: string }> = [
-    { tone: "violet", icon: FileText, text: c.actions.ksp, onClick: () => setLessonOpen(true) },
+    { tone: "violet", icon: FileText, text: c.actions.ksp, onClick: openLesson },
     { tone: "blue", icon: CalendarDays, text: c.actions.plan, href: "/plans" },
     { tone: "green", icon: Bot, text: c.actions.agent, href: "/school" },
   ];
-  const materials: Array<{ tone: Tone; icon: LucideIcon; text: string[] }> = [
-    { tone: "violet", icon: Gamepad2, text: c.materials.interactive },
-    { tone: "blue", icon: FileSpreadsheet, text: c.materials.worksheet },
-    { tone: "peach", icon: MessageSquareText, text: c.materials.speech },
-    { tone: "green", icon: Grid3x3, text: c.materials.crossword },
-    { tone: "pink", icon: ClipboardCheck, text: c.materials.quiz },
-    { tone: "gray", icon: LayoutGrid, text: c.materials.more },
+  const materials: Array<{ tone: Tone; icon: LucideIcon; text: string[]; anchor: string; kind?: MaterialKind }> = [
+    { tone: "violet", icon: Gamepad2, text: c.materials.interactive, anchor: "material-interactive", kind: "interactive" },
+    { tone: "blue", icon: FileSpreadsheet, text: c.materials.worksheet, anchor: "material-worksheet", kind: "worksheet" },
+    { tone: "peach", icon: MessageSquareText, text: c.materials.speech, anchor: "material-speech" },
+    { tone: "green", icon: Grid3x3, text: c.materials.crossword, anchor: "material-crossword", kind: "crossword" },
+    // Квиз живёт в плитке «Интерактив» (там же Live-квиз).
+    { tone: "pink", icon: ClipboardCheck, text: c.materials.quiz, anchor: "material-interactive", kind: "interactive" },
+    { tone: "gray", icon: LayoutGrid, text: c.materials.more, anchor: "materials" },
   ];
   const caps: Array<{ tone: Tone; icon: LucideIcon; text: string[]; href: string }> = [
     { tone: "violet", icon: FileText, text: c.caps.ksp, href: "/dashboard?new=1" },
@@ -347,8 +363,8 @@ export function Home({ startLesson = false, subjects, recent, favorites, bilimCo
             <h2 id="quick-title">{c.quickTitle}</h2>
             <p className={s.panelLead}>{c.quickLead}</p>
             <div className={s.materials}>
-              {materials.map(({ tone, icon: Icon, text }, i) => (
-                <button key={text[0]} type="button" className={s.material} data-tone={tone} style={{ "--i": i } as React.CSSProperties} onClick={startMaterial}>
+              {materials.map(({ tone, icon: Icon, text, anchor, kind }, i) => (
+                <button key={text[0]} type="button" className={s.material} data-tone={tone} style={{ "--i": i } as React.CSSProperties} onClick={() => startMaterial({ anchor, kind })}>
                   <Icon aria-hidden="true" />
                   <b>{text[0]}</b>
                   <span>{text[1]}</span>
@@ -369,7 +385,7 @@ export function Home({ startLesson = false, subjects, recent, favorites, bilimCo
             {list.length === 0 ? (
               <div className={s.empty}>
                 <p>{tab === "recent" ? c.emptyRecent : c.emptyFavorites}</p>
-                {tab === "recent" && <button type="button" className={s.primary} onClick={() => setLessonOpen(true)}><Sparkles aria-hidden="true" /> {c.createFirst}</button>}
+                {tab === "recent" && <button type="button" className={s.primary} onClick={openLesson}><Sparkles aria-hidden="true" /> {c.createFirst}</button>}
               </div>
             ) : (
               <ul className={s.projects}>
@@ -411,8 +427,8 @@ export function Home({ startLesson = false, subjects, recent, favorites, bilimCo
 
       <AgentPanel c={c} bilimConnected={bilimConnected} agentOnline={agentOnline} />
 
-      <LessonDialog open={lessonOpen} onClose={() => setLessonOpen(false)} subjects={subjects} c={c} locale={locale === "ru" ? "ru" : "kz"} />
-      <PickDialog open={pickOpen} onClose={() => setPickOpen(false)} onNew={() => { setPickOpen(false); setLessonOpen(true); }} plans={recent} c={c} />
+      <LessonDialog key={picked.kind ?? "lesson"} material={picked.kind} open={lessonOpen} onClose={() => setLessonOpen(false)} subjects={subjects} c={c} locale={locale === "ru" ? "ru" : "kz"} />
+      <PickDialog open={pickOpen} onClose={() => setPickOpen(false)} onNew={() => { setPickOpen(false); setLessonOpen(true); }} plans={recent} c={c} anchor={picked.anchor} />
     </div>
   );
 }
