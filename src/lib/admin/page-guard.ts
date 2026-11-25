@@ -1,6 +1,21 @@
 import "server-only";
 import { notFound, redirect } from "next/navigation";
-import { AdminError } from "./auth";
+import type { Metadata } from "next";
+import { AdminError, requireAdmin } from "./auth";
+
+const ROBOTS = { index: false, follow: false };
+
+/** Заголовок админки виден только админу: остальные получают общий заголовок сайта. */
+export function adminMetadata(title: string): () => Promise<Metadata> {
+  return async () => {
+    try {
+      await requireAdmin();
+      return { title, robots: ROBOTS };
+    } catch {
+      return { robots: ROBOTS };
+    }
+  };
+}
 
 /** Страницы админки: гость — на вход, не-админ и неизвестный id — 404; иначе текст ошибки. */
 export function adminPageError(error: unknown, next: string): string {

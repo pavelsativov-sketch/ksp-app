@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AdminError } from "@/lib/admin/auth";
+import { adminMetadata } from "@/lib/admin/page-guard";
 import { getAdminDashboard, type AdminSearchParams } from "@/lib/admin/queries";
 import {
   listHiddenPlans,
@@ -22,10 +22,7 @@ import { AdminShell, type AdminTabId } from "@/components/admin/admin-shell";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const metadata: Metadata = {
-  title: "Админ-панель — Mekty",
-  robots: { index: false, follow: false },
-};
+export const generateMetadata = adminMetadata("Админ-панель — Mekty");
 
 const VALID_ADMIN_TABS: readonly AdminTabId[] = [
   "overview",

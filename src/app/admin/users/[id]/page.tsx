@@ -1,13 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { getAdminUserDetail, type AdminUserDetail } from "@/lib/admin/users";
-import { adminPageError } from "@/lib/admin/page-guard";
+import { adminMetadata, adminPageError } from "@/lib/admin/page-guard";
 import { BonusForm, SubscriptionForm } from "@/components/admin/user-actions";
 import s from "@/components/admin/admin.module.css";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const metadata: Metadata = { title: "Пользователь — Mekty", robots: { index: false, follow: false } };
+export const generateMetadata = adminMetadata("Пользователь — Mekty");
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString("ru-RU", { timeZone: "Asia/Almaty" }) : "—";
 const ACTIONS: Record<string, string> = {

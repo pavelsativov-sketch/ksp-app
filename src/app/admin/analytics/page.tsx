@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AdminError, requireAdmin } from "@/lib/admin/auth";
+import { adminMetadata } from "@/lib/admin/page-guard";
 import { getAnalyticsSummary, getUsageOverTime, getErrorRates, getEngagementMetrics } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const metadata: Metadata = { title: "Аналитика — Mekty", robots: { index: false, follow: false } };
+export const generateMetadata = adminMetadata("Аналитика — Mekty");
 
 const DAYS = 30;
 

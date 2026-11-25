@@ -1,14 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { listAdminUsers, type AdminUserList } from "@/lib/admin/users";
 import type { AdminSearchParams } from "@/lib/admin/queries";
-import { adminPageError } from "@/lib/admin/page-guard";
+import { adminMetadata, adminPageError } from "@/lib/admin/page-guard";
 import { Button } from "@/components/ui/button";
 import s from "@/components/admin/admin.module.css";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const metadata: Metadata = { title: "Пользователи — Mekty", robots: { index: false, follow: false } };
+export const generateMetadata = adminMetadata("Пользователи — Mekty");
 
 const date = (value: string | null) => value ? new Date(value).toLocaleDateString("ru-RU", { timeZone: "UTC" }) : "—";
 
