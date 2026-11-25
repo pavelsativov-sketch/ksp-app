@@ -93,7 +93,7 @@ export async function joinSchoolAction(code: string): Promise<{ ok: true } | { e
   const user = await getCurrentUser();
   if (!user) return { error: 'Unauthorized' };
 
-  const parsed = joinSchema.safeParse(code);
+  const parsed = joinSchema.safeParse({ code });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Некорректный код школы' };
 
   const ip = await clientIp();
@@ -116,8 +116,10 @@ export async function joinSchoolAction(code: string): Promise<{ ok: true } | { e
       return { error: 'Школа с таким кодом не найдена или код введён неверно' };
     }
 
+    // school_id в school_members хранится строкой (addSchoolMember); с ObjectId
+    // проверка никогда не срабатывала, и повторный вход дублировал участника.
     const member = await db.collection(COL.schoolMembers).findOne({
-      school_id: school._id,
+      school_id: school._id.toString(),
       user_id: user.id,
     });
     if (member) return { error: 'Вы уже состоите в этой школе' };
