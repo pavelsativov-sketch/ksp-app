@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireApiAuth } from "@/lib/api-auth";
 import {
   saveCredentials,
@@ -23,25 +24,30 @@ export async function GET() {
   return NextResponse.json({ sites, knownSites: Object.entries(KNOWN_LOGIN_SITES).map(([domain, s]) => ({ domain, name: s.name })) });
 }
 
+const credentialsSchema = z.object({
+  domain: z.string().trim().toLowerCase().min(1, "Укажите домен").max(253, "Слишком длинный домен")
+    .transform((value) => value.replace(/^www\./, "")),
+  username: z.string().trim().min(1, "Укажите логин").max(256, "Слишком длинный логин"),
+  password: z.string().min(1, "Укажите пароль").max(1024, "Слишком длинный пароль"),
+});
+
 /** POST — сохранить учётные данные для домена */
 export async function POST(req: Request) {
   const auth = await requireApiAuth();
   if (auth.response) return auth.response;
 
-  let body: { domain?: string; username?: string; password?: string };
+  let body: unknown;
   try {
-    body = await req.json() as typeof body;
+    body = await req.json();
   } catch {
     return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
   }
-
-  const domain = (body.domain ?? "").trim().toLowerCase().replace(/^www\./, "");
-  const username = (body.username ?? "").trim();
-  const password = body.password ?? "";
-
-  if (!domain || domain.length > 200) return NextResponse.json({ error: "Укажите домен" }, { status: 400 });
-  if (!username) return NextResponse.json({ error: "Укажите логин" }, { status: 400 });
-  if (!password) return NextResponse.json({ error: "Укажите пароль" }, { status: 400 });
+  const parsed = credentialsSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Некорректные данные" }, { status: 400 });
+  }
+  const { domain, username, password } = parsed.data;
+  if (!domain) return NextResponse.json({ error: "Укажите домен" }, { status: 400 });
 
   await saveCredentials(auth.user.id, domain, username, password);
   return NextResponse.json({ ok: true, domain });
