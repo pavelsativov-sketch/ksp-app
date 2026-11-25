@@ -32,14 +32,18 @@ const securityHeaders = [
       "object-src 'none'",
       "frame-ancestors 'self'",
       "form-action 'self'",
-      "img-src 'self' data: blob: https:",
+      // Внешние картинки в браузере — только обложки каталога «Арман-ПВ»
+      // (static.wixstatic.com). Картинки ИИ (в т.ч. Pollinations) и QR приходят
+      // как data:, кадры браузера агента — blob: или /api.
+      "img-src 'self' data: blob: https://static.wixstatic.com",
       // Monaco раздаётся локально из public/monaco/vs (scripts/copy-monaco.mjs):
       // сторонние CDN (jsdelivr/unpkg) полностью исключены из script-src и connect-src,
       // чтобы закрыть вектор CSP-обхода через публичные npm-пакеты.
       "style-src 'self' 'unsafe-inline'",
       `script-src ${scriptSrc}`,
-      // Все вызовы ИИ-провайдеров выполняются строго на сервере — клиенту нужен только 'self' и wss.
-      "connect-src 'self' wss:",
+      // Все вызовы ИИ-провайдеров (и Presenton) выполняются на сервере — клиенту
+      // нужен только свой API. WebSocket в клиенте нет; ws: wss: — только для HMR в dev.
+      `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
       // workerSrc у Monaco это blob:-чанок — разрешаем создание воркеров из blob.
       "worker-src 'self' blob:",
       "font-src 'self' data:",

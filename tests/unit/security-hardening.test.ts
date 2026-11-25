@@ -70,6 +70,13 @@ describe("Security hardening", () => {
     expect(hdrs["content-security-policy"]).toContain("object-src 'none'");
   });
 
+  it("limits CSP img-src and connect-src to hosts the browser really uses", async () => {
+    const rules = await nextConfig.headers!();
+    const csp = rules[0]!.headers.find((h) => h.key === "Content-Security-Policy")!.value;
+    expect(csp).toContain("img-src 'self' data: blob: https://static.wixstatic.com;");
+    expect(csp).toMatch(/connect-src 'self'(;| ws: wss:;)/);
+  });
+
   it("rejects malformed userId in listTrashedPlans before touching DB", async () => {
     const result = await listTrashedPlans("not-an-object-id");
     expect(result).toEqual([]);
