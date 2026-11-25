@@ -11,6 +11,7 @@ const mock = vi.hoisted(() => ({
   apiAuth: vi.fn(),
   rate: vi.fn(),
   runLoop: vi.fn(),
+  finalize: vi.fn(async (_success: boolean) => {}),
   setControl: vi.fn(),
   releaseControl: vi.fn(async () => {}),
   db: null as unknown as ReturnType<typeof import("../helpers/fake-mongo").fakeDb>,
@@ -25,6 +26,9 @@ vi.mock("@/lib/mongo", () => ({
 }));
 vi.mock("@/lib/api-auth", () => ({ requireApiAuth: mock.apiAuth }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: mock.rate }));
+vi.mock("@/lib/billing/quota", () => ({
+  reserveQuotaOrResponse: vi.fn(async () => ({ ok: true, reservation: { remaining: 5, finalize: mock.finalize } })),
+}));
 vi.mock("@/lib/agents/ssrf", () => ({
   checkPublicUrl: vi.fn(async (url: string) => ({ ok: true, url: new URL(url) })),
   installRequestGuard: vi.fn(),
@@ -106,6 +110,8 @@ describe("остановка агента «Работа с компьютеро
     await vi.waitFor(async () => { expect(await isRunning()).toBe(true); });
     const second = await POST(post());
     expect(second.status).toBe(409);
+    // Первый запуск подтвердил слот assist, отклонённый второй — вернул свой.
+    expect(mock.finalize.mock.calls).toEqual([[true], [false]]);
     await DELETE();
     await first;
   });
@@ -114,6 +120,7 @@ describe("остановка агента «Работа с компьютеро
     mock.runLoop.mockResolvedValueOnce("готово");
     expect((await POST(post())).status).toBe(200);
     expect(mock.releaseControl).toHaveBeenCalledWith(userId);
+    expect(mock.finalize.mock.calls[0]).toEqual([true]);
 
     mock.releaseControl.mockClear();
     mock.runLoop.mockRejectedValueOnce(new Error("boom"));

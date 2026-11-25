@@ -84,7 +84,17 @@ export async function deleteAccountWorkspaceSandbox(userId: string): Promise<voi
   }
 }
 
-export async function getAccountSandbox(userId: string): Promise<Sandbox> {
+export interface SandboxAccessOptions {
+  /** Вызывается перед созданием НОВОЙ среды (не при подключении к существующей); бросает, чтобы запретить. */
+  beforeCreate?: () => Promise<void>;
+}
+
+/** 404 от API песочниц: среды с таким именем ещё нет. */
+function isSandboxNotFound(error: unknown): boolean {
+  return (error as { response?: { status?: number } } | null)?.response?.status === 404;
+}
+
+export async function getAccountSandbox(userId: string, options: SandboxAccessOptions = {}): Promise<Sandbox> {
   validateOwner(userId);
   if (!usesVercelSandbox()) throw new Error(workspaceUnavailableMessage());
   const bypassCache = Boolean(process.env.VITEST) || process.env.NODE_ENV === "test";
@@ -96,6 +106,15 @@ export async function getAccountSandbox(userId: string): Promise<Sandbox> {
   }
   const files = await ownedFiles(userId);
   const { Sandbox: VercelSandbox } = await import("@vercel/sandbox");
+  if (options.beforeCreate) {
+    // getOrCreate создаёт среду без спроса, поэтому сначала проверяем, есть ли она.
+    try {
+      await VercelSandbox.get({ name: sandboxName(userId) });
+    } catch (error) {
+      // Прочие ошибки (410 и т.п.) разбирает сам getOrCreate ниже.
+      if (isSandboxNotFound(error)) await options.beforeCreate();
+    }
+  }
   let sandbox = await VercelSandbox.getOrCreate({
     name: sandboxName(userId),
     image: "vercel/sandbox/universal",
@@ -199,10 +218,10 @@ function isMissingSandboxPath(error: unknown): boolean {
   return /not.?found|enoent|404/i.test(message);
 }
 
-async function makeVercelRuntime(userId: string) {
+async function makeVercelRuntime(userId: string, options: SandboxAccessOptions) {
   const db = await getDb();
   const snapshots = db.collection<SavedSnapshot>(COL.workspaceSnapshots);
-  const sandbox = await getAccountSandbox(userId);
+  const sandbox = await getAccountSandbox(userId, options);
 
   async function readWorkspaceFiles() {
     const result = await sandbox.runCommand({
@@ -398,9 +417,9 @@ async function ownedFiles(userId: string) {
 }
 
 /** Persistent account workspace stored in the application's MongoDB database. */
-export async function getWorkspaceRuntime(userId: string) {
+export async function getWorkspaceRuntime(userId: string, options: SandboxAccessOptions = {}) {
   const target = getWorkspaceTarget();
-  if (target === "vercel-sandbox") return makeVercelRuntime(userId);
+  if (target === "vercel-sandbox") return makeVercelRuntime(userId, options);
   const files = await ownedFiles(userId);
 
   return {

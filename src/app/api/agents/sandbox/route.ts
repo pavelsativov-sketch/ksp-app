@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireApiAuth } from "@/lib/api-auth";
-import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
+import { sandboxCreateGuard, SandboxCreateLimitError } from "@/lib/agents/usage-caps";
 import { getDb, COL } from "@/lib/mongo";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 // Константа живёт в paths.ts: реэкспорт через runtime.ts не виден сборке
@@ -9,6 +10,10 @@ import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 import { MAX_FILE_BYTES } from "@/lib/workspace/paths";
 
 export const dynamic = "force-dynamic";
+
+/** 429 для лимита новых сред, иначе прежний код ошибки. */
+const failureStatus = (error: unknown, fallback: number) =>
+  error instanceof SandboxCreateLimitError ? error.status : fallback;
 
 async function verifyOptionalTask(taskId: string | null, userId: string): Promise<boolean> {
   if (!taskId) return true;
@@ -29,7 +34,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const runtime = await getWorkspaceRuntime(auth.user.id);
+    const runtime = await getWorkspaceRuntime(auth.user.id, { beforeCreate: sandboxCreateGuard(clientIp(req)) });
     const file = url.searchParams.get("file");
     if (file !== null) {
       const content = await runtime.readFile(file);
@@ -57,7 +62,7 @@ export async function GET(req: Request) {
     }));
     return NextResponse.json({ files }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось открыть рабочую среду" }, { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось открыть рабочую среду" }, { status: failureStatus(error, 503) });
   }
 }
 
@@ -76,10 +81,10 @@ export async function PUT(req: Request) {
   }
 
   try {
-    await (await getWorkspaceRuntime(auth.user.id)).writeFile(body.file, body.content);
+    await (await getWorkspaceRuntime(auth.user.id, { beforeCreate: sandboxCreateGuard(clientIp(req)) })).writeFile(body.file, body.content);
     return NextResponse.json({ ok: true, name: body.file }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось сохранить файл" }, { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось сохранить файл" }, { status: failureStatus(error, 503) });
   }
 }
 
@@ -92,10 +97,10 @@ export async function DELETE(req: Request) {
   if (!file) return NextResponse.json({ error: "Нет имени файла" }, { status: 400 });
 
   try {
-    await (await getWorkspaceRuntime(auth.user.id)).deleteFile(file);
+    await (await getWorkspaceRuntime(auth.user.id, { beforeCreate: sandboxCreateGuard(clientIp(req)) })).deleteFile(file);
     return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось удалить файл" }, { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось удалить файл" }, { status: failureStatus(error, 503) });
   }
 }
 
@@ -112,11 +117,11 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Укажите исходное и новое имя файла" }, { status: 400 });
   }
   try {
-    await (await getWorkspaceRuntime(auth.user.id)).renameFile(body.from, body.to);
+    await (await getWorkspaceRuntime(auth.user.id, { beforeCreate: sandboxCreateGuard(clientIp(req)) })).renameFile(body.from, body.to);
     return NextResponse.json({ ok: true, name: body.to }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось переименовать файл";
-    const status = /некорректный|существует/i.test(message) ? 400 : 503;
+    const status = failureStatus(error, /некорректный|существует/i.test(message) ? 400 : 503);
     return NextResponse.json({ error: message }, { status });
   }
 }

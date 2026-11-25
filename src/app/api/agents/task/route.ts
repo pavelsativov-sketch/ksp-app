@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireApiAuth } from '@/lib/api-auth';
 import { checkRateLimitAsync } from '@/lib/rate-limit';
+import { reserveQuotaOrResponse } from '@/lib/billing/quota';
+import { checkAgentDailyCap } from '@/lib/agents/usage-caps';
 import { startAgentTask, listAgentTasks, maybeDispatchQueuedFromRequest } from '@/lib/agents/orchestrator';
 
 export const runtime = 'nodejs';
@@ -36,14 +38,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Опишите задачу (3–4000 символов)' }, { status: 400 });
   }
 
+  const daily = await checkAgentDailyCap(auth.user.id);
+  if (daily) return daily;
+  // Задача агента — AI-операция: занимает слот «assist». Продолжения той же
+  // задачи (/continue) слот не тратят.
+  const quota = await reserveQuotaOrResponse(auth.user, 'assist');
+  if (!quota.ok) return quota.response;
+
   try {
     const started = await startAgentTask(auth.user.id, parsed.data.schoolId ?? null, parsed.data.prompt);
+    await quota.reservation.finalize(true);
     // Если активная задача ещё бежит, новое поручение встаёт в очередь (202).
     return NextResponse.json(
       { taskId: started.id, status: started.status },
       { status: started.status === 'queued' ? 202 : 201 },
     );
   } catch (error) {
+    await quota.reservation.finalize(false);
     if (error instanceof Error && error.message === 'AGENT_TASK_ALREADY_RUNNING') {
       return NextResponse.json(
         { error: 'У вас уже выполняется задача агента. Дождитесь её завершения.' },

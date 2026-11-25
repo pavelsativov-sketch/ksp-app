@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
-import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { checkRateLimitAsync, clientIp } from "@/lib/rate-limit";
+import { checkTerminalDailyCap, sandboxCreateGuard, SandboxCreateLimitError } from "@/lib/agents/usage-caps";
 import { getWorkspaceRuntime } from "@/lib/workspace/runtime";
 import { getWorkspaceTarget } from "@/lib/agents/runtime-mode";
 import { randomUUID } from "node:crypto";
@@ -33,8 +34,10 @@ export async function POST(req: Request) {
   if (typeof body.command !== "string" || !body.command.trim() || body.command.length > 8_000) {
     return NextResponse.json({ error: "Введите команду до 8 000 символов" }, { status: 400 });
   }
+  const daily = await checkTerminalDailyCap(auth.user.id);
+  if (daily) return daily;
   try {
-    const runtime = await getWorkspaceRuntime(auth.user.id);
+    const runtime = await getWorkspaceRuntime(auth.user.id, { beforeCreate: sandboxCreateGuard(clientIp(req)) });
     // PID пишется в файл своего запуска (runId от клиента или наш), и заменяем
     // оболочку командой (exec): «Стоп» с этим runId убивает именно эту команду,
     // а не последнюю из параллельных. Общий файл — для старого клиента без runId.
@@ -44,6 +47,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: result.exitCode === 0, runId, ...result }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось выполнить команду";
+    if (error instanceof SandboxCreateLimitError) return NextResponse.json({ success: false, error: message }, { status: error.status });
     const sandboxConfigured = getWorkspaceTarget() !== "none";
     return NextResponse.json({ success: false, error: message }, { status: sandboxConfigured ? 500 : 503 });
   }

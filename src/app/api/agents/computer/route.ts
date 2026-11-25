@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
+import { reserveQuotaOrResponse } from "@/lib/billing/quota";
+import { checkAgentDailyCap } from "@/lib/agents/usage-caps";
 import { checkPublicUrl, installRequestGuard } from "@/lib/agents/ssrf";
 import { getControlOwner, releaseControlToUser, setControlOwner } from "@/lib/agents/session";
 import { runComputerUse, type AgentPage, type LoopEvent } from "@/lib/agents/computer/loop";
@@ -70,10 +72,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Опишите задачу подробнее" }, { status: 400 });
   }
 
+  const daily = await checkAgentDailyCap(userId);
+  if (daily) return daily;
+  // Запуск — AI-операция: слот «assist» подтверждается, когда цикл реально
+  // стартовал; при отказе до старта слот возвращается (finalize идемпотентен).
+  const quota = await reserveQuotaOrResponse(auth.user, "assist");
+  if (!quota.ok) return quota.response;
+
   // Слот запуска занимается в Mongo: так второй запуск (и со второго инстанса
   // функции) получает 409, а «Остановить» видит работающего агента.
-  const slot = await beginRun(userId, goal);
+  const slot = await beginRun(userId, goal).catch(async (error: unknown) => {
+    await quota.reservation.finalize(false);
+    throw error;
+  });
   if (!slot) {
+    await quota.reservation.finalize(false);
     return NextResponse.json(
       { error: "Агент уже работает. Дождитесь окончания или остановите его." },
       { status: 409 },
@@ -103,6 +116,7 @@ export async function POST(req: Request) {
     }
 
     const agentPage = session.page as unknown as AgentPage;
+    await quota.reservation.finalize(true);
 
     const summary = await runComputerUse({
       page: agentPage,
@@ -145,6 +159,7 @@ export async function POST(req: Request) {
     const message = failure.status === 429 ? failure.message : "Агент не смог выполнить задачу";
     return NextResponse.json({ error: message, events, detail: reason.slice(0, 300) }, { status: failure.status === 429 ? 429 : 502 });
   } finally {
+    await quota.reservation.finalize(false); // no-op, если запуск уже подтверждён
     await endRun(userId).catch(() => {});
     // Цикл окончен (успех, ошибка, ранний return) — рабочая область снова у учителя.
     await releaseControlToUser(userId).catch(() => {});
