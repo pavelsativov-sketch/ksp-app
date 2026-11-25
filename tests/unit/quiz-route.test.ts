@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   isMongoConfigured: vi.fn(() => true),
   getCurrentUser: vi.fn(),
-  checkRateLimitAsync: vi.fn(async () => ({ ok: true, remaining: 100, resetAt: Date.now() + 60_000 })),
+  checkRateLimitAsync: vi.fn<(key: string, limit: number, windowMs: number) => Promise<{ ok: boolean; remaining: number; resetAt: number }>>(async () => ({ ok: true, remaining: 100, resetAt: Date.now() + 60_000 })),
 }));
 
 vi.mock("@/lib/mongo", async () => {
