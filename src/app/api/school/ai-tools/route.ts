@@ -3,9 +3,11 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
 import { executeWithFallback } from "@/lib/ai/providers";
 import { COL, getDb, isMongoConfigured } from "@/lib/mongo";
+import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120; // каскад провайдеров до 90 с (executeWithFallback)
 
 export async function GET(req: Request) {
   const auth = await requireApiAuth();
@@ -240,6 +242,10 @@ ${agendaCustom ? `- Дополнительные вопросы: ${agendaCustom}
     userPrompt += "\n\nҚұжатты толығымен қазақ тілінде жаз.";
   }
 
+  // Школьный документ — вспомогательный AI-материал: тратит квоту assist.
+  const quota = await reserveQuotaOrResponse(auth.user, "assist");
+  if (!quota.ok) return quota.response;
+
   try {
     const completion = await executeWithFallback("enhance", async (client, model) => {
       const response = await client.chat.completions.create({
@@ -252,6 +258,7 @@ ${agendaCustom ? `- Дополнительные вопросы: ${agendaCustom}
       });
       return response.choices[0]?.message?.content || "";
     });
+    await quota.reservation.finalize(Boolean(completion.trim()));
 
     if (isMongoConfigured() && completion.trim()) {
       try {
@@ -278,6 +285,7 @@ ${agendaCustom ? `- Дополнительные вопросы: ${agendaCustom}
       tool,
     });
   } catch (error) {
+    await quota.reservation.finalize(false).catch(() => {});
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Не удалось сгенерировать документ" },
       { status: 500 },

@@ -176,6 +176,15 @@ describe("незавершённые слоты (функцию убили до 
     expect(events.filter((e) => e.kind === "slot")).toHaveLength(1);
   });
 
+  it("Pro без лимита: повторный finalize(true) не пишет второй учёт", async () => {
+    user = { _id: new ObjectId(userId), plan: "pro" };
+    const reservation = await reserveOk();
+    expect(reservation.remaining).toBeNull();
+    await reservation.finalize(true);
+    await reservation.finalize(true);
+    expect(events).toHaveLength(1);
+  });
+
   it("подтверждённые слоты со временем не освобождаются", async () => {
     for (let i = 0; i < 3; i++) await (await reserveOk()).finalize(true);
     vi.setSystemTime(new Date(now.getTime() + STALE_PENDING_MS * 3));

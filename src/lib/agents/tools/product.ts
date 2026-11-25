@@ -287,7 +287,6 @@ export const productTools = {
         ...input,
         learningObjectives: objectives,
       });
-      await quota.reservation.finalize(true);
 
       const db = await getDb();
       const inserted = await db.collection(COL.sorSochWorks).insertOne({
@@ -296,6 +295,8 @@ export const productTools = {
         created_at: new Date(),
       });
       const workId = inserted.insertedId.toHexString();
+      // Подтверждаем после сохранения: несохранённая работа учителю не досталась.
+      await quota.reservation.finalize(true);
 
       return {
         success: true,
@@ -415,7 +416,6 @@ export const productTools = {
             language: plan.language,
             count: 5,
           });
-          await quota.reservation.finalize(true);
 
           // Сохраним сгенерированные задания в середину урока
           const { getDb, COL, toObjectId } = await import('@/lib/mongo');
@@ -426,6 +426,7 @@ export const productTools = {
               { $set: { 'content.stages.middle.tasks': tasks, updated_at: new Date() } },
             );
           }
+          await quota.reservation.finalize(true);
         } catch (err) {
           await quota.reservation.finalize(false).catch(() => {});
           throw err;
@@ -523,7 +524,6 @@ export const productTools = {
         },
       );
 
-      await quota.reservation.finalize(true);
       const db = await getDb();
       const inserted = await db.collection(COL.schoolAiDocs).insertOne({
         owner_id: ctx.userId,
@@ -533,6 +533,7 @@ export const productTools = {
         created_at: new Date(),
       });
       const docId = inserted.insertedId.toHexString();
+      await quota.reservation.finalize(true);
       const file = await saveCopyToWorkspace(
         ctx.userId,
         `${input.docType}-${slugForFile(input.title)}.md`,

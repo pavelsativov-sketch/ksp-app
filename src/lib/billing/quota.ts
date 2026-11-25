@@ -152,11 +152,14 @@ export async function reserveQuota(
 
     if (limit === null) {
       // Безлимит (Pro): учитываем только по факту, слот резервировать не нужно.
+      let settled = false;
       return {
         ok: true,
         reservation: {
           remaining: null,
           finalize: async (success) => {
+            if (settled) return; // повторный finalize не пишет второй учёт
+            settled = true;
             if (!success) return;
             try {
               await (await getDb()).collection(COL.aiEvents).insertOne({

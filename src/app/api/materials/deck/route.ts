@@ -39,9 +39,9 @@ export async function POST(request: Request) {
       ...(sheet ? { assessment: worksheetDeckPoints(sheet.tasks, language) } : {}),
     });
     const { slides, fromAi } = await generateDeckOutline(plan, facts);
-    await quota.reservation.finalize(fromAi);
     // Черновик слайдов хранится в уроке: конструктор откроет его на любом устройстве.
     await saveToOwnedPlan({ planId: plan.id, ownerId: auth.user.id, kind: "deck", stage: "beginning", title: "Презентация к уроку", payload: { slides, fromAi } });
+    await quota.reservation.finalize(fromAi);
     return NextResponse.json({ slides, fromAi });
   } catch (error) {
     await quota.reservation.finalize(false).catch(() => undefined);

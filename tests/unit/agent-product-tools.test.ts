@@ -17,17 +17,21 @@ const mock = vi.hoisted(() => ({
   getSubjectByName: vi.fn(),
   getSubjectById: vi.fn(),
   writeFile: vi.fn(),
+  sorSoch: vi.fn(),
+  complete: vi.fn(),
 }));
 
 vi.mock("@/lib/billing/quota", () => ({ reserveQuota: mock.reserveQuota, getPlanForUser: mock.getPlanForUser }));
 vi.mock("@/lib/ai/generate", () => ({ generateKspWithModel: mock.generate }));
+vi.mock("@/lib/ai/sor-soch-generator", () => ({ generateSorSochWork: mock.sorSoch }));
+vi.mock("@/lib/ai/providers", () => ({ executeWithFallback: mock.complete }));
 vi.mock("@/lib/plans-repo", () => ({
   getPlanById: mock.getPlanById,
   getSubjectByName: mock.getSubjectByName,
   getSubjectById: mock.getSubjectById,
 }));
 vi.mock("@/lib/mongo", () => ({
-  COL: { plans: "lesson_plans" },
+  COL: { plans: "lesson_plans", sorSochWorks: "sor_soch_works", schoolAiDocs: "school_ai_documents" },
   getDb: async () => ({ collection: () => ({ insertOne: mock.insertOne, find: mock.find }) }),
 }));
 vi.mock("@/lib/workspace/runtime", () => ({
@@ -216,5 +220,34 @@ describe("listPlans", () => {
     const result = await productTools.listPlans({}, { userId: USER, taskId: "t" });
     expect(mock.find.mock.calls[0]![0]).toMatchObject({ owner_id: USER });
     expect(result).toMatchObject({ success: true, plans: [{ planId: expect.any(String), title: "Математика: Дроби", topic: "Дроби" }] });
+  });
+});
+
+describe("вспомогательные инструменты: квота assist, подтверждение после сохранения", () => {
+  const ctx = { userId: USER, taskId: "t" };
+  const saved = { insertedId: { toString: () => PLAN_ID, toHexString: () => PLAN_ID } };
+  const cases = [
+    ["createSorSoch", () => productTools.createSorSoch({ subject: "Математика", grade: 7 }, ctx)],
+    ["createSchoolDoc", () => productTools.createSchoolDoc({ docType: "homeroom", title: "Классный час", details: "Безопасность в сети" }, ctx)],
+  ] as const;
+
+  beforeEach(() => {
+    mock.sorSoch.mockResolvedValue({ title: "СОР" });
+    mock.complete.mockResolvedValue("# Документ");
+    mock.insertOne.mockResolvedValue(saved);
+  });
+
+  it.each(cases)("%s резервирует assist и подтверждает слот", async (_name, call) => {
+    const result = await call();
+    expect(result).toMatchObject({ success: true });
+    expect(mock.reserveQuota).toHaveBeenCalledWith({ id: USER }, "assist");
+    expect(mock.finalize.mock.calls).toEqual([[true]]);
+  });
+
+  it.each(cases)("%s возвращает слот, если результат не сохранился", async (_name, call) => {
+    mock.insertOne.mockRejectedValue(new Error("db down"));
+    const result = await call();
+    expect(result).toMatchObject({ success: false });
+    expect(mock.finalize.mock.calls).toEqual([[false]]);
   });
 });

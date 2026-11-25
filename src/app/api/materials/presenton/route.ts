@@ -16,7 +16,7 @@ import {
 import { log } from "@/lib/logger";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 180; // Presenton до 95 с + скачивание до 30 с + локальная сборка при сбое
 
 const bodySchema = z.object({
   planId: z.string().regex(/^[0-9a-f]{24}$/i),
@@ -57,13 +57,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const qGate = await reserveQuotaOrResponse(auth.user, "assist");
-  if (!qGate.ok) return qGate.response;
-
   const topic = plan.content.topic || plan.title || "Урок";
   const filename = `Презентация - ${topic}.pptx`.replace(/[^\p{L}\p{N}_\-. ]/gu, "_");
 
   if (isPresentonConfigured()) {
+    // Слот assist тратит только платный Presenton; локальная сборка ниже — обычный экспорт без AI.
+    const quota = await reserveQuotaOrResponse(auth.user, "assist");
+    if (!quota.ok) return quota.response;
     try {
       const subject = plan.subject_id ? await getSubjectById(plan.subject_id) : null;
       const subjectName =
@@ -77,6 +77,7 @@ export async function POST(request: Request) {
         language: plan.language === "kz" ? "kz" : "ru",
         template: parsed.data.template,
       });
+      await quota.reservation.finalize(true);
 
       return new NextResponse(new Uint8Array(result.buffer), {
         status: 200,
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
         },
       });
     } catch (error) {
+      await quota.reservation.finalize(false).catch(() => {});
       log.warn("Presenton generation failed, falling back to local PPTX builder", {
         planId: plan.id,
         error: error instanceof Error ? error.message : String(error),

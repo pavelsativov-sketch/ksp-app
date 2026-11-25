@@ -7,7 +7,7 @@ import { generateSorSochWork, type SorSochWork } from "@/lib/ai/sor-soch-generat
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120; // каскад провайдеров до 90 с (executeWithFallback)
 
 interface SavedSorDoc {
   owner_id: string;
@@ -76,7 +76,6 @@ export const POST = withApiAuth(
 
     try {
       const work = await generateSorSochWork(parsed.data);
-      await quota.reservation.finalize(true);
 
       const db = await getDb();
       const inserted = await db.collection<SavedSorDoc>(COL.sorSochWorks).insertOne({
@@ -84,6 +83,8 @@ export const POST = withApiAuth(
         work,
         created_at: new Date(),
       });
+      // Подтверждаем после сохранения: если вариант не сохранился, учитель его не получил.
+      await quota.reservation.finalize(true);
 
       return NextResponse.json({
         ok: true,
