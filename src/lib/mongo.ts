@@ -236,6 +236,8 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     // вынуждена была сортировать в памяти весь набор комплектов.
     db.collection(COL.kits).createIndex({ owner_id: 1, updated_at: -1 }, { name: "kits_owner_updated" }),
     db.collection(COL.templates).createIndex({ owner_id: 1, updated_at: -1 }, { name: "templates_owner_updated" }),
+    // listPlanMaterials: { plan_id, owner_id } + сортировка по updated_at.
+    db.collection(COL.planMaterials).createIndex({ plan_id: 1, owner_id: 1, updated_at: -1 }, { name: "plan_materials_owner_updated" }),
     // Комментарии и отзывы к планам.
     db.collection(COL.comments).createIndex({ plan_id: 1, created_at: 1 }, { name: "comments_plan_created" }),
     db.collection(COL.planReviews).createIndex({ plan_id: 1, created_at: -1 }, { name: "plan_reviews_plan_created" }),
@@ -257,7 +259,6 @@ async function ensureIndexes(db: Db): Promise<PromiseSettledResult<unknown>[]> {
     // School Management
     db.collection(COL.schools).createIndex({ code: 1 }, { unique: true, name: "schools_code_unique" }),
     db.collection(COL.schools).createIndex({ name: 1 }, { name: "schools_name" }),
-    db.collection(COL.schoolMembers).createIndex({ school_id: 1, user_id: 1 }, { unique: true, name: "school_members_unique" }),
     db.collection(COL.schoolMembers).createIndex({ school_id: 1 }, { name: "school_members_school" }),
     db.collection(COL.schoolMembers).createIndex({ user_id: 1 }, { name: "school_members_user" }),
     db.collection(COL.students).createIndex({ school_id: 1, class_name: 1 }, { name: "students_school_class" }),
