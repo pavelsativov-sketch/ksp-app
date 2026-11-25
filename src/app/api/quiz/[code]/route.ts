@@ -20,6 +20,10 @@ interface HostQuestionPayload {
 const ROOM_TTL_MS = 6 * 3600_000;
 const MAX_BODY_BYTES = 32 * 1024;
 const EVENTS_PER_MINUTE = 240;
+/** Чтение комнаты: до 200 учеников × ~40 опросов в минуту, с запасом. */
+const ROOM_READS_PER_MINUTE = 10_000;
+/** Запросов к несуществующим комнатам с одного IP в минуту: опечатки в коде, но не перебор. */
+const MISSES_PER_MINUTE = 30;
 /** Попыток сгенерировать свободный код комнаты при коллизии. */
 const MAX_CODE_ATTEMPTS = 5;
 
@@ -357,9 +361,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
   if (!isMongoConfigured()) return NextResponse.json({ events: [] });
   const { code } = await params;
   if (!/^\d{6}$/.test(code)) return NextResponse.json({ error: "Invalid code" }, { status: 400 });
-  // Ученики поллят каждые ~1.5 с, поэтому лимит щедрый, но перебор 6-значных
-  // кодов комнат и amplification чтения БД без него ничем не ограничены.
-  const rl = await checkRateLimitAsync(`quiz:get:${clientIp(request)}:${code}`, 120, 60_000);
+  // Лимит на комнату, а не на IP: весь класс сидит за одним школьным IP, ~40 опросов в минуту на ученика.
+  const rl = await checkRateLimitAsync(`quiz:get:${code}`, ROOM_READS_PER_MINUTE, 60_000);
   if (!rl.ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   const url = new URL(request.url);
   const since = Math.max(0, Number(url.searchParams.get("since") ?? 0) || 0);
@@ -370,6 +373,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     .sort({ seq: 1 })
     .limit(100)
     .toArray();
+  if (events.length === 0) {
+    const room = await db.collection(COL.quizRooms).findOne({ code }, { projection: { _id: 1 } });
+    // Перебор кодов: промахи по несуществующим комнатам ограничены на IP, иначе чужой квиз находится за минуты.
+    if (!room && !(await checkRateLimitAsync(`quiz:miss:${clientIp(request)}`, MISSES_PER_MINUTE, 60_000)).ok) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+  }
   return NextResponse.json({
     events: events.map((e) => ({ seq: e.seq, event: e.event, payload: e.payload, createdAt: e.createdAt })),
   });

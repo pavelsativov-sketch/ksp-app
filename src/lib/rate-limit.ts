@@ -80,6 +80,12 @@ export function clientIpFromHeaders(headers: Headers): string {
     const value = headers.get(trustedHeader)?.split(",")[0]?.trim();
     if (value) return value;
   }
+  // На Vercel x-real-ip ставит сама платформа (клиент его не подделает); без этого все
+  // посетители были "unknown" и делили один лимит: один перебор пароля блокировал вход всем.
+  if (process.env.VERCEL) {
+    const real = headers.get("x-real-ip")?.trim();
+    if (real) return real;
+  }
   return "unknown";
 }
 

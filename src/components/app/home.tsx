@@ -11,7 +11,7 @@ import { useUiLocale } from "@/components/i18n/use-ui-locale";
 import { setActiveAgentTask } from "@/components/agents/agent-dock";
 import { ThreeStage } from "@/components/three/three-stage";
 import { appCopy, type AppCopy } from "./copy";
-import { LessonKitPicker, readLastKit, rememberKit } from "./lesson-kit-picker";
+import { DEFAULT_KIT, LessonKitPicker, readLastKit, rememberKit } from "./lesson-kit-picker";
 import type { KitAnswers } from "@/lib/materials/kit";
 import type { MaterialKind } from "@/lib/types/ksp";
 import s from "./home.module.css";
@@ -36,12 +36,16 @@ export interface HomeProps {
 
 type Tone = "violet" | "blue" | "peach" | "green" | "pink" | "gray";
 
+/** Календарный день по Алматы: сервер (UTC) и браузер должны получить одинаковый текст, иначе React #418. */
+const TZ = "Asia/Almaty";
+const dayKey = (date: Date) => date.toLocaleDateString("en-CA", { timeZone: TZ });
+
 function when(iso: string, c: AppCopy, locale: string): string {
   const date = new Date(iso);
-  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
-  if (days <= 0) return c.today;
-  if (days === 1) return c.yesterday;
-  return date.toLocaleDateString(locale === "ru" ? "ru-RU" : "kk-KZ", { day: "numeric", month: "short" });
+  const now = new Date();
+  if (dayKey(date) >= dayKey(now)) return c.today;
+  if (dayKey(date) === dayKey(new Date(now.getTime() - 86_400_000))) return c.yesterday;
+  return date.toLocaleDateString(locale === "ru" ? "ru-RU" : "kk-KZ", { day: "numeric", month: "short", timeZone: TZ });
 }
 
 /** Новый урок: три поля и кнопка. Пока ИИ пишет, робот работает и показывает этап. */
@@ -61,19 +65,30 @@ function readLastLesson(): { grade: number; subject: string } {
   }
 }
 
+const withMaterial = (kit: KitAnswers, material?: MaterialKind): KitAnswers =>
+  material && !kit.materials.includes(material) ? { ...kit, materials: [...kit.materials, material] } : kit;
+
 function LessonDialog({ open, onClose, subjects, c, locale, material }: { open: boolean; onClose: () => void; subjects: HomeProps["subjects"]; c: AppCopy; locale: "ru" | "kz"; material?: MaterialKind }) {
   const router = useRouter();
   const ref = useRef<HTMLDialogElement | null>(null);
   const topicRef = useRef<HTMLInputElement | null>(null);
-  const [grade, setGrade] = useState(() => readLastLesson().grade);
-  const [subject, setSubject] = useState(() => readLastLesson().subject);
+  const [grade, setGrade] = useState(5);
+  const [subject, setSubject] = useState("");
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState<"ru" | "kz">("ru");
   // Материал, выбранный плиткой на главной, сразу отмечен в комплекте.
-  const [kit, setKit] = useState<KitAnswers>(() => {
-    const last = readLastKit();
-    return material && !last.materials.includes(material) ? { ...last, materials: [...last.materials, material] } : last;
-  });
+  const [kit, setKit] = useState<KitAnswers>(() => withMaterial(DEFAULT_KIT, material));
+
+  // Прошлый выбор — только после монтирования: на сервере localStorage нет, и окно, открытое
+  // по ?new=1, рисовалось бы по-разному на сервере и в браузере (React #418).
+  useEffect(() => {
+    const last = readLastLesson();
+    /* eslint-disable react-hooks/set-state-in-effect -- localStorage недоступен при серверной отрисовке */
+    setGrade(last.grade);
+    setSubject(last.subject);
+    setKit(withMaterial(readLastKit(), material));
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [material]);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
