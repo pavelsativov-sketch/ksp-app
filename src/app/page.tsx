@@ -1,10 +1,21 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, ArrowUpRight, BookOpen, Bot, Check, FileText, Languages, Layers, Leaf, PencilLine, Presentation, Sparkles } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getDict } from "@/lib/i18n/server";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
 import { KitPreview, PlantIllustration } from "@/components/landing/kit-preview";
 import s from "@/components/landing/landing.module.css";
 import { ThreeStage } from "@/components/three/three-stage";
+
+const LANDING_TITLE = `${SITE_NAME} — комплект к уроку за 5 минут`;
+
+export const metadata: Metadata = {
+  title: LANDING_TITLE,
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "ru_RU", url: "/", title: LANDING_TITLE, description: SITE_DESCRIPTION },
+};
 
 export default async function HomePage() {
   const signedIn = Boolean(await getCurrentUser());

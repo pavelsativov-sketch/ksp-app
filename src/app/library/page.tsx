@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getDb, isMongoConfigured } from "@/lib/mongo";
 import { listSubjects } from "@/lib/plans-repo";
@@ -7,8 +8,19 @@ import { LibraryResults } from "@/components/ksp/library-results";
 import { parseLibraryQuery, type LibrarySearchParams } from "@/lib/library-query";
 import { listLibraryPlans } from "@/lib/library-repo";
 import { getDict } from "@/lib/i18n/server";
+import { SITE_NAME } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
+
+const LIBRARY_TITLE = `Библиотека КСП — ${SITE_NAME}`;
+const LIBRARY_DESCRIPTION = "Публичные КСП учителей Казахстана: возьмите идею, посмотрите структуру урока или начните свой вариант.";
+
+export const metadata: Metadata = {
+  title: LIBRARY_TITLE,
+  description: LIBRARY_DESCRIPTION,
+  alternates: { canonical: "/library" },
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "ru_RU", url: "/library", title: LIBRARY_TITLE, description: LIBRARY_DESCRIPTION },
+};
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<LibrarySearchParams> }) {
   const { t } = await getDict();

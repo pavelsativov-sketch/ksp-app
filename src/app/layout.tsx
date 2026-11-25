@@ -46,7 +46,6 @@ export const metadata: Metadata = {
     type: "website",
     siteName: SITE_NAME,
     locale: "ru_RU",
-    url: "/",
     title: `${SITE_NAME} — комплект к уроку за 5 минут`,
     description: SITE_DESCRIPTION,
   },
