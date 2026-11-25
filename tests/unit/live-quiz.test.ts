@@ -4,6 +4,7 @@ import {
   correctSummary,
   generateRoomCode,
   generateStudentId,
+  fetchQuizEvents,
   postQuizEvent,
   speedBonus,
   toPublicTask,
@@ -123,7 +124,7 @@ describe("postQuizEvent", () => {
       .mockResolvedValueOnce(new Response("", { status: 503 }))
       .mockResolvedValueOnce(new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(postQuizEvent("123456", "student:join", {}, [0, 0])).resolves.toBeUndefined();
+    await expect(postQuizEvent("123456", "student:join", {}, [0, 0])).resolves.toEqual({});
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -139,5 +140,19 @@ describe("postQuizEvent", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(postQuizEvent("123456", "host:state", {}, [0, 0])).rejects.toThrow("HTTP 403");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("возвращает тело ответа (токен ученика)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"ok":true,"seq":2,"token":"t"}', { status: 200 })));
+    await expect(postQuizEvent("123456", "student:join", {}, [])).resolves.toMatchObject({ token: "t" });
+  });
+});
+
+describe("fetchQuizEvents", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("сбой сервера — ошибка, а не пустой список (иначе UI молча «ждёт хоста»)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
+    await expect(fetchQuizEvents("123456", 0)).rejects.toThrow("HTTP 503");
   });
 });

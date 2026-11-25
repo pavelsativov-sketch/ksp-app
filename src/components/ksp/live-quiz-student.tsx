@@ -11,6 +11,8 @@ import {
   fetchQuizEvents,
   generateStudentId,
   postQuizEvent,
+  QUIZ_OFFLINE_AFTER_FAILURES,
+  QuizHttpError,
   type HostQuestionMsg,
   type HostState,
   type LiveLeaderboardEntry,
@@ -33,6 +35,14 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
       return generateStudentId();
     }
   });
+  // Секрет участника от сервера: без него нельзя отвечать или войти под этим id.
+  const [token, setToken] = useState<string | null>(() => {
+    try {
+      return window.sessionStorage.getItem(tokenKey(initialCode));
+    } catch {
+      return null;
+    }
+  });
   const [phase, setPhase] = useState<Phase>("name");
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +58,8 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   const lastAnswerRef = useRef<{ index: number; answer: TaskAnswer; ms: number } | null>(null);
 
   const lastSeqRef = useRef(0);
+  const [offline, setOffline] = useState(false);
+  const pollFailuresRef = useRef(0);
 
   // При смене кода на экране входа пересоздаём идентификатор под новый код.
   function ensureStudentIdForCode(targetCode: string) {
@@ -55,6 +67,7 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
     const key = `ksp-quiz-student:${targetCode}`;
     try {
       const existing = window.sessionStorage.getItem(key);
+      setToken(window.sessionStorage.getItem(tokenKey(targetCode)));
       if (existing) {
         setStudentId(existing);
         return;
@@ -81,6 +94,8 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
       try {
         const events = await fetchQuizEvents(code, lastSeqRef.current);
         if (!alive) return;
+        pollFailuresRef.current = 0;
+        setOffline(false);
         for (const ev of events) {
           lastSeqRef.current = Math.max(lastSeqRef.current, ev.seq);
           if (ev.event === "host:question") {
@@ -104,7 +119,9 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
           }
         }
       } catch {
-        // polling продолжается
+        // polling продолжается; после нескольких сбоев подряд — видимое «нет связи»
+        pollFailuresRef.current += 1;
+        if (alive && pollFailuresRef.current >= QUIZ_OFFLINE_AFTER_FAILURES) setOffline(true);
       }
     }
     const t = setInterval(poll, 1500);
@@ -126,15 +143,33 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
     }
     setError(null);
     setJoining(true);
-    postQuizEvent(code, "student:join", { studentId, name: name.trim() })
-      .then(() => setPhase("lobby"))
-      .catch(() => setError("Не удалось войти: нет связи с сервером. Попробуйте ещё раз."))
+    postQuizEvent(code, "student:join", { studentId, name: name.trim(), ...(token ? { token } : {}) })
+      .then((res) => {
+        if (res.token) {
+          setToken(res.token);
+          try {
+            window.sessionStorage.setItem(`ksp-quiz-student:${code}`, studentId);
+            window.sessionStorage.setItem(tokenKey(code), res.token);
+          } catch {
+            // без sessionStorage после F5 войдём новым участником
+          }
+        }
+        setPhase("lobby");
+      })
+      .catch((err: unknown) => {
+        const status = err instanceof QuizHttpError ? err.status : 0;
+        setError(
+          status === 404 ? "Квиз не найден. Проверьте код."
+            : status === 403 ? "Этот участник уже вошёл с другого устройства."
+            : "Не удалось войти: нет связи с сервером. Попробуйте ещё раз.",
+        );
+      })
       .finally(() => setJoining(false));
   }
 
   function sendAnswer(msg: { index: number; answer: TaskAnswer; ms: number }) {
     setSendState("sending");
-    postQuizEvent(code, "student:answer", { studentId, ...msg })
+    postQuizEvent(code, "student:answer", { studentId, token, ...msg })
       .then(() => setSendState("sent"))
       .catch(() => setSendState("failed"));
   }
@@ -149,6 +184,20 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
   }
 
   // ---------- render ----------
+
+  const view = renderView();
+  return (
+    <>
+      {offline && (
+        <div role="status" className="fixed inset-x-0 top-0 z-50 bg-amber-100 px-4 py-2 text-center text-sm font-medium text-amber-900">
+          Нет связи с квизом, пробуем снова…
+        </div>
+      )}
+      {view}
+    </>
+  );
+
+  function renderView() {
 
   if (phase === "name") {
     return (
@@ -310,7 +359,10 @@ export function LiveQuizStudent({ initialCode }: { initialCode: string }) {
       </div>
     </div>
   );
+  }
 }
+
+const tokenKey = (roomCode: string) => `ksp-quiz-token:${roomCode}`;
 
 function CenterScreen({ children }: { children: React.ReactNode }) {
   return (

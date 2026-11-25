@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { createHash } from "node:crypto";
 
 /**
  * HTTP-слой live-квиза (`api/quiz/[code]`) не был покрыт тестами, хотя именно
@@ -67,7 +68,10 @@ function fakeDb(room: Record<string, unknown> | null, sink: { events: Array<Reco
   const filterMatches = (filter: Record<string, unknown>): boolean => {
     for (const [key, cond] of Object.entries(filter)) {
       const value = readPath(state.room ?? {}, key);
-      if (cond !== null && typeof cond === "object" && "$exists" in (cond as Record<string, unknown>)) {
+      if (cond !== null && typeof cond === "object" && "$in" in (cond as Record<string, unknown>)) {
+        const options = (cond as { $in: unknown[] }).$in;
+        if (!options.some((o) => (o === null ? value === undefined || value === null : o === value))) return false;
+      } else if (cond !== null && typeof cond === "object" && "$exists" in (cond as Record<string, unknown>)) {
         const want = (cond as { $exists: boolean }).$exists;
         if ((value !== undefined) !== want) return false;
       } else if (cond !== null && typeof cond === "object" && !Array.isArray(cond)) {
@@ -127,6 +131,10 @@ function fakeDb(room: Record<string, unknown> | null, sink: { events: Array<Reco
   return { db: { collection: (name: string) => (name === "quiz_events" ? events : rooms) }, sink, state };
 }
 
+const SID = "s_0123456789ab";
+const TOKEN = "tok_0123456789abcdefghij";
+const TOKEN_HASH = createHash("sha256").update(TOKEN).digest("hex");
+
 const SECRET_TASK = { type: "MCQ", question: "2+2=?", options: ["4", "5"], correctIndex: 0, points: 2 };
 
 /** Полезная нагрузка host:state по схеме роута. */
@@ -140,7 +148,7 @@ function useFakeDb(room: Record<string, unknown> | null, sink?: { events: Array<
 }
 
 interface RoomState {
-  students?: Record<string, { name?: string; score?: number; answered?: number }>;
+  students?: Record<string, { name?: string; score?: number; answered?: number; tokenHash?: string }>;
   answers?: Record<string, Record<string, boolean>>;
   [key: string]: unknown;
 }
@@ -154,6 +162,7 @@ beforeEach(() => {
   mocks.getCurrentUser.mockReset();
   mocks.getCurrentUser.mockResolvedValue({ id: "c".repeat(24), email: "t@e.st" });
   mocks.isMongoConfigured.mockReturnValue(true);
+  mocks.checkRateLimitAsync.mockReset();
   mocks.checkRateLimitAsync.mockResolvedValue({ ok: true, remaining: 100, resetAt: Date.now() + 60_000 });
 });
 
@@ -177,6 +186,14 @@ describe("POST /api/quiz/[code] — валидация", () => {
 
     const badPayload = await POST(req({ event: "student:join", payload: { studentId: "s" } }), params);
     expect(badPayload.status).toBe(400);
+  });
+
+  it("studentId проверяется по шаблону [A-Za-z0-9_-]{8,64}", async () => {
+    useFakeDb({ code: CODE, ownerId: "c".repeat(24), seq: 1, students: {} });
+    for (const studentId of ["short", "s_abc$def12", "x".repeat(65), "students.$"]) {
+      const res = await POST(req({ event: "student:join", payload: { studentId, name: "Аня" } }), params);
+      expect(res.status).toBe(400);
+    }
   });
 });
 
@@ -248,39 +265,33 @@ describe("POST /api/quiz/[code] — ответы учеников", () => {
     secretTask: SECRET_TASK,
     questionStartedAt: new Date(),
     questionEndsAt: new Date(Date.now() + 30_000),
-    students: { s1: { name: "Аня", score: 0, answered: 0 } },
+    students: { [SID]: { name: "Аня", score: 0, answered: 0, tokenHash: TOKEN_HASH } },
     answers: {},
   });
+  const answer = (selectedIndex: number, extra: Record<string, unknown> = {}) =>
+    req({ event: "student:answer", payload: { studentId: SID, token: TOKEN, index: 0, answer: { type: "MCQ", selectedIndex }, ms: 100, ...extra } });
 
   it("верный ответ начисляет очки", async () => {
     const { db } = useFakeDb(openRoom());
-    const res = await POST(
-      req({ event: "student:answer", payload: { studentId: "s1", index: 0, answer: { type: "MCQ", selectedIndex: 0 }, ms: 100 } }),
-      params,
-    );
+    const res = await POST(answer(0), params);
     expect(res.status).toBe(200);
     const after = await roomsOf(db).findOne();
     // Счёт вырос, ответ засчитан ровно один раз.
-    expect((after.students as { s1: { score: number } }).s1.score).toBeGreaterThan(0);
-    expect(after.answers?.[0]?.s1).toBe(true);
+    expect(after.students?.[SID]?.score).toBeGreaterThan(0);
+    expect(after.answers?.[0]?.[SID]).toBe(true);
   });
 
   it("неверный ответ очков не даёт", async () => {
     const { db } = useFakeDb(openRoom());
-    await POST(
-      req({ event: "student:answer", payload: { studentId: "s1", index: 0, answer: { type: "MCQ", selectedIndex: 1 }, ms: 100 } }),
-      params,
-    );
+    await POST(answer(1), params);
     const after = await roomsOf(db).findOne();
-    expect((after.students as { s1: { score: number } }).s1.score).toBe(0);
+    expect(after.students?.[SID]?.score).toBe(0);
   });
 
   it("ученик без join не может набрать очки", async () => {
     const { db } = useFakeDb(openRoom());
-    await POST(
-      req({ event: "student:answer", payload: { studentId: "ghost", index: 0, answer: { type: "MCQ", selectedIndex: 0 }, ms: 100 } }),
-      params,
-    );
+    const res = await POST(answer(0, { studentId: "ghost_student" }), params);
+    expect(res.status).toBe(403);
     // Ответ не должен был появиться в карте ответов.
     const roomAfter = await roomsOf(db).findOne();
     expect(roomAfter.answers?.[0]).toBeUndefined();
@@ -290,12 +301,75 @@ describe("POST /api/quiz/[code] — ответы учеников", () => {
     const room = openRoom();
     room.questionEndsAt = new Date(Date.now() - 60_000);
     const { db } = useFakeDb(room);
-    await POST(
-      req({ event: "student:answer", payload: { studentId: "s1", index: 0, answer: { type: "MCQ", selectedIndex: 0 }, ms: 100 } }),
-      params,
-    );
+    await POST(answer(0), params);
     const after = await roomsOf(db).findOne();
     expect(after.answers?.[0]).toBeUndefined();
+  });
+
+  it("ответ за чужого ученика без его токена отклоняется", async () => {
+    const { db } = useFakeDb(openRoom());
+    const res = await POST(answer(0, { token: "wrong-token-wrong-token" }), params);
+    expect(res.status).toBe(403);
+    expect((await roomsOf(db).findOne()).answers?.[0]).toBeUndefined();
+  });
+
+  it("токен не попадает в ленту событий", async () => {
+    const sink = { events: [] as Array<Record<string, unknown>> };
+    useFakeDb(openRoom(), sink);
+    await POST(answer(0), params);
+    expect(JSON.stringify(sink.events)).not.toContain(TOKEN);
+  });
+});
+
+describe("POST /api/quiz/[code] — вход ученика (M1/M2)", () => {
+  it("первый вход выдаёт секрет, в комнате хранится только его хэш, в событии его нет", async () => {
+    const sink = { events: [] as Array<Record<string, unknown>> };
+    const { db } = useFakeDb({ code: CODE, ownerId: "c".repeat(24), seq: 1, students: {} }, sink);
+    const res = await POST(req({ event: "student:join", payload: { studentId: SID, name: "Аня" } }), params);
+    expect(res.status).toBe(200);
+    const { token } = await res.json();
+    expect(token).toMatch(/^[A-Za-z0-9_-]{16,}$/);
+    const room = await roomsOf(db).findOne();
+    expect(room.students?.[SID]?.tokenHash).toBe(createHash("sha256").update(token).digest("hex"));
+    expect(JSON.stringify(sink.events)).not.toContain(token);
+    expect(sink.events.at(-1)?.payload).toEqual({ studentId: SID, name: "Аня" });
+  });
+
+  it("повторный вход под чужим id без токена отклоняется, со своим токеном проходит", async () => {
+    useFakeDb({ code: CODE, ownerId: "c".repeat(24), seq: 1, students: { [SID]: { name: "Аня", score: 5, tokenHash: TOKEN_HASH } } });
+    const hijack = await POST(req({ event: "student:join", payload: { studentId: SID, name: "Вор" } }), params);
+    expect(hijack.status).toBe(403);
+    const own = await POST(req({ event: "student:join", payload: { studentId: SID, name: "Аня", token: TOKEN } }), params);
+    expect(own.status).toBe(200);
+  });
+
+  it("событие ученика не создаёт комнату: 404 «Квиз не найден»", async () => {
+    const { state } = useFakeDb(null);
+    const res = await POST(req({ event: "student:join", payload: { studentId: SID, name: "Аня" } }), params);
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe("Квиз не найден");
+    expect(state.room).toBeNull();
+  });
+
+  it("лимиты: IP+код для всех, отдельные бакеты для хоста и учеников", async () => {
+    useFakeDb({ code: CODE, ownerId: "c".repeat(24), seq: 1, students: {} });
+    await POST(req({ event: "student:join", payload: { studentId: SID, name: "Аня" } }), params);
+    await POST(req({ event: "host:state", payload: hostState }), params);
+    const keys = mocks.checkRateLimitAsync.mock.calls.map((c) => (c as unknown[])[0]);
+    expect(keys).toContain(`quiz:student:${CODE}`);
+    expect(keys).toContain(`quiz:host:${CODE}`);
+    expect(keys.filter((k) => String(k).startsWith("quiz:post:ip:") && String(k).endsWith(`:${CODE}`))).toHaveLength(2);
+  });
+
+  it("исчерпанный бакет учеников не мешает хосту", async () => {
+    useFakeDb({ code: CODE, ownerId: "c".repeat(24), seq: 1, students: {} });
+    mocks.checkRateLimitAsync.mockImplementation(async (key: string) => ({
+      ok: !key.startsWith("quiz:student:"), remaining: 0, resetAt: Date.now() + 60_000,
+    }));
+    const student = await POST(req({ event: "student:join", payload: { studentId: SID, name: "Аня" } }), params);
+    expect(student.status).toBe(429);
+    const host = await POST(req({ event: "host:state", payload: hostState }), params);
+    expect(host.status).toBe(200);
   });
 });
 

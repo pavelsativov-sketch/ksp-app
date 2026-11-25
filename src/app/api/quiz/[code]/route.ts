@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getDb, COL, isMongoConfigured } from "@/lib/mongo";
 import { getCurrentUser } from "@/lib/auth";
@@ -19,7 +20,12 @@ interface HostQuestionPayload {
 
 const ROOM_TTL_MS = 6 * 3600_000;
 const MAX_BODY_BYTES = 32 * 1024;
-const EVENTS_PER_MINUTE = 240;
+/** Хост и ученики считаются в разных бакетах: флуд учеников не останавливает ведущего. */
+const HOST_EVENTS_PER_MINUTE = 240;
+/** До 200 учеников: вход + ответ на вопрос раз в ~20 с. */
+const STUDENT_EVENTS_PER_MINUTE = 1_200;
+/** С одного IP в одну комнату. Класс за общим школьным NAT укладывается, один скрипт — нет. */
+const IP_EVENTS_PER_MINUTE = 600;
 /** Чтение комнаты: до 200 учеников × ~40 опросов в минуту, с запасом. */
 const ROOM_READS_PER_MINUTE = 10_000;
 /** Запросов к несуществующим комнатам с одного IP в минуту: опечатки в коде, но не перебор. */
@@ -31,6 +37,8 @@ interface RoomStudent {
   name?: string;
   score?: number;
   answered?: number;
+  /** sha256 секрета, выданного ученику при входе; без него нельзя отвечать за него. */
+  tokenHash?: string;
 }
 
 interface RoomDoc {
@@ -61,6 +69,8 @@ function asTime(value: Date | number | undefined): number {
   return typeof value === "number" ? value : 0;
 }
 
+const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
 /** Лидерборд из карты студентов комнаты (сервер — единственный источник очков). */
 function buildLeaderboard(students: Record<string, RoomStudent> | undefined) {
   return Object.entries(students ?? {})
@@ -84,6 +94,9 @@ const leaderboardSchema = z
     }),
   )
   .max(200);
+
+const studentIdSchema = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
+const studentTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{16,128}$/);
 
 /** Схемы payload по типу события — вместо z.unknown(), который пропускал любой мусор. */
 const payloadSchemas = {
@@ -111,11 +124,14 @@ const payloadSchemas = {
   }),
   "host:end": z.object({ leaderboard: leaderboardSchema }),
   "student:join": z.object({
-    studentId: z.string().min(1).max(64),
+    studentId: studentIdSchema,
     name: z.string().trim().min(1).max(40),
+    /** Секрет из ответа на первый вход: нужен для повторного входа под тем же id. */
+    token: studentTokenSchema.optional(),
   }),
   "student:answer": z.object({
-    studentId: z.string().min(1).max(64),
+    studentId: studentIdSchema,
+    token: studentTokenSchema,
     index: z.number().int().min(0).max(500),
     answer: z.record(z.string(), z.unknown()),
     ms: z.number().int().min(0).max(3_600_000),
@@ -151,9 +167,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
+  const ipRl = await checkRateLimitAsync(`quiz:post:ip:${clientIp(request)}:${code}`, IP_EVENTS_PER_MINUTE, 60_000);
+  if (!ipRl.ok) {
+    return NextResponse.json({ error: "Слишком много событий с вашего адреса" }, { status: 429 });
+  }
+
   const db = await getDb();
   const rooms = db.collection<RoomDoc>(COL.quizRooms);
   const now = new Date();
+  const isHostEvent = parsed.data.event.startsWith("host:");
 
   // Хост-события — только от владельца комнаты. Комната создаётся первым
   // host-событием; если студенты успели создать её раньше хоста (lobby),
@@ -162,7 +184,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   // Защита от захвата: «занять» или создать комнату может только владелец
   // плана, переданного в событии (host:state/х:question несут planId).
   // Студент с аккаунтом, знающий код, не владеет планом — захват невозможен.
-  if (parsed.data.event.startsWith("host:")) {
+  if (isHostEvent) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
     const hostPlanId = (payloadChecked.data as { planId?: string }).planId;
@@ -212,9 +234,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     }
   }
 
-  const rl = await checkRateLimitAsync(`quiz:${code}`, EVENTS_PER_MINUTE, 60_000);
+  const rl = isHostEvent
+    ? await checkRateLimitAsync(`quiz:host:${code}`, HOST_EVENTS_PER_MINUTE, 60_000)
+    : await checkRateLimitAsync(`quiz:student:${code}`, STUDENT_EVENTS_PER_MINUTE, 60_000);
   if (!rl.ok) {
     return NextResponse.json({ error: "Слишком много событий в комнате" }, { status: 429 });
+  }
+
+  // Ученики не создают комнат: её открывает только хост.
+  let issuedToken: string | undefined;
+  if (!isHostEvent) {
+    const room = await rooms.findOne({ code }, { projection: { students: 1 } });
+    if (!room) return NextResponse.json({ error: "Квиз не найден" }, { status: 404 });
+    const { studentId, token } = payloadChecked.data as { studentId: string; token?: string };
+    const known = room.students?.[studentId];
+    if (parsed.data.event === "student:answer" && (!known?.tokenHash || !token || hashToken(token) !== known.tokenHash)) {
+      return NextResponse.json({ error: "Войдите в квиз заново" }, { status: 403 });
+    }
+    if (parsed.data.event === "student:join") {
+      if (known?.tokenHash && (!token || hashToken(token) !== known.tokenHash)) {
+        return NextResponse.json({ error: "Этот участник уже вошёл с другого устройства" }, { status: 403 });
+      }
+      // Защита от флуда: без лимита любой знающий код мог раздуть словарь
+      // students до тысяч записей. Уже вошедший ученик лимит не расходует.
+      if (!known && Object.keys(room.students ?? {}).length >= MAX_STUDENTS) {
+        return NextResponse.json({ error: "В комнате слишком много участников" }, { status: 429 });
+      }
+      issuedToken = token ?? randomBytes(24).toString("base64url");
+    }
   }
 
   const seqDoc = await rooms.findOneAndUpdate(
@@ -224,9 +271,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       $set: { updatedAt: now, expiresAt: new Date(now.getTime() + ROOM_TTL_MS) },
       $setOnInsert: { code, createdAt: now },
     },
-    { returnDocument: "after", upsert: true },
+    { returnDocument: "after", upsert: isHostEvent },
   );
-  const seq = typeof seqDoc?.seq === "number" ? seqDoc.seq : 1;
+  if (!seqDoc) return NextResponse.json({ error: "Квиз не найден" }, { status: 404 });
+  const seq = typeof seqDoc.seq === "number" ? seqDoc.seq : 1;
 
   // ── Серверная обработка события (авторитетный подсчёт очков) ──
   // По умолчанию в событие пишем payload как есть; отдельные типы — ниже.
@@ -275,22 +323,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     await rooms.updateOne({ code }, { $set: set });
   } else if (parsed.data.event === "student:join") {
     const { studentId, name } = payloadChecked.data as { studentId: string; name: string };
-    const roomNow = await rooms.findOne({ code }, { projection: { students: 1 } });
-    const existingCount = roomNow?.students ? Object.keys(roomNow.students).length : 0;
-    // Защита от флуда: без лимита любой знающий код мог раздуть словарь
-    // students до тысяч записей. Уже вошедший ученик лимит не расходует.
-    if (existingCount >= MAX_STUDENTS && !roomNow?.students?.[studentId]) {
-      return NextResponse.json({ error: "В комнате слишком много участников" }, { status: 429 });
-    }
+    const tokenHash = hashToken(issuedToken!);
+    // Токен в событие не попадает: ленту читает кто угодно, знающий код.
+    storedPayload = { studentId, name };
     const firstJoin = await rooms.updateOne(
       { code, [`students.${studentId}`]: { $exists: false } },
-      { $set: { [`students.${studentId}`]: { name, score: 0, answered: 0 } } },
+      { $set: { [`students.${studentId}`]: { name, score: 0, answered: 0, tokenHash } } },
     );
     if (firstJoin.matchedCount === 0) {
-      // Повторный вход: обновляем имя, счёт не трогаем.
-      await rooms.updateOne({ code }, { $set: { [`students.${studentId}.name`]: name } });
+      // Повторный вход: обновляем имя, счёт не трогаем. Участник без токена
+      // (комната со старой версии) закрепляется за первым, кто предъявит токен.
+      const rejoin = await rooms.updateOne(
+        { code, [`students.${studentId}.tokenHash`]: { $in: [tokenHash, null] } },
+        { $set: { [`students.${studentId}.name`]: name, [`students.${studentId}.tokenHash`]: tokenHash } },
+      );
+      if (rejoin.matchedCount === 0) {
+        return NextResponse.json({ error: "Этот участник уже вошёл с другого устройства" }, { status: 403 });
+      }
     }
   } else if (parsed.data.event === "student:answer") {
+    const { token, ...publicAnswer } = payloadChecked.data as { token: string };
+    // Токен в событие не попадает.
+    storedPayload = publicAnswer;
+    const tokenHash = hashToken(token);
     const { studentId, index, answer } = payloadChecked.data as {
       studentId: string;
       index: number;
@@ -330,7 +385,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       await rooms.updateOne(
         {
           code,
-          [`students.${studentId}`]: { $exists: true },
+          [`students.${studentId}.tokenHash`]: tokenHash,
           [`answers.${index}.${studentId}`]: { $exists: false },
         },
         {
@@ -353,7 +408,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     payload: storedPayload,
     createdAt: now,
   });
-  return NextResponse.json({ ok: true, seq });
+  return NextResponse.json(issuedToken ? { ok: true, seq, token: issuedToken } : { ok: true, seq });
 }
 
 /** GET /api/quiz/[code]?since=N — забрать события комнаты. */

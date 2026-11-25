@@ -23,6 +23,7 @@ import {
 import {
   correctSummary,
   fetchQuizEvents,
+  QUIZ_OFFLINE_AFTER_FAILURES,
   generateRoomCode,
   postQuizEvent,
   toPublicTask,
@@ -56,6 +57,8 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
   const [now, setNow] = useState(0);
   const [endsAt, setEndsAt] = useState<number | null>(resume?.endsAt ?? null);
   const lastSeqRef = useRef(0);
+  const [offline, setOffline] = useState(false);
+  const pollFailuresRef = useRef(0);
   const [joinUrl, setJoinUrl] = useState("");
   // Неотправленные события хоста: показываем баннер с повтором, чтобы ученики не зависли.
   const [failedEvents, setFailedEvents] = useState<Array<{ event: string; payload: unknown }>>([]);
@@ -70,7 +73,7 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
     const pending = failedEvents;
     setFailedEvents([]);
     // Порядок важен (question → reveal → state), поэтому шлём последовательно.
-    void pending.reduce<Promise<void>>(
+    void pending.reduce<Promise<unknown>>(
       (chain, ev, i) =>
         chain.then(() =>
           postQuizEvent(code, ev.event, ev.payload).catch((err: unknown) => {
@@ -113,7 +116,10 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
     async function poll() {
       try {
         const events = await fetchQuizEvents(code, lastSeqRef.current);
-        if (!alive || events.length === 0) return;
+        if (!alive) return;
+        pollFailuresRef.current = 0;
+        setOffline(false);
+        if (events.length === 0) return;
         for (const ev of events) {
           lastSeqRef.current = Math.max(lastSeqRef.current, ev.seq);
           if (ev.event === "student:join") {
@@ -138,7 +144,9 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
           }
         }
       } catch {
-        // polling продолжается
+        // polling продолжается; после нескольких сбоев подряд — видимое «нет связи»
+        pollFailuresRef.current += 1;
+        if (alive && pollFailuresRef.current >= QUIZ_OFFLINE_AFTER_FAILURES) setOffline(true);
       }
     }
     const t = setInterval(poll, 1500);
@@ -257,6 +265,12 @@ export function LiveQuizHost({ tasks, planTitle, planId, resume = null }: Props)
           </div>
           <div className="text-right"><p className="tabular-nums text-xs font-bold uppercase tracking-[0.1em] text-[#b9cce8]">Код для входа</p><p className="mt-1 tabular-nums text-4xl font-bold tracking-[0.16em] text-white">{code}</p></div>
         </div>
+
+        {offline && (
+          <div role="status" className="rounded-lg border border-amber-400 bg-amber-950/60 px-4 py-3 text-sm">
+            Нет связи с квизом, пробуем снова…
+          </div>
+        )}
 
         {failedEvents.length > 0 && (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-400 bg-red-950/60 px-4 py-3 text-sm">

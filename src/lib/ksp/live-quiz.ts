@@ -68,6 +68,8 @@ export interface HostRevealMsg {
 export interface StudentJoinMsg {
   studentId: string;
   name: string;
+  /** Секрет участника (выдан сервером при первом входе); в ленту событий не попадает. */
+  token?: string;
 }
 
 export interface StudentAnswerMsg {
@@ -181,6 +183,23 @@ export function generateStudentId(): string {
 }
 
 const QUIZ_FETCH_TIMEOUT_MS = 8000;
+/** Столько неудачных опросов подряд (~4.5 с) — и показываем «нет связи». */
+export const QUIZ_OFFLINE_AFTER_FAILURES = 3;
+
+/** Ответ POST /api/quiz/[code]. token — только на student:join. */
+export interface QuizPostResult {
+  ok?: boolean;
+  seq?: number;
+  token?: string;
+  roomCode?: string;
+}
+
+/** Ошибка HTTP квиза: статус нужен UI, чтобы отличить «нет комнаты» от «нет сети». */
+export class QuizHttpError extends Error {
+  constructor(readonly status: number, message = `HTTP ${status}`) {
+    super(message);
+  }
+}
 const QUIZ_POST_RETRY_DELAYS_MS = [500, 1500];
 
 /** API polling: отправить событие в комнату; бросает ошибку, если не удалось после повторов. */
@@ -189,7 +208,7 @@ export async function postQuizEvent(
   event: string,
   payload: unknown,
   retryDelaysMs: readonly number[] = QUIZ_POST_RETRY_DELAYS_MS,
-): Promise<void> {
+): Promise<QuizPostResult> {
   let lastError: unknown = null;
   for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, retryDelaysMs[attempt - 1]));
@@ -200,8 +219,8 @@ export async function postQuizEvent(
         body: JSON.stringify({ event, payload }),
         signal: AbortSignal.timeout(QUIZ_FETCH_TIMEOUT_MS),
       });
-      if (res.ok) return;
-      lastError = new Error(`HTTP ${res.status}`);
+      if (res.ok) return ((await res.json().catch(() => ({}))) ?? {}) as QuizPostResult;
+      lastError = new QuizHttpError(res.status);
       // 4xx (кроме 429) повтор не исправит — сразу сдаёмся.
       if (res.status < 500 && res.status !== 429) break;
     } catch (err) {
@@ -218,13 +237,13 @@ export interface QuizEvent {
   createdAt: string;
 }
 
-/** API polling: забрать события комнаты после seq. */
+/** API polling: забрать события комнаты после seq. Бросает при сбое — UI покажет «нет связи». */
 export async function fetchQuizEvents(code: string, since: number): Promise<QuizEvent[]> {
   const res = await fetch(`/api/quiz/${code}?since=${since}`, {
     cache: "no-store",
     signal: AbortSignal.timeout(QUIZ_FETCH_TIMEOUT_MS),
   });
-  if (!res.ok) return [];
+  if (!res.ok) throw new QuizHttpError(res.status);
   const data = (await res.json()) as { events?: QuizEvent[] };
   return data.events ?? [];
 }
