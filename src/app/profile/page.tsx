@@ -11,6 +11,7 @@ import { DeleteAccountForm, PasswordForm, ProfileNameForm } from "@/components/p
 import { ClassesManager } from "@/components/profile/classes-manager";
 import { listCurrentClasses } from "@/lib/classes";
 import { getDict } from "@/lib/i18n/server";
+import { formatDateAlmaty } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Профиль — Mekty" };
@@ -26,7 +27,7 @@ export default async function ProfilePage() {
   }
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/profile");
-  const { t } = await getDict();
+  const { t, locale } = await getDict();
   const pf = t.profile;
 
   // Сбой биллинга не должен ломать страницу: показываем урезанный профиль с кодом активации.
@@ -52,7 +53,7 @@ export default async function ProfilePage() {
       .toArray();
     void start;
     const last = events[0] as { created_at?: Date } | undefined;
-    redeemedAt = last?.created_at ? last.created_at.toLocaleDateString("ru-RU") : null;
+    redeemedAt = last?.created_at ? formatDateAlmaty(last.created_at, locale) : null;
   } catch {
     // некритично
   }
@@ -118,7 +119,7 @@ export default async function ProfilePage() {
             <dd className="mt-1 text-sm font-medium">
               {billing
                 ? isPro
-                  ? (billing.expiresAt ? billing.expiresAt.toLocaleDateString("ru-RU") : "бессрочно")
+                  ? (billing.expiresAt ? formatDateAlmaty(billing.expiresAt, locale) : "бессрочно")
                   : "Бесплатный"
                 : "Неизвестен"}
             </dd>

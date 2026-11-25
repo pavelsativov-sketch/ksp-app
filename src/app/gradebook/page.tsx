@@ -9,6 +9,7 @@ import { ElectronicJournal } from "@/components/journal/electronic-journal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getDict } from "@/lib/i18n/server";
+import { formatDateAlmaty } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -179,7 +180,7 @@ export default async function GradebookPage() {
                       </td>
                       <td className="p-3 text-muted-foreground">{row.attempts}</td>
                       <td className="p-3 text-muted-foreground">
-                        {new Date(row.date).toLocaleDateString("ru-RU")}
+                        {formatDateAlmaty(row.date, locale)}
                       </td>
                     </tr>
                   ))}

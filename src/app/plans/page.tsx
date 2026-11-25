@@ -20,6 +20,7 @@ import { schoolApprovalCopy } from "@/lib/school-approval-copy";
 import { listTrashedPlans } from "@/lib/plan-trash";
 import { restorePlanFormAction } from "@/app/actions/plans";
 import { PlanSearchBox } from "@/components/ksp/plan-search-box";
+import { formatDateAlmaty } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +83,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                 <p className="text-sm font-semibold">{t.title}</p>
                 <p className="text-xs text-muted-foreground">
                   {t.grade ?? "—"} класс · удалён{" "}
-                  {new Date(t.deletedAt).toLocaleDateString("ru-RU")}
+                  {formatDateAlmaty(t.deletedAt, locale)}
                 </p>
               </div>
               <form action={restorePlanFormAction}>

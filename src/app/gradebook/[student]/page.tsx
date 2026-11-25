@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ParentShareCard } from "@/components/gradebook/parent-share-card";
 import { getDict } from "@/lib/i18n/server";
+import { formatDateAlmaty } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,7 @@ export default async function StudentGradebookPage({ params }: { params: Promise
             <div className="space-y-3">
               {[...student.assignments].reverse().map((row, i) => (
                 <div key={`${row.assignmentId}-${i}`} className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{row.assignmentTitle}</p><p className="text-xs text-muted-foreground">{new Date(row.date).toLocaleDateString("ru-RU")}</p></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{row.assignmentTitle}</p><p className="text-xs text-muted-foreground">{formatDateAlmaty(row.date, locale)}</p></div>
                   <div className="hidden w-56 items-center gap-2 sm:flex"><div className="h-2 flex-1 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${scoreColor(row.percentage)}`} style={{ width: `${Math.min(100, Math.max(0, (row.percentage / maxPercentage) * 100))}%` }} /></div></div>
                   <span className={`w-12 text-right text-sm font-bold ${scoreTextColor(row.percentage)}`}>{row.percentage}%</span>
                 </div>
@@ -92,7 +93,7 @@ export default async function StudentGradebookPage({ params }: { params: Promise
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-left text-sm">
           <thead><tr className="border-b border-border bg-muted/50"><th className="p-3">{g.assignment}</th><th className="p-3">{g.subject}</th><th className="p-3">{g.grade}</th><th className="p-3">{g.score}</th><th className="p-3">{g.percentage}</th><th className="p-3">{g.attempts}</th><th className="p-3">{g.date}</th></tr></thead>
-          <tbody>{student.assignments.map((row, i) => <tr key={`${row.assignmentId}-${i}`} className="border-b border-border last:border-0"><td className="p-3 font-medium">{row.assignmentTitle}</td><td className="p-3 text-muted-foreground">{row.subject ?? "—"}</td><td className="p-3 text-muted-foreground">{row.grade ?? "—"}</td><td className="p-3 font-bold">{row.score} / {row.maxScore}</td><td className={`p-3 font-bold ${scoreTextColor(row.percentage)}`}>{row.percentage}%</td><td className="p-3 text-muted-foreground">{row.attempts}</td><td className="p-3 text-muted-foreground">{new Date(row.date).toLocaleDateString("ru-RU")}</td></tr>)}</tbody>
+          <tbody>{student.assignments.map((row, i) => <tr key={`${row.assignmentId}-${i}`} className="border-b border-border last:border-0"><td className="p-3 font-medium">{row.assignmentTitle}</td><td className="p-3 text-muted-foreground">{row.subject ?? "—"}</td><td className="p-3 text-muted-foreground">{row.grade ?? "—"}</td><td className="p-3 font-bold">{row.score} / {row.maxScore}</td><td className={`p-3 font-bold ${scoreTextColor(row.percentage)}`}>{row.percentage}%</td><td className="p-3 text-muted-foreground">{row.attempts}</td><td className="p-3 text-muted-foreground">{formatDateAlmaty(row.date, locale)}</td></tr>)}</tbody>
         </table>
       </div>
     </div>
