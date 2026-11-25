@@ -1,6 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import JSZip from "jszip";
 import { DECK_PALETTES, descriptorPoints, parseBranch, splitThesis, type DeckPalette, type DeckSlide, type DeckTheme } from "@/lib/materials/deck-types";
+import { addSlideNumber, addWatermark, WATERMARK_TEXT } from "./pptx-footer";
 
 /** Презентация из конструктора: макеты, цвета темы, переходы и появление элементов. */
 
@@ -383,8 +384,8 @@ export async function buildDeckPptx(
     LAYOUTS[slide.kind]({ pres, s, p, slide, image: options.images?.get(slide.id) });
     if (slide.notes) s.addNotes(slide.notes);
     const dark = slide.kind === "thanks" || Boolean(slide.takeaway);
-    s.addText(`${index + 1} / ${deck.slides.length}`, { x: 11.9, y: 7.08, w: 1.2, h: 0.3, fontSize: 10, color: dark ? "ffffff" : p.muted, align: "right" });
-    if (options.watermark) s.addText("Создано в Mekty — бесплатный тариф", { x: PAD, y: 7.08, w: 6, h: 0.3, fontSize: 10, color: dark ? "ffffff" : p.muted });
+    addSlideNumber(s, index, deck.slides.length, { x: 11.9, y: 7.08, w: 1.2, h: 0.3 }, dark ? "ffffff" : p.muted);
+    if (options.watermark) addWatermark(s, WATERMARK_TEXT.ru, { x: PAD, y: 7.08, w: 6, h: 0.3 }, [{ color: dark ? "ffffff" : p.muted }]);
   });
 
   return addAnimations((await pres.write({ outputType: "nodebuffer" })) as Buffer);

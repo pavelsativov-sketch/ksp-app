@@ -1,6 +1,8 @@
 import PptxGenJS from "pptxgenjs";
 import type { LessonPlanRow, LessonStage, KspContent } from "@/lib/types/ksp";
 import type { InteractiveTask } from "@/lib/ksp/tasks";
+import { DECK_PALETTES } from "@/lib/materials/deck-types";
+import { addSlideNumber, addWatermark, WATERMARK_TEXT } from "./pptx-footer";
 
 /**
  * Подписи слайдов презентации.
@@ -36,10 +38,15 @@ type PptxCopy = {
   number: string;
   answer: string;
   hintPrefix: string;
+  assessNote: string;
+  resourcesNote: string;
+  watermark: string;
 };
 
 /** Буквы вариантов ответа в алфавитном порядке для казахского. */
-const SOFT = "efe8ff";
+// КСП в фирменной лавандовой теме конструктора; приглушённый цвет у КСП свой.
+const { accent: ACCENT, ink: INK, soft: SOFT } = DECK_PALETTES.lavender;
+const MUTED = "6b6490";
 const CARD_LINE = "e3defa";
 
 const OPTION_LETTERS_RU = ["А", "Б", "В", "Г", "Д", "Е", "Ж", "З", "И", "К"];
@@ -71,6 +78,9 @@ const COPY_RU: PptxCopy = {
   number: "Число",
   answer: "Ответ",
   hintPrefix: "Подсказка: ",
+  assessNote: "Оцениваем: ",
+  resourcesNote: "Нужно: ",
+  watermark: WATERMARK_TEXT.ru,
 };
 
 const COPY_KZ: PptxCopy = {
@@ -99,6 +109,9 @@ const COPY_KZ: PptxCopy = {
   number: "Сан",
   answer: "Жауап",
   hintPrefix: "Нұсқау: ",
+  assessNote: "Бағалаймыз: ",
+  resourcesNote: "Қажет: ",
+  watermark: WATERMARK_TEXT.kz,
 };
 
 /**
@@ -129,10 +142,6 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
   pres.author = "КСП App";
   pres.company = c.header.school || "—";
   pres.title = plan.title;
-
-  const ACCENT = "6d3bea";
-  const INK = "1e1a3c";
-  const MUTED = "6b6490";
 
   // Заголовки слайдов на языке плана. Раньше они были зашиты по-русски, и
   // казахский КСП получал презентацию с русскими подписями при казахском
@@ -359,25 +368,7 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
       // Знак печатается двумя слоями: тёмный слой читается на белых/светлых
       // слайдах, белый — на тёмно-синем финальном. Одиночный цвет всегда
       // пропадал на одном из фонов.
-      slide.addText("Создано в Mekty — бесплатный тариф", {
-        x: 0.7,
-        y: 7.02,
-        w: 6,
-        h: 0.32,
-        fontSize: 10,
-        color: "334155",
-        align: "left",
-      });
-      slide.addText("Создано в Mekty — бесплатный тариф", {
-        x: 0.7,
-        y: 7.02,
-        w: 6,
-        h: 0.32,
-        fontSize: 10,
-        color: "ffffff",
-        transparency: 45,
-        align: "left",
-      });
+      addWatermark(slide, T.watermark, { x: 0.7, y: 7.02, w: 6, h: 0.32 }, [{ color: "334155" }, { color: "ffffff", transparency: 45 }]);
     }
   }
 
@@ -388,15 +379,7 @@ export async function buildKspPptx(plan: LessonPlanRow, options: { watermark?: b
     const total = slides.length;
     slides.forEach((slide, index) => {
       if (total < 2) return;
-      slide.addText(`${index + 1} / ${total}`, {
-        x: 11.9,
-        y: 7.02,
-        w: 0.9,
-        h: 0.32,
-        fontSize: 10,
-        color: index === total - 1 ? "ffffff" : MUTED,
-        align: "right",
-      });
+      addSlideNumber(slide, index, total, { x: 11.9, y: 7.02, w: 0.9, h: 0.32 }, index === total - 1 ? "ffffff" : MUTED);
     });
   }
 
@@ -531,8 +514,8 @@ function addStageSlide(
 
   // Оценивание и ресурсы нужны учителю, а не классу: они в заметках докладчика.
   const notes = [
-    stage.descriptors?.length ? `Оцениваем: ${stage.descriptors.join(" · ")}` : "",
-    stage.resources ? `Нужно: ${stage.resources}` : "",
+    stage.descriptors?.length ? `${T.assessNote}${stage.descriptors.join(" · ")}` : "",
+    stage.resources ? `${T.resourcesNote}${stage.resources}` : "",
   ].filter(Boolean);
   if (notes.length) s.addNotes(notes.join("\n"));
 }
