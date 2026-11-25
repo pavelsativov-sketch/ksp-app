@@ -892,6 +892,8 @@ const ru = {
   nav: {
     library: "Библиотека",
     pricing: "Тарифы",
+    privacy: "Конфиденциальность",
+    terms: "Соглашение",
     profile: "Профиль",
     plans: "Мои планы",
     materials: "Материалы",
@@ -1818,6 +1820,8 @@ planEditor: {
   nav: {
     library: "Кітапхана",
     pricing: "Тарифтер",
+    privacy: "Құпиялылық",
+    terms: "Келісім",
     profile: "Профиль",
     plans: "Менің жоспарларым",
     materials: "Материалдар",

@@ -23,4 +23,4 @@ export function getSiteUrl(value = process.env.APP_URL): string {
 
 export const siteUrl = getSiteUrl();
 export const isPublicSite = new URL(siteUrl).protocol === "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(new URL(siteUrl).hostname);
-export const publicRoutes = ["/", "/pricing", "/library"] as const;
+export const publicRoutes = ["/", "/pricing", "/library", "/privacy", "/terms"] as const;

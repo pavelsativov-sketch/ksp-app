@@ -123,6 +123,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <Link href="/library" className={navClass}>{t.nav.library}</Link>
           <Link href="/pricing" className={navClass}>{t.nav.pricing}</Link>
           <Link href="/login" className={navClass}>{t.nav.login}</Link>
+          <Link href="/privacy" className={navClass}>{t.nav.privacy}</Link>
+          <Link href="/terms" className={navClass}>{t.nav.terms}</Link>
         </nav>
       </div>
     </footer>
