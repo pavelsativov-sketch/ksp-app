@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), rate: vi.fn(), quota: vi.fn(), generate: vi.fn(), image: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), rate: vi.fn(), quota: vi.fn(), generate: vi.fn(), image: vi.fn(), imageConfigured: vi.fn() }));
 vi.mock("@/lib/api-auth", () => ({ requireApiAuth: mocks.auth }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: mocks.rate }));
 vi.mock("@/lib/billing/quota", () => ({ reserveQuota: mocks.quota }));
 vi.mock("@/lib/ai/generate", () => ({ generateKsp: mocks.generate }));
-vi.mock("@/lib/ai/image", () => ({ generateImage: mocks.image }));
+vi.mock("@/lib/ai/image", () => ({ generateImage: mocks.image, isImageProviderConfigured: mocks.imageConfigured }));
 vi.mock("@/lib/rag/retrieve", () => ({ retrieveTextbookContext: vi.fn() }));
 import { POST as generate } from "@/app/api/ai/generate/route";
 import { POST as image } from "@/app/api/ai/image/route";
@@ -17,6 +17,16 @@ beforeEach(() => {
   mocks.quota.mockImplementation(() => { throw new Error("Quota must not be reserved"); });
   mocks.generate.mockImplementation(() => { throw new Error("External call forbidden"); });
   mocks.image.mockImplementation(() => { throw new Error("External call forbidden"); });
+  mocks.imageConfigured.mockReturnValue(true);
+});
+
+it("image route without any image provider returns an SVG diagram without reserving quota", async () => {
+  mocks.imageConfigured.mockReturnValue(false);
+  const response = await image(new Request("http://localhost/api/test", { method: "POST", body: JSON.stringify({ prompt: "Строение клетки" }) }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ provider: "svg-diagram", fallback: true });
+  expect(mocks.quota).not.toHaveBeenCalled();
+  expect(mocks.image).not.toHaveBeenCalled();
 });
 
 describe.each([["generate", generate], ["image", image]] as const)("%s request guards", (_name, handler) => {

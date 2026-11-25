@@ -2,11 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { WorksheetTask } from "@/lib/handouts/types";
 
 // Текстовые AI-провайдеры мокаются: никаких реальных сетевых запросов.
-vi.mock("@/lib/ai/providers", () => ({
-  isAnyProviderConfigured: vi.fn(),
-  getResponseFormat: vi.fn(),
-  executeWithFallback: vi.fn(),
-}));
+vi.mock("@/lib/ai/providers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ai/providers")>();
+  return {
+    isAnyProviderConfigured: vi.fn(),
+    getResponseFormat: vi.fn(),
+    executeWithFallback: vi.fn(),
+    // Настоящий разбор ключей: от него зависит isImageProviderConfigured.
+    parseApiKeys: actual.parseApiKeys,
+    freeProvidersDisabled: actual.freeProvidersDisabled,
+  };
+});
 
 const { openaiImages, openaiConstructor } = vi.hoisted(() => ({
   openaiImages: vi.fn(),
@@ -19,8 +25,10 @@ vi.mock("openai", () => ({
   },
 }));
 
-vi.mock("@/lib/ai/image", () => ({
+vi.mock("@/lib/ai/image", async (importOriginal) => ({
   generateImage: vi.fn(),
+  // Настоящая проверка ключей: тесты управляют ею через process.env.
+  isImageProviderConfigured: (await importOriginal<typeof import("@/lib/ai/image")>()).isImageProviderConfigured,
 }));
 
 import { generateHandout } from "@/lib/handouts/generate";
@@ -398,12 +406,21 @@ describe("illustrateFlashcards через общий Cloudflare-провайде
     expect(cards[0]).not.toHaveProperty("imageBase64");
   });
 
-  it("OpenAI-путь больше не используется: без Cloudflare-ключей запросов нет даже с OPENAI_API_KEY", async () => {
+  it("с одним OPENAI_API_KEY картинки идут через generateImage (DALL-E), а не через SDK напрямую", async () => {
     process.env.OPENAI_API_KEY = "test";
+    generateImageMock.mockResolvedValue({ base64: "PNG", mimeType: "image/png", provider: "OpenAI", model: "dall-e-3" });
     const { attempted, created } = await illustrateFlashcards([{ front: "A", back: "B" }], { ...baseInput, language: "ru" }, allow);
     expect(openaiImages).not.toHaveBeenCalled();
+    expect(generateImageMock).toHaveBeenCalledTimes(1);
+    expect(attempted).toBe(1);
+    expect(created).toBe(1);
+  });
+
+  it("без ключей картинок (только GEMINI_API_KEY) запросов нет", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "g");
+    const { attempted } = await illustrateFlashcards([{ front: "A", back: "B" }], { ...baseInput, language: "ru" }, allow);
     expect(attempted).toBe(0);
-    expect(created).toBe(0);
+    expect(generateImageMock).not.toHaveBeenCalled();
   });
 });
 

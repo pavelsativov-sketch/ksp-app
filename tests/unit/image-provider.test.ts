@@ -4,6 +4,7 @@ import {
   resetImageCache,
   resetImageFailures,
   cooledDownProviders,
+  isImageProviderConfigured,
 } from "@/lib/ai/image";
 
 const fetchMock = vi.fn();
@@ -15,6 +16,8 @@ beforeEach(() => {
   // реальный GEMINI_API_KEY увёл бы тест не туда.
   vi.stubEnv("GEMINI_API_KEY", "");
   vi.stubEnv("OPENAI_API_KEY", "");
+  vi.stubEnv("POLLINATIONS_ENABLED", "");
+  vi.stubEnv("AI_DISABLE_FREE_PROVIDERS", "");
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
   // Все тесты берут один промпт: без сброса кеша второй тест получил бы
@@ -77,12 +80,10 @@ describe("Cloudflare image requests", () => {
     expect(callsTo(FLUX2)).toBe(0);
     expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
-  it.each([429, 500, 503])("FLUX.2 retries a transient HTTP %s only once", async (status) => {
-    flux2Responses(() => new Response("Temporary", { status, headers: { "Retry-After": "1" } }), success);
-    const promise = generateImage({ prompt: "Apple" });
-    await vi.runAllTimersAsync();
-    expect((await promise).base64).toBe(PNG_BYTES);
-    expect(callsTo(FLUX2)).toBe(2);
+  it.each([429, 500, 503])("FLUX.2 does not retry a transient HTTP %s: the cascade is the retry", async (status) => {
+    flux2Responses(() => new Response("Temporary", { status, headers: { "Retry-After": "1" } }));
+    await expect(generateImage({ prompt: "Apple" })).rejects.toThrow(`Cloudflare API error ${status}`);
+    expect(callsTo(FLUX2)).toBe(1);
   });
   it("does not retry or expose an authentication error body", async () => {
     fetchMock.mockResolvedValue(new Response("secret-test-token", { status: 401 }));
@@ -95,21 +96,27 @@ describe("Cloudflare image requests", () => {
     await expect(generateImage({ prompt: "Apple" })).rejects.toThrow("Cloudflare API error 400 [7001: prompt validation failed]");
     expect(callsTo(FLUX2)).toBe(1);
   });
-  it("caps retries when the provider remains unavailable", async () => {
-    flux2Responses(() => new Response("Temporary", { status: 503 }));
-    const assertion = expect(generateImage({ prompt: "Apple" })).rejects.toThrow("Cloudflare API error 503");
-    await vi.runAllTimersAsync();
-    await assertion;
-    expect(callsTo(FLUX2)).toBe(2);
+  it("skips the next provider when the 50 s cascade deadline is nearly spent", async () => {
+    fetchMock.mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 46_000);
+      return new Response("busy", { status: 503 });
+    });
+    await expect(generateImage({ prompt: "Apple" })).rejects.toThrow("FLUX.2: пропущен, не осталось времени");
+    expect(callsTo(FLUX_SCHNELL)).toBe(1);
+    expect(callsTo(FLUX2)).toBe(0);
   });
-  it("waits about a minute before the retry on 429", async () => {
-    flux2Responses(() => new Response("Limited", { status: 429 }), success);
-    const promise = generateImage({ prompt: "Apple" });
-    await vi.advanceTimersByTimeAsync(59_999);
-    expect(callsTo(FLUX2)).toBe(1);
-    await vi.advanceTimersByTimeAsync(10);
-    expect(callsTo(FLUX2)).toBe(2);
-    expect((await promise).base64).toBe(PNG_BYTES);
+  it("uses DALL-E when only OPENAI_API_KEY is set, once, without retries", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "");
+    vi.stubEnv("OPENAI_API_KEY", "sk-test");
+    fetchMock.mockResolvedValue(new Response("busy", { status: 503 }));
+    await expect(generateImage({ prompt: "Apple" })).rejects.toThrow("OpenAI DALL-E error 503");
+    expect(callsTo("api.openai.com")).toBe(1);
+  });
+  it("never calls Gemini, even with GEMINI_API_KEY set", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
+    fetchMock.mockResolvedValue(success());
+    await generateImage({ prompt: "Apple" });
+    expect(callsTo("generativelanguage")).toBe(0);
   });
 });
 
@@ -156,54 +163,88 @@ describe("ротация провайдеров", () => {
   });
 
   it("провайдер, дважды ответивший отказом, выводится из ротации", async () => {
-    // Живая проба показала: Gemini отдаёт 503. Без паузы каждая иллюстрация
-    // тратила три попытки по 120 секунд, прежде чем дойти до рабочего FLUX.
-    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
     fetchMock.mockImplementation(async (url: string) =>
-      String(url).includes("generativelanguage")
-        ? new Response("overloaded", { status: 503 })
-        : success(),
+      String(url).includes(FLUX_SCHNELL) ? new Response("overloaded", { status: 503 }) : success(),
     );
-    const geminiCalls = () =>
-      fetchMock.mock.calls.filter((c) => String(c[0]).includes("generativelanguage")).length;
-
     // Первый отказ — ещё норма: провайдера не выводим.
     await generateWithTimers({ prompt: "Первая" });
-    expect(cooledDownProviders()).not.toContain("Gemini");
+    expect(cooledDownProviders()).not.toContain("FLUX.1 schnell");
 
-    // Второй вызов к Gemini подряд — выводим на паузу. Каждый вызов внутри
-    // делает ещё и три HTTP-попытки, поэтому счётчик запросов больше двух.
     await generateWithTimers({ prompt: "Вторая" });
-    expect(cooledDownProviders()).toContain("Gemini");
-    const geminiAfterCooldown = geminiCalls();
-    expect(geminiAfterCooldown).toBeGreaterThan(1);
+    expect(cooledDownProviders()).toContain("FLUX.1 schnell");
+    expect(callsTo(FLUX_SCHNELL)).toBe(2);
 
-    // Третий вызов идёт сразу в рабочий провайдер, минуя Gemini целиком.
+    // Третий вызов идёт сразу в рабочий провайдер, минуя schnell.
     const callsBefore = fetchMock.mock.calls.length;
     await generateWithTimers({ prompt: "Третья" });
-    expect(geminiCalls()).toBe(geminiAfterCooldown);
+    expect(callsTo(FLUX_SCHNELL)).toBe(2);
     expect(fetchMock.mock.calls.length - callsBefore).toBe(1);
   });
 
-  it("одиночный сбой не выводит провайдера из ротации", async () => {
-    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
+  it("после успеха провайдер возвращается в ротацию", async () => {
+    let fail = true;
     fetchMock.mockImplementation(async (url: string) =>
-      String(url).includes("generativelanguage")
-        ? new Response("overloaded", { status: 503 })
-        : success(),
+      String(url).includes(FLUX_SCHNELL) && fail ? new Response("overloaded", { status: 503 }) : success(),
     );
     await generateWithTimers({ prompt: "Раз" });
-    expect(cooledDownProviders()).not.toContain("Gemini");
+    fail = false;
+    await generateWithTimers({ prompt: "Два" });
+    fail = true;
+    await generateWithTimers({ prompt: "Три" });
+    // Счётчик сброшен успехом: один отказ после него паузы не даёт.
+    expect(cooledDownProviders()).not.toContain("FLUX.1 schnell");
+  });
+});
+
+describe("Pollinations и наличие провайдера", () => {
+  const POLLINATIONS = "image.pollinations.ai";
+  const pngResponse = () =>
+    new Response(Buffer.from(PNG_BYTES, "base64"), { headers: { "content-type": "image/png" } });
+
+  it("Pollinations — последний резерв после отказа Cloudflare", async () => {
+    vi.stubEnv("POLLINATIONS_ENABLED", "1");
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes(POLLINATIONS) ? pngResponse() : new Response("limit", { status: 429 }),
+    );
+    const result = await generateImage({ prompt: "Apple" });
+    expect(result.provider).toBe("Pollinations");
+    expect(callsTo(FLUX_SCHNELL)).toBe(1);
+    expect(callsTo(FLUX2)).toBe(1);
+    expect(callsTo(POLLINATIONS)).toBe(1);
   });
 
-  it("после успеха провайдер возвращается в ротацию", async () => {
+  it("AI_DISABLE_FREE_PROVIDERS убирает Pollinations из каскада", async () => {
+    vi.stubEnv("POLLINATIONS_ENABLED", "1");
+    vi.stubEnv("AI_DISABLE_FREE_PROVIDERS", "1");
+    fetchMock.mockResolvedValue(new Response("limit", { status: 429 }));
+    await expect(generateImage({ prompt: "Apple" })).rejects.toThrow("Cloudflare");
+    expect(callsTo(POLLINATIONS)).toBe(0);
+  });
+
+  it("isImageProviderConfigured видит Cloudflare, OpenAI и Pollinations, но не Gemini", () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "");
     vi.stubEnv("GEMINI_API_KEY", "gemini-key");
-    const geminiImage = { candidates: [{ content: { parts: [{ inlineData: { data: PNG_BYTES, mimeType: "image/png" } }] } }] };
-    fetchMock.mockImplementation(async (url: string) =>
-      String(url).includes("generativelanguage") ? Response.json(geminiImage) : success(),
-    );
-    await generateWithTimers({ prompt: "Раз" });
-    await generateWithTimers({ prompt: "Два" });
-    expect(cooledDownProviders()).not.toContain("Gemini");
+    expect(isImageProviderConfigured()).toBe(false);
+    vi.stubEnv("OPENAI_API_KEY", "sk-test");
+    expect(isImageProviderConfigured()).toBe(true);
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("POLLINATIONS_ENABLED", "1");
+    expect(isImageProviderConfigured()).toBe(true);
+    vi.stubEnv("AI_DISABLE_FREE_PROVIDERS", "true");
+    expect(isImageProviderConfigured()).toBe(false);
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "acc");
+    expect(isImageProviderConfigured()).toBe(true);
+  });
+});
+
+describe("кэш изображений", () => {
+  it("хранит не больше 8 картинок и вытесняет самую давнюю", async () => {
+    fetchMock.mockImplementation(async () => success());
+    for (let i = 0; i < 9; i++) await generateImage({ prompt: `P${i}` });
+    const calls = fetchMock.mock.calls.length;
+    await generateImage({ prompt: "P8" });
+    expect(fetchMock.mock.calls.length).toBe(calls);
+    await generateImage({ prompt: "P0" });
+    expect(fetchMock.mock.calls.length).toBe(calls + 1);
   });
 });

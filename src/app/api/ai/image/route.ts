@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiAuth } from "@/lib/api-auth";
 import { checkRateLimitAsync } from "@/lib/rate-limit";
-import { generateImage } from "@/lib/ai/image";
+import { generateImage, isImageProviderConfigured } from "@/lib/ai/image";
 import { autoDetectDiagramSpec, buildEducationalSvg, svgToDataUri } from "@/lib/ai/svg-diagram";
 import { reserveQuotaOrResponse } from "@/lib/billing/quota";
 
@@ -43,6 +43,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const svgFallback = (remaining?: number | null) =>
+    NextResponse.json({
+      image: svgToDataUri(buildEducationalSvg(autoDetectDiagramSpec(parsed.data))),
+      provider: "svg-diagram",
+      fallback: true,
+      ...(remaining === undefined ? {} : { quota: { remaining } }),
+    });
+
+  // Без провайдера слот квоты не резервируем: сразу отдаём SVG-схему.
+  if (!isImageProviderConfigured()) return svgFallback();
+
   const quota = await reserveQuotaOrResponse(auth.user, "image");
   if (!quota.ok) return quota.response;
   const { reservation } = quota;
@@ -58,12 +69,6 @@ export async function POST(request: Request) {
   } catch (error) {
     await reservation.finalize(false);
     console.warn("Image generation fallback to educational SVG:", error instanceof Error ? error.name : "UnknownError");
-    const svg = buildEducationalSvg(autoDetectDiagramSpec(parsed.data));
-    return NextResponse.json({
-      image: svgToDataUri(svg),
-      provider: "svg-diagram",
-      fallback: true,
-      quota: { remaining: reservation.remaining },
-    });
+    return svgFallback(reservation.remaining);
   }
 }

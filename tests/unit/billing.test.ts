@@ -12,7 +12,7 @@ vi.mock("@/lib/mongo", async (original) => ({
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimitAsync: mock.rate }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: mock.auth }));
 vi.mock("@/lib/api-auth", () => ({ requireApiAuth: mock.apiAuth }));
-vi.mock("@/lib/ai/image", () => ({ generateImage: mock.img }));
+vi.mock("@/lib/ai/image", () => ({ generateImage: mock.img, isImageProviderConfigured: () => true }));
 vi.mock("next/cache", () => ({ revalidatePath: mock.revalidate }));
 
 import { PLANS } from "@/lib/billing/plans";

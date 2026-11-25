@@ -1,5 +1,5 @@
 import type { Flashcard, WorksheetTask } from "./types";
-import { generateImage } from "@/lib/ai/image";
+import { generateImage, isImageProviderConfigured } from "@/lib/ai/image";
 
 /**
  * Иллюстрации раздаточных материалов — единый провайдер Cloudflare FLUX.1
@@ -87,8 +87,7 @@ export async function illustrate<T>(
   withImage: (item: T, result: { base64: string; mimeType: string }) => T,
   reserve: ReserveImageSlot,
 ): Promise<IllustrationResult<T>> {
-  const cloudflare = process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN;
-  if (!cloudflare && !process.env.GEMINI_API_KEY) {
+  if (!isImageProviderConfigured()) {
     return { items, attempted: 0, created: 0, quotaExhausted: false };
   }
 

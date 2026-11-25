@@ -1,26 +1,23 @@
 /**
  * Генерация изображений к уроку через несколько провайдеров.
  *
- * Поддерживаемые модели (по приоритету качества):
- * - Gemini 2.5 Flash (основная — лучшее качество, яркие цвета, понимает контекст)
- * - FLUX.2 [dev] через Cloudflare (вторая — фотореалистичное качество)
- * - DALL-E 3 (если доступен OpenAI ключ)
- * - FLUX.1 schnell через Cloudflare (быстрый и дешёвый резерв)
+ * Каскад (по очереди, до первого успеха):
+ * - FLUX.1 schnell через Cloudflare (основной: дешёвый и быстрый)
+ * - FLUX.2 [dev] через Cloudflare (резерв, выше качество, дороже)
+ * - DALL-E 3 (каждый ключ из OPENAI_API_KEY)
+ * - Pollinations Flux (POLLINATIONS_ENABLED=1, бесплатный, без ключа)
+ *
+ * Gemini из каскада убран: gemini-3.8-flash текстовая модель, запрос с
+ * responseModalities IMAGE тратил вызов впустую.
  *
  * Состав проверен живыми запросами: `node scripts/probe-image-providers.mjs`.
- * На момент проверки отвечали FLUX.2 и FLUX.1 schnell; Gemini отдавал 503,
- * DALL-E — 401 из-за чужого ключа в OPENAI_API_KEY.
  *
- * Особенности:
- * - Автоматический выбор лучшей доступной модели
- * - Провайдер, дважды ответивший отказом, выводится из ротации на 10 минут
- * - Улучшенные промпты с стилями и композицией
- * - Валидация качества изображения
- * - Логика повторных попыток
- * - Кэширование для избежания повторной генерации
+ * Время: весь каскад укладывается в CASCADE_DEADLINE_MS, чтобы маршрут
+ * с maxDuration 60 с успел ответить. Повторов внутри провайдера нет —
+ * повтором служит следующий провайдер.
  */
 
-import { parseApiKeys } from "./providers";
+import { freeProvidersDisabled, parseApiKeys } from "./providers";
 
 export interface GenerateImageInput {
   /** Промпт для генерации. */
@@ -63,10 +60,35 @@ export interface GenerateImageResult {
   model: string;
 }
 
+/** Общий бюджет каскада: меньше maxDuration маршрута (60 с) с запасом на ответ. */
+const CASCADE_DEADLINE_MS = 50_000;
+/** Таймаут одного провайдера. */
+const PROVIDER_TIMEOUT_MS = 20_000;
+/** С меньшим остатком провайдер не запускается: ответ всё равно не успеет. */
+const MIN_PROVIDER_MS = 5_000;
+
+/** Pollinations — сторонний бесплатный сервис: включается флагом и гасится AI_DISABLE_FREE_PROVIDERS. */
+function pollinationsEnabled(): boolean {
+  return process.env.POLLINATIONS_ENABLED === "1" && !freeProvidersDisabled();
+}
+
+/** Есть ли хоть один провайдер картинок (Cloudflare, OpenAI или Pollinations). */
+export function isImageProviderConfigured(): boolean {
+  return Boolean(
+    (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) ||
+      parseApiKeys(process.env.OPENAI_API_KEY).length ||
+      pollinationsEnabled(),
+  );
+}
+
 // ── Кэш изображений ──────────────────────────────────────────────
 
+/**
+ * Маленький LRU: на serverless экземпляр живёт недолго, а каждая запись —
+ * сотни КБ base64. Держим только последние картинки для повторного запроса.
+ */
 const imageCache = new Map<string, GenerateImageResult>();
-const CACHE_MAX_SIZE = 50;
+const CACHE_MAX_SIZE = 8;
 
 function getCacheKey(input: GenerateImageInput): string {
   return JSON.stringify({
@@ -80,13 +102,20 @@ function getCacheKey(input: GenerateImageInput): string {
 }
 
 function getFromCache(key: string): GenerateImageResult | undefined {
-  return imageCache.get(key);
+  const hit = imageCache.get(key);
+  if (hit) {
+    // Перестановка в конец: вытесняется давно не запрошенная запись.
+    imageCache.delete(key);
+    imageCache.set(key, hit);
+  }
+  return hit;
 }
 
 function setInCache(key: string, result: GenerateImageResult): void {
+  imageCache.delete(key);
   if (imageCache.size >= CACHE_MAX_SIZE) {
-    const firstKey = imageCache.keys().next().value;
-    if (firstKey) imageCache.delete(firstKey);
+    const oldest = imageCache.keys().next().value;
+    if (oldest !== undefined) imageCache.delete(oldest);
   }
   imageCache.set(key, result);
 }
@@ -99,13 +128,8 @@ export function resetImageCache(): void {
 // ── Защита от мёртвого провайдера ───────────────────────────────
 
 /**
- * Провайдер, который только что не ответил, выводится из ротации на 10 минут.
- *
- * Зачем это нужно. Проверено живой пробой (`scripts/probe-image-providers.mjs`):
- * на текущих ключах Gemini отдаёт 503 «high demand», а FLUX.2 работает. Без
- * защиты каждая иллюстрация сначала шла в Gemini, делала три попытки по
- * 120 секунд ожидания и только потом попадала в рабочий провайдер — учитель
- * ждал десятки секунд впустую и квота Gemini списывалась на отказы.
+ * Провайдер, дважды подряд не ответивший, выводится из ротации на 10 минут,
+ * чтобы каждая картинка не тратила его таймаут из общего бюджета каскада.
  *
  * Порог 2 отказа: одиночный сбой у провайдера — это норма, регулярный — нет.
  */
@@ -156,13 +180,7 @@ export function cooledDownProviders(now = Date.now()): string[] {
 // ── Основная функция генерации ──────────────────────────────────
 
 /**
- * Генерирует иллюстрацию к уроку.
- *
- * Автоматически выбирает лучшую доступную модель:
- * 1. Gemini 2.5 Flash (если есть GEMINI_API_KEY) — лучшее качество, яркие цвета
- * 2. FLUX.2 [dev] через Cloudflare — фотореалистичное качество
- * 3. DALL-E 3 (если есть OpenAI ключ)
- * 4. FLUX.1-schnell (быстрый фолбэк)
+ * Генерирует иллюстрацию к уроку: FLUX.1 schnell → FLUX.2 [dev] → DALL-E 3 → Pollinations.
  */
 export async function generateImage(
   input: GenerateImageInput,
@@ -173,35 +191,30 @@ export async function generateImage(
     return cached;
   }
 
-  const geminiKeys = parseApiKeys(process.env.GEMINI_API_KEY);
+  if (!isImageProviderConfigured()) {
+    throw new Error(
+      "Не настроены ключи для генерации изображений (CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN, OPENAI_API_KEY или POLLINATIONS_ENABLED=1)",
+    );
+  }
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const openaiKeys = parseApiKeys(process.env.OPENAI_API_KEY);
-  const pollinationsEnabled = process.env.POLLINATIONS_ENABLED === "1";
+  const deadline = Date.now() + CASCADE_DEADLINE_MS;
 
-  const configured = Boolean(
-    geminiKeys.length || (accountId && token) || openaiKeys.length || pollinationsEnabled,
-  );
-  if (!configured) {
-    throw new Error(
-      "Не настроены ключи для генерации изображений (GEMINI_API_KEY, OPENAI_API_KEY или CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN)",
-    );
-  }
-
-  // Каждого провайдера пробуем по очереди. Ошибки копим: если все упали,
-  // показываем последнюю причину, а не «ключи не настроены» — иначе
-  // просроченный токен или 401 от провайдера выглядели бы как «ничего не
-  // настроено» и сбивали с толку.
+  // Ошибки копим: если все упали, показываем причины, а не «ключи не настроены».
   const failures: string[] = [];
-  const attempt = async (label: string, run: () => Promise<GenerateImageResult>) => {
-    // Провайдер, дважды подряд ответивший отказом, не опрашивается в течение
-    // паузы: см. «Защита от мёртвого провайдера».
+  const attempt = async (label: string, run: (signal: AbortSignal) => Promise<GenerateImageResult>) => {
     if (isCoolingDown(label)) {
       failures.push(`${label}: пропущен, провайдер не отвечает (пауза 10 мин)`);
       return null;
     }
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_PROVIDER_MS) {
+      failures.push(`${label}: пропущен, не осталось времени`);
+      return null;
+    }
     try {
-      const result = await run();
+      const result = await run(AbortSignal.timeout(Math.min(PROVIDER_TIMEOUT_MS, remaining)));
       noteSuccess(label);
       setInCache(cacheKey, result);
       return result;
@@ -214,36 +227,27 @@ export async function generateImage(
     }
   };
 
-  // 1. Gemini — основная модель, лучшее качество и яркие цвета (перебираем все ключи из GEMINI_API_KEY).
-  for (const [idx, gKey] of geminiKeys.entries()) {
-    const label = geminiKeys.length > 1 ? `Gemini #${idx + 1}` : "Gemini";
-    const result = await attempt(label, () => generateWithGemini(input, gKey));
-    if (result) return result;
-  }
-
-  // 2. FLUX.1 schnell через Cloudflare первым: бесплатных 10 000 «нейронов» в сутки
-  //    FLUX.2 [dev] съел за несколько десятков картинок, а schnell в разы дешевле,
-  //    и для иллюстрации задания без текста его качества хватает (проверено вживую).
-  //    Принимает JSON-тело и не принимает width/height.
   if (accountId && token) {
-    const fast = await attempt("FLUX.1 schnell", () => generateWithFluxFast(input, accountId, token));
+    // 1. FLUX.1 schnell первым: бесплатных 10 000 «нейронов» в сутки FLUX.2 [dev]
+    //    съедал за несколько десятков картинок, а schnell в разы дешевле.
+    const fast = await attempt("FLUX.1 schnell", (signal) => generateWithFluxFast(input, accountId, token, signal));
     if (fast) return fast;
 
-    // 3. FLUX.2 [dev] — резерв, если schnell не ответил.
-    const result = await attempt("FLUX.2", () => generateWithFlux(input, accountId, token));
+    // 2. FLUX.2 [dev] — резерв, если schnell не ответил.
+    const result = await attempt("FLUX.2", (signal) => generateWithFlux(input, accountId, token, signal));
     if (result) return result;
   }
 
-  // 4. DALL-E 3 — резерв OpenAI.
+  // 3. DALL-E 3 — резерв OpenAI (перебираем все ключи из OPENAI_API_KEY).
   for (const [idx, oKey] of openaiKeys.entries()) {
     const label = openaiKeys.length > 1 ? `DALL-E 3 #${idx + 1}` : "DALL-E 3";
-    const result = await attempt(label, () => generateWithDallE(input, oKey));
+    const result = await attempt(label, (signal) => generateWithDallE(input, oKey, signal));
     if (result) return result;
   }
 
-  // 5. Pollinations Flux — бесплатный резерв без API-ключа (когда дневные 10 000 нейронов Cloudflare исчерпаны).
-  if (pollinationsEnabled) {
-    const result = await attempt("Pollinations Flux", () => generateWithPollinations(input));
+  // 4. Pollinations Flux — бесплатный резерв без API-ключа (когда дневные 10 000 нейронов Cloudflare исчерпаны).
+  if (pollinationsEnabled()) {
+    const result = await attempt("Pollinations Flux", (signal) => generateWithPollinations(input, signal));
     if (result) return result;
   }
 
@@ -252,91 +256,13 @@ export async function generateImage(
   );
 }
 
-// ── Gemini 2.5 Flash (лучшее качество) ──────────────────────────
-
-async function generateWithGemini(
-  input: GenerateImageInput,
-  apiKey: string,
-): Promise<GenerateImageResult> {
-  const prompt = buildImagePrompt(input);
-  // Gemini 3.8 Flash — актуальная модель с генерацией изображений.
-  // (gemini-2.5-flash с 2026 года недоступна новым ключам и отдаёт 404.)
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
-
-  const body = {
-    contents: [{
-      parts: [{ text: prompt }]
-    }],
-    generationConfig: {
-      responseModalities: ["TEXT", "IMAGE"],
-      temperature: 1.2, // выше температура = более креативные и яркие изображения
-    }
-  };
-
-  let response: Response | undefined;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000), // 2 минуты — качество важнее скорости
-    });
-
-    if (response.ok) break;
-
-    const retryable = response.status === 429 || response.status >= 500;
-    if (!retryable || attempt === 2) {
-      const errorText = await response.text();
-      throw new Error(`Gemini API error ${response.status}: ${errorText.slice(0, 200)}`);
-    }
-
-    const retryAfter = Number(response.headers.get("retry-after")) || 10;
-    await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-  }
-
-  if (!response) throw new Error("Gemini не вернул изображение");
-
-  const data = await response.json() as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          inlineData?: { data?: string; mimeType?: string };
-          text?: string;
-        }>;
-      };
-    }>;
-  };
-
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const imagePart = parts.find((p) => p.inlineData?.data);
-
-  if (!imagePart?.inlineData?.data) {
-    throw new Error("Gemini не вернул изображение в ожидаемом формате");
-  }
-
-  const base64 = imagePart.inlineData.data;
-  const mimeType = imagePart.inlineData.mimeType || "image/png";
-
-  if (!validateImageQuality(base64)) {
-    throw new Error("Сгенерированное изображение не прошло валидацию качества");
-  }
-
-  return {
-    base64,
-    mimeType,
-    provider: "Google",
-    model: "gemini-3.8-flash",
-  };
-}
-
 // ── FLUX.2 [dev] через Cloudflare ───────────────────────────────
 
 async function generateWithFlux(
   input: GenerateImageInput,
   accountId: string,
   token: string,
+  signal: AbortSignal,
 ): Promise<GenerateImageResult> {
   const educationalPrompt = buildImagePrompt(input);
   if (educationalPrompt.length > 4000) {
@@ -358,38 +284,19 @@ async function generateWithFlux(
     return form;
   };
 
-  let response: Response | undefined;
-  // Ровно одна повторная попытка: окно лимита FLUX длинное, учитель не
-  // должен ждать три минуты впустую.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        // Content-Type намеренно не задаём — boundary проставит fetch.
-      },
-      body: buildBody(),
-      signal: AbortSignal.timeout(120_000), // 2 минуты — качество важнее скорости
-    });
-    if (response.ok) break;
-    const retryable = response.status === 429 || response.status >= 500;
-    if (!retryable || attempt === 1) {
-      throw new Error(`Cloudflare API error ${response.status}${await describeCloudflareError(response)}`);
-    }
-    if (response.status === 429) {
-      const clonedText = await response.clone().text().catch(() => "");
-      if (/daily free allocation/i.test(clonedText)) {
-        throw new Error(`Cloudflare API error 429${await describeCloudflareError(response)}`);
-      }
-    }
-    const retryAfter = Number(response.headers.get("retry-after"));
-    // Если заголовок retry-after отсутствует — ждём дефолтные 30 секунд.
-    // Раньше NaN превращался в 0 и retry срабатывал мгновенно.
-    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 30_000;
-    await response.body?.cancel();
-    await new Promise((resolve) => setTimeout(resolve, Math.min(70_000, Math.max(60_000, delayMs))));
+  // Без повтора: окно лимита FLUX — около минуты, это больше всего бюджета маршрута.
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      // Content-Type намеренно не задаём — boundary проставит fetch.
+    },
+    body: buildBody(),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`Cloudflare API error ${response.status}${await describeCloudflareError(response)}`);
   }
-  if (!response) throw new Error("Cloudflare не вернул изображение");
 
   const contentType = response.headers.get("content-type") || "";
 
@@ -418,10 +325,10 @@ async function generateWithFlux(
   };
 }
 
-// ── FLUX.1 schnell через Cloudflare (быстрый резерв) ─────────────
+// ── FLUX.1 schnell через Cloudflare (основной) ──────────────────
 
 /**
- * Быстрый резерв на случай, если FLUX.2 недоступен или упёрся в лимит.
+ * Основной провайдер: дешевле и быстрее FLUX.2.
  *
  * Отличия от FLUX.2 проверены живым запросом и неочевидны:
  *  * принимает JSON-тело, а не multipart (с multipart отдаёт 6003
@@ -435,6 +342,7 @@ async function generateWithFluxFast(
   input: GenerateImageInput,
   accountId: string,
   token: string,
+  signal: AbortSignal,
 ): Promise<GenerateImageResult> {
   const prompt = buildImagePrompt(input);
   if (prompt.length > 4000) throw new Error("Промпт изображения слишком длинный");
@@ -451,7 +359,7 @@ async function generateWithFluxFast(
     // width/height здесь не передаются: модель их не принимает.
     // Только steps: поле num_steps модель отвергает (5006 «unevaluated properties '/num_steps'»).
     body: JSON.stringify({ prompt, steps: 4 }),
-    signal: AbortSignal.timeout(60_000),
+    signal,
   });
 
   if (!response.ok) {
@@ -474,6 +382,7 @@ async function generateWithFluxFast(
 async function generateWithDallE(
   input: GenerateImageInput,
   apiKey: string,
+  signal: AbortSignal,
 ): Promise<GenerateImageResult> {
   const prompt = buildImagePrompt(input);
   const url = "https://api.openai.com/v1/images/generations";
@@ -487,31 +396,19 @@ async function generateWithDallE(
     response_format: "b64_json",
   };
 
-  let response: Response | undefined;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000),
-    });
-
-    if (response.ok) break;
-
-    const retryable = response.status === 429 || response.status >= 500;
-    if (!retryable || attempt === 2) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI DALL-E error ${response.status}: ${errorText.slice(0, 200)}`);
-    }
-
-    const retryAfter = Number(response.headers.get("retry-after")) || 10;
-    await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI DALL-E error ${response.status}: ${errorText.slice(0, 200)}`);
   }
-
-  if (!response) throw new Error("OpenAI не вернул изображение");
 
   const data = await response.json() as { data?: Array<{ b64_json?: string }> };
   const base64 = data.data?.[0]?.b64_json;
@@ -533,6 +430,7 @@ async function generateWithDallE(
 
 async function generateWithPollinations(
   input: GenerateImageInput,
+  signal: AbortSignal,
 ): Promise<GenerateImageResult> {
   const concisePrompt = [
     "Colorful educational flat vector illustration for school students, pure visual scene without any text, letters, or numbers:",
@@ -541,7 +439,7 @@ async function generateWithPollinations(
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(concisePrompt)}?width=896&height=576&nologo=true&model=flux`;
   const response = await fetch(url, {
     method: "GET",
-    signal: AbortSignal.timeout(28_000),
+    signal,
   });
   if (!response.ok) {
     throw new Error(`Pollinations error ${response.status}`);
