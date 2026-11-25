@@ -15,6 +15,16 @@ const passwordSchema = z.string().min(10, "Пароль должен содер�
 const loginSchema = z.object({ email: z.email({ error: "Некорректный email" }), password: passwordSchema });
 const registerSchema = loginSchema.extend({ fullName: z.string().trim().min(2, "Укажите имя").max(200) });
 
+/**
+ * bcrypt-хэш (cost 12) случайной строки: при неизвестном email логин всё равно
+ * тратит время на сравнение, и по задержке нельзя узнать, есть ли аккаунт.
+ */
+const DUMMY_PASSWORD_HASH = "$2b$12$d9UJdo9W9Joh3GbPksv4ee2vk2CXBbzUmU7RosAoD3YgPIa61kR2a";
+
+/** Один ответ для «email свободен» и «email занят»: регистрация не раскрывает чужие аккаунты. */
+const REGISTER_DUPLICATE_INFO =
+  "Если такой email свободен, аккаунт создан; если он уже зарегистрирован — войдите или восстановите пароль.";
+
 export type AuthFormState = { error?: string; fieldErrors?: Record<string, string>; info?: string };
 
 function fieldErrorsOf(error: z.ZodError): Record<string, string> {
@@ -83,7 +93,11 @@ export async function loginAction(_: AuthFormState, formData: FormData): Promise
   const next = safeNextPath(formData.get("next"));
   try {
     const user = await findUserByEmail(parsed.data.email);
-    if (!user || !(await verifyPassword(parsed.data.password, user.password_hash))) return { error: "Неверный email или пароль" };
+    if (!user) {
+      await verifyPassword(parsed.data.password, DUMMY_PASSWORD_HASH);
+      return { error: "Неверный email или пароль" };
+    }
+    if (!(await verifyPassword(parsed.data.password, user.password_hash))) return { error: "Неверный email или пароль" };
     await createSession(user._id.toString(), user.session_version ?? 0, {
       email: user.email,
       fullName: user.full_name,
@@ -117,7 +131,8 @@ export async function registerAction(_: AuthFormState, formData: FormData): Prom
       fullName: parsed.data.fullName,
     });
   } catch (error) {
-    if (error instanceof MongoServerError && error.code === 11000) return { error: "Пользователь с таким email уже зарегистрирован" };
+    // Сессию для существующего аккаунта не создаём и его существование не подтверждаем.
+    if (error instanceof MongoServerError && error.code === 11000) return { info: REGISTER_DUPLICATE_INFO };
     log.error("registerAction failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: "Не удалось зарегистрироваться. Повторите попытку позже." };
   }
